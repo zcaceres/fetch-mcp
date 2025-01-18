@@ -1,5 +1,7 @@
 # Fetch MCP Server
 
+![fetch mcp logo](logo.jpg)
+
 This MCP server provides functionality to fetch web content in various formats, including HTML, JSON, plain text, and Markdown.
 
 ## Components
