@@ -2,6 +2,8 @@
 
 ![fetch mcp logo](logo.jpg)
 
+[![smithery badge](https://smithery.ai/badge/fetch-mcp)](https://smithery.ai/server/fetch-mcp)
+
 This MCP server provides functionality to fetch web content in various formats, including HTML, JSON, plain text, and Markdown.
 
 ## Components
@@ -45,6 +47,14 @@ This server does not provide any persistent resources. It's designed to fetch an
 1. Clone the repository
 2. Install dependencies: `npm install`
 3. Build the server: `npm run build`
+
+### Installing via Smithery
+
+To install Fetch MCP Server for Claude Desktop automatically via [Smithery](https://smithery.ai/server/fetch-mcp):
+
+```bash
+npx -y @smithery/cli install fetch-mcp --client claude
+```
 
 ### Usage
 
