@@ -3,6 +3,14 @@ import TurndownService from "turndown";
 import { RequestPayload } from "./types.js";
 
 export class Fetcher {
+  private static applyLengthLimits(text: string, maxLength: number, startIndex: number): string {
+    if (startIndex >= text.length) {
+      return "";
+    }
+    
+    const end = Math.min(startIndex + maxLength, text.length);
+    return text.substring(startIndex, end);
+  }
   private static async _fetch({
     url,
     headers,
@@ -32,7 +40,15 @@ export class Fetcher {
   static async html(requestPayload: RequestPayload) {
     try {
       const response = await this._fetch(requestPayload);
-      const html = await response.text();
+      let html = await response.text();
+      
+      // Apply length limits
+      html = this.applyLengthLimits(
+        html, 
+        requestPayload.max_length ?? 5000, 
+        requestPayload.start_index ?? 0
+      );
+      
       return { content: [{ type: "text", text: html }], isError: false };
     } catch (error) {
       return {
@@ -46,8 +62,17 @@ export class Fetcher {
     try {
       const response = await this._fetch(requestPayload);
       const json = await response.json();
+      let jsonString = JSON.stringify(json);
+      
+      // Apply length limits
+      jsonString = this.applyLengthLimits(
+        jsonString,
+        requestPayload.max_length ?? 5000,
+        requestPayload.start_index ?? 0
+      );
+      
       return {
-        content: [{ type: "text", text: JSON.stringify(json) }],
+        content: [{ type: "text", text: jsonString }],
         isError: false,
       };
     } catch (error) {
@@ -72,8 +97,14 @@ export class Fetcher {
       Array.from(styles).forEach((style) => style.remove());
 
       const text = document.body.textContent || "";
-
-      const normalizedText = text.replace(/\s+/g, " ").trim();
+      let normalizedText = text.replace(/\s+/g, " ").trim();
+      
+      // Apply length limits
+      normalizedText = this.applyLengthLimits(
+        normalizedText,
+        requestPayload.max_length ?? 5000,
+        requestPayload.start_index ?? 0
+      );
 
       return {
         content: [{ type: "text", text: normalizedText }],
@@ -92,7 +123,15 @@ export class Fetcher {
       const response = await this._fetch(requestPayload);
       const html = await response.text();
       const turndownService = new TurndownService();
-      const markdown = turndownService.turndown(html);
+      let markdown = turndownService.turndown(html);
+      
+      // Apply length limits
+      markdown = this.applyLengthLimits(
+        markdown,
+        requestPayload.max_length ?? 5000,
+        requestPayload.start_index ?? 0
+      );
+      
       return { content: [{ type: "text", text: markdown }], isError: false };
     } catch (error) {
       return {

@@ -39,6 +39,14 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               type: "object",
               description: "Optional headers to include in the request",
             },
+            max_length: {
+              type: "number",
+              description: "Maximum number of characters to return (default: 5000)",
+            },
+            start_index: {
+              type: "number",
+              description: "Start content from this character index (default: 0)",
+            },
           },
           required: ["url"],
         },
@@ -56,6 +64,14 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             headers: {
               type: "object",
               description: "Optional headers to include in the request",
+            },
+            max_length: {
+              type: "number",
+              description: "Maximum number of characters to return (default: 5000)",
+            },
+            start_index: {
+              type: "number",
+              description: "Start content from this character index (default: 0)",
             },
           },
           required: ["url"],
@@ -76,6 +92,14 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               type: "object",
               description: "Optional headers to include in the request",
             },
+            max_length: {
+              type: "number",
+              description: "Maximum number of characters to return (default: 5000)",
+            },
+            start_index: {
+              type: "number",
+              description: "Start content from this character index (default: 0)",
+            },
           },
           required: ["url"],
         },
@@ -93,6 +117,14 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             headers: {
               type: "object",
               description: "Optional headers to include in the request",
+            },
+            max_length: {
+              type: "number",
+              description: "Maximum number of characters to return (default: 5000)",
+            },
+            start_index: {
+              type: "number",
+              description: "Start content from this character index (default: 0)",
             },
           },
           required: ["url"],
