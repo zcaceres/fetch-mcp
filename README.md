@@ -17,6 +17,8 @@ This MCP server provides functionality to fetch web content in various formats, 
   - Input:
     - `url` (string, required): URL of the website to fetch
     - `headers` (object, optional): Custom headers to include in the request
+    - `max_length` (number, optional): Maximum length to fetch (default 5000, can change via environment variable)
+    - `start_index` (number, optional): Used together with max_length to retrieve contents piece by piece, 0 by default
   - Returns the raw HTML content of the webpage
 
 - **fetch_json**
@@ -24,6 +26,8 @@ This MCP server provides functionality to fetch web content in various formats, 
   - Input:
     - `url` (string, required): URL of the JSON to fetch
     - `headers` (object, optional): Custom headers to include in the request
+    - `max_length` (number, optional): Maximum length to fetch (default 5000, can change via environment variable)
+    - `start_index` (number, optional): Used together with max_length to retrieve contents piece by piece, 0 by default
   - Returns the parsed JSON content
 
 - **fetch_txt**
@@ -31,6 +35,8 @@ This MCP server provides functionality to fetch web content in various formats, 
   - Input:
     - `url` (string, required): URL of the website to fetch
     - `headers` (object, optional): Custom headers to include in the request
+    - `max_length` (number, optional): Maximum length to fetch (default 5000, can change via environment variable)
+    - `start_index` (number, optional): Used together with max_length to retrieve contents piece by piece, 0 by default
   - Returns the text content of the webpage with HTML tags, scripts, and styles removed
 
 - **fetch_markdown**
@@ -38,6 +44,8 @@ This MCP server provides functionality to fetch web content in various formats, 
   - Input:
     - `url` (string, required): URL of the website to fetch
     - `headers` (object, optional): Custom headers to include in the request
+    - `max_length` (number, optional): Maximum length to fetch (default 5000, can change via environment variable)
+    - `start_index` (number, optional): Used together with max_length to retrieve contents piece by piece, 0 by default
   - Returns the content of the webpage converted to Markdown format
 
 ### Resources
@@ -60,6 +68,10 @@ npm start
 
 This will start the Fetch MCP Server running on stdio.
 
+### Environment variables
+
+- **DEFAULT_LIMIT** - sets the default size limit for the fetch (0 = no limit)
+
 ### Usage with Desktop App
 
 To integrate this server with a desktop app, add the following to your app's server configuration:
@@ -68,10 +80,13 @@ To integrate this server with a desktop app, add the following to your app's ser
 {
   "mcpServers": {
     "fetch": {
-      "command": "node",
+      "command": "npx",
       "args": [
-        "{ABSOLUTE PATH TO FILE HERE}/dist/index.js"
-      ]
+        "fetch-mcp"
+      ], 
+      "env": {
+        "DEFAULT_LIMIT": "50000" // optionally change default limit
+      }
     }
   }
 }
