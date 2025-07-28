@@ -82,7 +82,7 @@ To integrate this server with a desktop app, add the following to your app's ser
     "fetch": {
       "command": "npx",
       "args": [
-        "fetch-mcp"
+        "mcp-fetch-server"
       ], 
       "env": {
         "DEFAULT_LIMIT": "50000" // optionally change default limit
