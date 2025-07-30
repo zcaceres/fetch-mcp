@@ -4,6 +4,8 @@
 
 This MCP server provides functionality to fetch web content in various formats, including HTML, JSON, plain text, and Markdown.
 
+[![MCPHub.com Badge](https://mcphub.com/api/mcp-servers/zcaceres/fetch-mcp/badge)](https://mcphub.com/mcp-servers/zcaceres/fetch-mcp)
+
 <a href="https://glama.ai/mcp/servers/nu09wf23ao">
   <img width="380" height="200" src="https://glama.ai/mcp/servers/nu09wf23ao/badge" alt="Fetch Server MCP server" />
 </a>
