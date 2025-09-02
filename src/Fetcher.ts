@@ -9,7 +9,7 @@ export class Fetcher {
       return "";
     }
     
-    const end = Math.min(startIndex + maxLength, text.length);
+    const end = maxLength > 0 ? Math.min(startIndex + maxLength, text.length) : text.length;
     return text.substring(startIndex, end);
   }
   private static async _fetch({

@@ -8,6 +8,8 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import { RequestPayloadSchema } from "./types.js";
 import { Fetcher } from "./Fetcher.js";
+import process from "process";
+import { downloadLimit } from "./types.js";
 
 const server = new Server(
   {
@@ -27,7 +29,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
     tools: [
       {
         name: "fetch_html",
-        description: "Fetch a website and return the content as HTML",
+        description: "Fetch a website and return its unmodified contents as HTML",
         inputSchema: {
           type: "object",
           properties: {
@@ -41,7 +43,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             },
             max_length: {
               type: "number",
-              description: "Maximum number of characters to return (default: 5000)",
+              description: `Maximum number of characters to return (default: ${downloadLimit})`,
             },
             start_index: {
               type: "number",
@@ -53,7 +55,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "fetch_markdown",
-        description: "Fetch a website and return the content as Markdown",
+        description: "Fetch a website and return its contents converted content to Markdown",
         inputSchema: {
           type: "object",
           properties: {
@@ -67,7 +69,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             },
             max_length: {
               type: "number",
-              description: "Maximum number of characters to return (default: 5000)",
+              description: `Maximum number of characters to return (default: ${downloadLimit}})`,
             },
             start_index: {
               type: "number",
@@ -80,7 +82,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       {
         name: "fetch_txt",
         description:
-          "Fetch a website, return the content as plain text (no HTML)",
+          "Fetch a website, convert the content to plain text (no HTML)",
         inputSchema: {
           type: "object",
           properties: {
@@ -94,7 +96,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             },
             max_length: {
               type: "number",
-              description: "Maximum number of characters to return (default: 5000)",
+              description: `Maximum number of characters to return (default: ${downloadLimit})`,
             },
             start_index: {
               type: "number",
@@ -120,7 +122,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             },
             max_length: {
               type: "number",
-              description: "Maximum number of characters to return (default: 5000)",
+              description: `Maximum number of characters to return (default: ${downloadLimit})`,
             },
             start_index: {
               type: "number",
