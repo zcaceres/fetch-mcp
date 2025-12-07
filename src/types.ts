@@ -1,18 +1,64 @@
+// src/types.ts
+// Re-export all types and utilities from their respective modules
+// This maintains backward compatibility with existing imports
+
 import { z } from "zod";
 
-export const downloadLimit = Number.parseInt(process.env.DEFAULT_LIMIT ?? "5000") ?? 5000;
+// Re-export configuration
+export {
+  downloadLimit,
+  safeFetchLimit,
+  enableDnsCheck,
+  dnsFailClosed,
+  requestTimeout,
+  maxRedirects,
+  sanitizeErrors,
+  BLOCKED_HEADERS,
+  AUTH_HEADERS,
+  allowAuthHeaders,
+  validateContentType,
+  EXPECTED_CONTENT_TYPES,
+  includeMetadata,
+  MAX_METADATA_SIZE,
+  htmlWorkerMaxMemoryMb,
+  htmlWorkerYoungMemoryMb,
+  htmlWorkerCodeRangeMb,
+  enableHtmlSandbox,
+  allowUnsafeHtml,
+  htmlWorkerTimeout,
+  enableMetrics,
+  logLevel,
+  logFormat,
+  maxRequestsPerMinute,
+  enableCache,
+  cacheTTL,
+  RequestPayloadSchema,
+  type RequestPayload,
+  validateConfiguration,
+  type ConfigValidationError,
+} from "./config/index.js";
 
-export const RequestPayloadSchema = z.object({
-  url: z.string().url(),
-  headers: z.record(z.string()).optional(),
-  max_length: z.number().int().min(0).optional().default(downloadLimit),
-  start_index: z.number().int().min(0).optional().default(0),
-});
+// Re-export risk detection
+export {
+  type ResponseMetadata,
+  type SecurityContext,
+  type RiskProfile,
+  getRiskProfile,
+  mapRiskLevelToScore,
+  decodeHtmlEntities,
+  normalizeHomoglyphs,
+  detectBase64Injection,
+  detectKnownRisks,
+} from "./risk/index.js";
 
-// Make sure TypeScript treats the fields as optional with defaults
-export type RequestPayload = {
-  url: string;
-  headers?: Record<string, string>;
-  max_length?: number;
-  start_index?: number;
-};
+// Re-export cache
+export { ResponseCache, responseCache } from "./cache/index.js";
+
+// Re-export rate limiting
+export { RateLimiter, rateLimiter } from "./rate-limit/index.js";
+
+// Re-export logging
+export { type FetchMetrics, emitMetric, log } from "./logging/index.js";
+
+// Re-export dependency injection
+export { type FetcherDependencies, dependencies } from "./deps/index.js";
