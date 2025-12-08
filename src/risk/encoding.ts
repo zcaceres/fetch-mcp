@@ -1,6 +1,28 @@
 // src/risk/encoding.ts
 // Encoding detection and normalization utilities for attack detection
 
+import punycode from "punycode";
+
+/**
+ * Decode URL-encoded characters (percent encoding)
+ * Handles %XX hex sequences (e.g., %69 → 'i', %3C → '<')
+ */
+export function decodeUrlEncoding(text: string): string {
+  try {
+    // First pass: decode standard percent-encoding
+    let decoded = text.replace(/%([0-9A-Fa-f]{2})/g, (_, hex) =>
+      String.fromCharCode(parseInt(hex, 16)),
+    );
+    // Second pass: handle double-encoded sequences (%25XX → %XX → char)
+    decoded = decoded.replace(/%([0-9A-Fa-f]{2})/g, (_, hex) =>
+      String.fromCharCode(parseInt(hex, 16)),
+    );
+    return decoded;
+  } catch {
+    return text;
+  }
+}
+
 /**
  * Decode HTML entities to detect encoded injection attempts
  * Handles both numeric (&#73;) and named (&lt;) entities
@@ -174,6 +196,70 @@ export function normalizeHomoglyphs(text: string): string {
   for (const [homoglyph, ascii] of Object.entries(HOMOGLYPH_MAP)) {
     normalized = normalized.split(homoglyph).join(ascii);
   }
+  return normalized;
+}
+
+/**
+ * Recursively decode HTML entities to catch double/triple encoding
+ * Example: &#38;#105;gnore → &#105;gnore → ignore
+ * Limited to MAX_ITERATIONS to prevent DoS via deeply nested encoding
+ */
+const MAX_DECODE_ITERATIONS = 3;
+
+export function decodeHtmlEntitiesRecursive(text: string): string {
+  let current = text;
+  let previous = "";
+
+  for (let i = 0; i < MAX_DECODE_ITERATIONS && current !== previous; i++) {
+    previous = current;
+    current = decodeHtmlEntities(current);
+  }
+
+  return current;
+}
+
+/**
+ * Normalize punycode/IDN domains to Unicode for homoglyph detection
+ * Example: xn--80ak6aa92e.com → москва.com (which may contain homoglyphs)
+ *
+ * This catches IDN homograph attacks where attackers register domains like:
+ * - xn--pple-43d.com (аpple.com with Cyrillic 'а')
+ * - xn--80a1acny.xn--p1ai (россия.рф)
+ */
+export function decodePunycode(text: string): string {
+  try {
+    // Find punycode-encoded segments (xn--...)
+    return text.replace(/xn--[a-z0-9-]+/gi, (match) => {
+      try {
+        return punycode.toUnicode(match);
+      } catch {
+        return match;
+      }
+    });
+  } catch {
+    return text;
+  }
+}
+
+/**
+ * Comprehensive text normalization for attack detection
+ * Applies all decoding/normalization passes in the correct order
+ */
+export function normalizeForDetection(text: string): string {
+  let normalized = text;
+
+  // 1. Decode URL encoding first (may reveal HTML entities)
+  normalized = decodeUrlEncoding(normalized);
+
+  // 2. Recursively decode HTML entities (catches double encoding)
+  normalized = decodeHtmlEntitiesRecursive(normalized);
+
+  // 3. Decode punycode domains (reveals Unicode for homoglyph check)
+  normalized = decodePunycode(normalized);
+
+  // 4. Normalize homoglyphs to ASCII
+  normalized = normalizeHomoglyphs(normalized);
+
   return normalized;
 }
 

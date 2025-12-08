@@ -49,6 +49,10 @@ export {
   normalizeHomoglyphs,
   detectBase64Injection,
   detectKnownRisks,
+  decodeUrlEncoding,
+  decodeHtmlEntitiesRecursive,
+  decodePunycode,
+  normalizeForDetection,
 } from "./risk/index.js";
 
 // Re-export cache

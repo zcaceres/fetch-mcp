@@ -12,6 +12,10 @@ import {
   decodeHtmlEntities,
   normalizeHomoglyphs,
   detectBase64Injection,
+  normalizeForDetection,
+  decodeUrlEncoding,
+  decodeHtmlEntitiesRecursive,
+  decodePunycode,
 } from "./encoding.js";
 import type { ResponseMetadata } from "./types.js";
 
@@ -50,7 +54,13 @@ export function detectKnownRisks(
     risks.push("contains_javascript_url");
   }
 
-  // Prepare normalized versions for pattern detection
+  // Prepare normalized versions for pattern detection (layered decoding)
+  const urlDecodedContent = decodeUrlEncoding(content);
+  const htmlDecodedContent = decodeHtmlEntitiesRecursive(urlDecodedContent);
+  const punycodeDecodedContent = decodePunycode(htmlDecodedContent);
+  const fullyNormalizedContent = normalizeHomoglyphs(punycodeDecodedContent);
+
+  // Legacy compatibility: keep old variable names for existing checkPatterns logic
   const decodedContent = decodeHtmlEntities(content);
   const normalizedContent = normalizeHomoglyphs(decodedContent);
 
@@ -67,8 +77,20 @@ export function detectKnownRisks(
         }
       }
       if (checkEncoded) {
-        // Check HTML-decoded content (if different)
-        if (decodedContent !== content && pattern.test(decodedContent)) {
+        // Check URL-decoded content (if different)
+        if (urlDecodedContent !== content && pattern.test(urlDecodedContent)) {
+          if (!risks.includes(risk)) {
+            risks.push(risk);
+          }
+          if (!risks.includes("url_encoded_attack")) {
+            risks.push("url_encoded_attack");
+          }
+        }
+        // Check HTML-decoded content (if different from URL-decoded)
+        if (
+          htmlDecodedContent !== urlDecodedContent &&
+          pattern.test(htmlDecodedContent)
+        ) {
           if (!risks.includes(risk)) {
             risks.push(risk);
           }
@@ -76,10 +98,32 @@ export function detectKnownRisks(
             risks.push("html_entity_encoded_attack");
           }
         }
+        // Check for double-encoded attacks (recursive decode found more)
+        if (
+          decodedContent !== content &&
+          htmlDecodedContent !== decodedContent &&
+          pattern.test(htmlDecodedContent)
+        ) {
+          if (!risks.includes("double_encoded_attack")) {
+            risks.push("double_encoded_attack");
+          }
+        }
+        // Check punycode-decoded content (if different)
+        if (
+          punycodeDecodedContent !== htmlDecodedContent &&
+          pattern.test(punycodeDecodedContent)
+        ) {
+          if (!risks.includes(risk)) {
+            risks.push(risk);
+          }
+          if (!risks.includes("punycode_homograph_attack")) {
+            risks.push("punycode_homograph_attack");
+          }
+        }
         // Check homoglyph-normalized content (if different)
         if (
-          normalizedContent !== decodedContent &&
-          pattern.test(normalizedContent)
+          fullyNormalizedContent !== punycodeDecodedContent &&
+          pattern.test(fullyNormalizedContent)
         ) {
           if (!risks.includes(risk)) {
             risks.push(risk);

@@ -13,6 +13,10 @@ export {
   decodeHtmlEntities,
   normalizeHomoglyphs,
   detectBase64Injection,
+  decodeUrlEncoding,
+  decodeHtmlEntitiesRecursive,
+  decodePunycode,
+  normalizeForDetection,
 } from "./encoding.js";
 
 // Re-export detection patterns (for testing)

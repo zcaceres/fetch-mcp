@@ -254,7 +254,10 @@ Be aware of these common prompt injection techniques in fetched content:
 | Multi-Tool Attack    | "Use write_file tool to..."           | ✅ Auto-detected as `multi_tool_attack`           |
 | Context Overflow     | Padding + injection at end            | ✅ Auto-detected as `context_overflow_attack`     |
 | HTML Entity Encoded  | `&#73;gnore` (encodes "Ignore")       | ✅ Auto-detected as `html_entity_encoded_attack`  |
+| Double Encoded       | `&#38;#105;gnore` (nested entities)   | ✅ Auto-detected as `double_encoded_attack`       |
+| URL Encoded          | `%69gnore` (%69 = 'i')                | ✅ Auto-detected as `url_encoded_attack`          |
 | Unicode Homoglyphs   | `іgnоrе` (Cyrillic lookalikes)        | ✅ Auto-detected as `homoglyph_attack`            |
+| IDN Homograph        | `xn--80ak6aa92e.com` (fake apple.com) | ✅ Auto-detected as `punycode_homograph_attack`   |
 | Base64 Encoded       | `aWdub3JlIHByZXZpb3Vz...`             | ✅ Auto-detected as `base64_encoded_attack`       |
 
 ### Attack Detection
@@ -264,7 +267,10 @@ The server automatically detects various attack patterns and flags them in `secu
 **Encoding Attacks:**
 
 - `html_entity_encoded_attack` - HTML entity encoded injection detected
+- `double_encoded_attack` - Nested/recursive encoding detected (e.g., `&#38;#105;`)
+- `url_encoded_attack` - URL percent-encoding detected (e.g., `%69gnore`)
 - `homoglyph_attack` - Unicode lookalike characters detected
+- `punycode_homograph_attack` - IDN homograph attack via punycode domain
 - `base64_encoded_attack` - Base64 encoded dangerous phrase detected
 
 **Structural Attacks:**
