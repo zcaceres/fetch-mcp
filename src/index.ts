@@ -6,7 +6,7 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
-import { RequestPayloadSchema } from "./types.js";
+import { RequestPayloadSchema, YouTubeTranscriptPayloadSchema } from "./types.js";
 import { Fetcher } from "./Fetcher.js";
 import process from "process";
 import { downloadLimit } from "./types.js";
@@ -50,6 +50,10 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               type: "number",
               description: "Start content from this character index (default: 0)",
             },
+            proxy: {
+              type: "string",
+              description: "Optional proxy URL (e.g. 'http://proxy:8080')",
+            },
           },
           required: ["url"],
         },
@@ -75,6 +79,10 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             start_index: {
               type: "number",
               description: "Start content from this character index (default: 0)",
+            },
+            proxy: {
+              type: "string",
+              description: "Optional proxy URL (e.g. 'http://proxy:8080')",
             },
           },
           required: ["url"],
@@ -103,6 +111,10 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               type: "number",
               description: "Start content from this character index (default: 0)",
             },
+            proxy: {
+              type: "string",
+              description: "Optional proxy URL (e.g. 'http://proxy:8080')",
+            },
           },
           required: ["url"],
         },
@@ -129,6 +141,45 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               type: "number",
               description: "Start content from this character index (default: 0)",
             },
+            proxy: {
+              type: "string",
+              description: "Optional proxy URL (e.g. 'http://proxy:8080')",
+            },
+          },
+          required: ["url"],
+        },
+      },
+      {
+        name: "fetch_youtube_transcript",
+        description:
+          "Fetch a YouTube video page and extract its captions/transcript",
+        inputSchema: {
+          type: "object",
+          properties: {
+            url: {
+              type: "string",
+              description: "URL of the YouTube video",
+            },
+            headers: {
+              type: "object",
+              description: "Optional headers to include in the request",
+            },
+            max_length: {
+              type: "number",
+              description: `Maximum number of characters to return (default: ${downloadLimit})`,
+            },
+            start_index: {
+              type: "number",
+              description: "Start content from this character index (default: 0)",
+            },
+            proxy: {
+              type: "string",
+              description: "Optional proxy URL (e.g. 'http://proxy:8080')",
+            },
+            lang: {
+              type: "string",
+              description: "Language code for captions (default: 'en')",
+            },
           },
           required: ["url"],
         },
@@ -139,6 +190,11 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
 
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
+
+  if (name === "fetch_youtube_transcript") {
+    const validatedArgs = YouTubeTranscriptPayloadSchema.parse(args);
+    return Fetcher.youtubeTranscript(validatedArgs);
+  }
 
   const validatedArgs = RequestPayloadSchema.parse(args);
 

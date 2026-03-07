@@ -12,6 +12,7 @@ describe("Fetcher", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     globalThis.fetch = mockFetch as any;
+    Fetcher.hasYtDlp = false;
   });
 
   const mockRequest = {
@@ -177,6 +178,126 @@ describe("Fetcher", () => {
       const result = await Fetcher.html({ url: "https://example.com" });
       expect(result.isError).toBe(false);
       expect(result.content[0].text).toBe("<html>ok</html>");
+    });
+  });
+
+  describe("proxy", () => {
+    it("should pass proxy option to fetch when provided", async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        text: jest.fn().mockResolvedValueOnce("<html>ok</html>"),
+      });
+
+      await Fetcher.html({ url: "https://example.com", proxy: "http://proxy:8080" });
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      const callArgs = mockFetch.mock.calls[0];
+      expect(callArgs[1]).toHaveProperty("proxy", "http://proxy:8080");
+    });
+
+    it("should not include proxy option when not provided", async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        text: jest.fn().mockResolvedValueOnce("<html>ok</html>"),
+      });
+
+      await Fetcher.html({ url: "https://example.com" });
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      const callArgs = mockFetch.mock.calls[0];
+      expect(callArgs[1]).not.toHaveProperty("proxy");
+    });
+  });
+
+  describe("youtubeTranscript", () => {
+    it("should fetch and parse YouTube transcript", async () => {
+      const playerResponse = {
+        captions: {
+          playerCaptionsTracklistRenderer: {
+            captionTracks: [
+              {
+                languageCode: "en",
+                baseUrl: "https://www.youtube.com/api/timedtext?lang=en",
+                name: { simpleText: "English" },
+              },
+            ],
+          },
+        },
+      };
+      const pageHtml = `<html><script>var ytInitialPlayerResponse = ${JSON.stringify(playerResponse)};</script></html>`;
+      const captionXml = `<transcript><text start="0" dur="2">Hello</text><text start="2" dur="3">World</text></transcript>`;
+
+      // First call: page HTML. Second call: caption XML.
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          text: jest.fn().mockResolvedValueOnce(pageHtml),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          text: jest.fn().mockResolvedValueOnce(captionXml),
+        });
+
+      const result = await Fetcher.youtubeTranscript({
+        url: "https://www.youtube.com/watch?v=test",
+      });
+
+      expect(result.isError).toBe(false);
+      expect(result.content[0].text).toContain("[Transcript language: en");
+      expect(result.content[0].text).toContain("[0:00] Hello");
+      expect(result.content[0].text).toContain("[0:02] World");
+    });
+
+    it("should pass proxy when fetching captions", async () => {
+      const playerResponse = {
+        captions: {
+          playerCaptionsTracklistRenderer: {
+            captionTracks: [
+              {
+                languageCode: "en",
+                baseUrl: "https://www.youtube.com/api/timedtext?lang=en",
+                name: { simpleText: "English" },
+              },
+            ],
+          },
+        },
+      };
+      const pageHtml = `<html><script>var ytInitialPlayerResponse = ${JSON.stringify(playerResponse)};</script></html>`;
+      const captionXml = `<transcript><text start="0" dur="2">Hi</text></transcript>`;
+
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          text: jest.fn().mockResolvedValueOnce(pageHtml),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          text: jest.fn().mockResolvedValueOnce(captionXml),
+        });
+
+      await Fetcher.youtubeTranscript({
+        url: "https://www.youtube.com/watch?v=test",
+        proxy: "http://proxy:8080",
+      });
+
+      // Both calls should include proxy
+      for (const call of mockFetch.mock.calls) {
+        expect(call[1]).toHaveProperty("proxy", "http://proxy:8080");
+      }
+    });
+
+    it("should return error when no captions found", async () => {
+      const pageHtml = `<html><script>var ytInitialPlayerResponse = {"videoDetails":{"videoId":"test"}};</script></html>`;
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        text: jest.fn().mockResolvedValueOnce(pageHtml),
+      });
+
+      const result = await Fetcher.youtubeTranscript({
+        url: "https://www.youtube.com/watch?v=test",
+      });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("No caption tracks found");
     });
   });
 

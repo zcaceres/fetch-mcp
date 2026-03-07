@@ -8,6 +8,7 @@ export const RequestPayloadSchema = z.object({
   headers: z.record(z.string(), z.string()).optional(),
   max_length: z.number().int().min(0).optional().default(downloadLimit),
   start_index: z.number().int().min(0).optional().default(0),
+  proxy: z.string().url().optional(),
 });
 
 // Make sure TypeScript treats the fields as optional with defaults
@@ -16,4 +17,18 @@ export type RequestPayload = {
   headers?: Record<string, string>;
   max_length?: number;
   start_index?: number;
+  proxy?: string;
+};
+
+export const YouTubeTranscriptPayloadSchema = z.object({
+  url: z.string().url(),
+  headers: z.record(z.string(), z.string()).optional(),
+  max_length: z.number().int().min(0).optional().default(downloadLimit),
+  start_index: z.number().int().min(0).optional().default(0),
+  proxy: z.string().url().optional(),
+  lang: z.string().optional().default("en"),
+});
+
+export type YouTubeTranscriptPayload = RequestPayload & {
+  lang?: string;
 };
