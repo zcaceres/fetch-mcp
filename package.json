@@ -1,25 +1,39 @@
 {
   "name": "mcp-fetch-server",
-  "version": "1.0.2",
+  "version": "1.1.0",
   "description": "An MCP server offering simple HTTP fetch functionality",
   "type": "module",
-  "main": "index.js",
+  "main": "dist/index.js",
   "license": "MIT",
   "author": "zcaceres (@zachcaceres zach.dev)",
   "contributors": [
     "pwilkin (ilintar@gmail.com)"
   ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/zcaceres/fetch-mcp.git"
+  },
+  "homepage": "https://github.com/zcaceres/fetch-mcp#readme",
+  "bugs": {
+    "url": "https://github.com/zcaceres/fetch-mcp/issues"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
-    "build": "bun build src/index.ts --outdir dist --target node",
+    "build": "bun build src/index.ts src/cli.ts --outdir dist --target node",
     "prepare": "bun run build",
     "dev": "bun run --watch src/index.ts",
     "start": "bun run src/index.ts",
     "test": "bun test"
   },
   "bin": {
-    "mcp-fetch-server": "dist/index.js"
+    "mcp-fetch-server": "dist/index.js",
+    "mcp-fetch": "dist/cli.js"
   },
-  "keywords": [],
+  "keywords": ["mcp", "fetch", "web", "scrape", "markdown", "youtube", "transcript"],
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.27.1",
     "jsdom": "^28.1.0",
