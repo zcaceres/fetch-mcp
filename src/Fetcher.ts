@@ -36,30 +36,30 @@ export class Fetcher {
     headers,
   }: RequestPayload): Promise<Response> {
     this.validateUrl(url);
+    let response: Response;
     try {
-      const response = await fetch(url, {
+      response = await fetch(url, {
         headers: {
           "User-Agent":
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
           ...headers,
         },
       });
-
-      if (response.url && response.url !== url) {
-        this.validateUrl(response.url);
-      }
-
-      if (!response.ok) {
-        throw new Error(`HTTP error: ${response.status}`);
-      }
-      return response;
     } catch (e: unknown) {
       if (e instanceof Error) {
         throw new Error(`Failed to fetch ${url}: ${e.message}`);
-      } else {
-        throw new Error(`Failed to fetch ${url}: Unknown error`);
       }
+      throw new Error(`Failed to fetch ${url}: Unknown error`);
     }
+
+    if (response.url && response.url !== url) {
+      this.validateUrl(response.url);
+    }
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch ${url}: HTTP error: ${response.status}`);
+    }
+    return response;
   }
 
   static async html(requestPayload: RequestPayload) {
@@ -77,7 +77,7 @@ export class Fetcher {
       return { content: [{ type: "text", text: html }], isError: false };
     } catch (error) {
       return {
-        content: [{ type: "text", text: (error as Error).message }],
+        content: [{ type: "text", text: error instanceof Error ? error.message : String(error) }],
         isError: true,
       };
     }
@@ -102,7 +102,7 @@ export class Fetcher {
       };
     } catch (error) {
       return {
-        content: [{ type: "text", text: (error as Error).message }],
+        content: [{ type: "text", text: error instanceof Error ? error.message : String(error) }],
         isError: true,
       };
     }
@@ -137,7 +137,7 @@ export class Fetcher {
       };
     } catch (error) {
       return {
-        content: [{ type: "text", text: (error as Error).message }],
+        content: [{ type: "text", text: error instanceof Error ? error.message : String(error) }],
         isError: true,
       };
     }
@@ -160,7 +160,7 @@ export class Fetcher {
       return { content: [{ type: "text", text: markdown }], isError: false };
     } catch (error) {
       return {
-        content: [{ type: "text", text: (error as Error).message }],
+        content: [{ type: "text", text: error instanceof Error ? error.message : String(error) }],
         isError: true,
       };
     }

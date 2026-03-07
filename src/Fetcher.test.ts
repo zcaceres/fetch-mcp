@@ -163,6 +163,8 @@ describe("Fetcher", () => {
       const result = await Fetcher.html({ url: "https://example.com" });
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain("private address");
+      // Should NOT be double-wrapped with "Failed to fetch" prefix
+      expect(result.content[0].text).not.toContain("Failed to fetch");
     });
 
     it("should allow redirects to public URLs", async () => {
@@ -210,6 +212,18 @@ describe("Fetcher", () => {
         ],
         isError: true,
       });
+    });
+
+    it("should produce a string text field when response processing throws a non-Error", async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        text: jest.fn().mockRejectedValueOnce("string error"),
+      });
+
+      const result = await Fetcher.html(mockRequest);
+      expect(result.isError).toBe(true);
+      expect(typeof result.content[0].text).toBe("string");
+      expect(result.content[0].text).toBe("string error");
     });
   });
 });
