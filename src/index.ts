@@ -55,7 +55,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "fetch_markdown",
-        description: "Fetch a website and return its contents converted content to Markdown",
+        description: "Fetch a website and return its contents converted to Markdown",
         inputSchema: {
           type: "object",
           properties: {
@@ -69,7 +69,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             },
             max_length: {
               type: "number",
-              description: `Maximum number of characters to return (default: ${downloadLimit}})`,
+              description: `Maximum number of characters to return (default: ${downloadLimit})`,
             },
             start_index: {
               type: "number",

@@ -1,7 +1,7 @@
 import { JSDOM } from "jsdom";
 import TurndownService from "turndown";
 import is_ip_private from "private-ip";
-import { RequestPayload } from "./types.js";
+import { RequestPayload, downloadLimit } from "./types.js";
 
 export class Fetcher {
   private static applyLengthLimits(text: string, maxLength: number, startIndex: number): string {
@@ -17,7 +17,9 @@ export class Fetcher {
     headers,
   }: RequestPayload): Promise<Response> {
     try {
-      if (is_ip_private(url)) {
+      const parsedUrl = new URL(url);
+      const hostname = parsedUrl.hostname;
+      if (hostname === 'localhost' || is_ip_private(hostname)) {
         throw new Error(
           `Fetcher blocked an attempt to fetch a private IP ${url}. This is to prevent a security vulnerability where a local MCP could fetch privileged local IPs and exfiltrate data.`,
         );
@@ -51,10 +53,10 @@ export class Fetcher {
       // Apply length limits
       html = this.applyLengthLimits(
         html, 
-        requestPayload.max_length ?? 5000, 
+        requestPayload.max_length ?? downloadLimit,
         requestPayload.start_index ?? 0
       );
-      
+
       return { content: [{ type: "text", text: html }], isError: false };
     } catch (error) {
       return {
@@ -73,10 +75,10 @@ export class Fetcher {
       // Apply length limits
       jsonString = this.applyLengthLimits(
         jsonString,
-        requestPayload.max_length ?? 5000,
+        requestPayload.max_length ?? downloadLimit,
         requestPayload.start_index ?? 0
       );
-      
+
       return {
         content: [{ type: "text", text: jsonString }],
         isError: false,
@@ -108,7 +110,7 @@ export class Fetcher {
       // Apply length limits
       normalizedText = this.applyLengthLimits(
         normalizedText,
-        requestPayload.max_length ?? 5000,
+        requestPayload.max_length ?? downloadLimit,
         requestPayload.start_index ?? 0
       );
 
@@ -134,10 +136,10 @@ export class Fetcher {
       // Apply length limits
       markdown = this.applyLengthLimits(
         markdown,
-        requestPayload.max_length ?? 5000,
+        requestPayload.max_length ?? downloadLimit,
         requestPayload.start_index ?? 0
       );
-      
+
       return { content: [{ type: "text", text: markdown }], isError: false };
     } catch (error) {
       return {
