@@ -131,7 +131,7 @@ describe("parseArgs", () => {
   });
 
   it("parses all subcommands", () => {
-    for (const cmd of ["html", "markdown", "txt", "json", "youtube"] as const) {
+    for (const cmd of ["html", "markdown", "readable", "txt", "json", "youtube"] as const) {
       const result = parseArgs([cmd, "https://example.com"]);
       expect(result.subcommand).toBe(cmd);
     }

@@ -112,6 +112,52 @@ describe("Fetcher", () => {
     });
   });
 
+  describe("readable", () => {
+    const articleHtml = `
+      <html>
+        <head><title>Test Article</title></head>
+        <body>
+          <nav>Navigation</nav>
+          <article>
+            <h1>Hello World</h1>
+            <p>This is the main article content that should be extracted by Readability. It needs to be long enough for Readability to consider it real content, so here is some additional text to pad it out a bit more.</p>
+          </article>
+          <footer>Footer stuff</footer>
+        </body>
+      </html>
+    `;
+
+    it("should return readable content as markdown", async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        text: jest.fn().mockResolvedValueOnce(articleHtml),
+      });
+
+      const result = await Fetcher.readable(mockRequest);
+      expect(result.isError).toBe(false);
+      expect(result.content[0].text).toContain("Hello World");
+    });
+
+    it("should return error when Readability cannot parse", async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        text: jest.fn().mockResolvedValueOnce("<html><body></body></html>"),
+      });
+
+      const result = await Fetcher.readable(mockRequest);
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("Failed to parse readable content");
+    });
+
+    it("should handle fetch errors", async () => {
+      mockFetch.mockRejectedValueOnce(new Error("Network error"));
+
+      const result = await Fetcher.readable(mockRequest);
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("Failed to fetch https://example.com: Network error");
+    });
+  });
+
   describe("markdown", () => {
     it("should handle errors", async () => {
       mockFetch.mockRejectedValueOnce(new Error("Conversion error"));

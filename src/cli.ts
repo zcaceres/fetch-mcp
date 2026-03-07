@@ -11,6 +11,7 @@ Usage: mcp-fetch <command> <url> [flags]
 Commands:
   html      Fetch a URL and return raw HTML
   markdown  Fetch a URL and return Markdown
+  readable  Fetch a URL and return article content as Markdown (via Readability)
   txt       Fetch a URL and return plain text
   json      Fetch a URL and return JSON
   youtube   Fetch a YouTube video transcript
@@ -24,7 +25,7 @@ Flags:
   --version          Show version
 `;
 
-const SUBCOMMANDS = ["html", "markdown", "txt", "json", "youtube"] as const;
+const SUBCOMMANDS = ["html", "markdown", "readable", "txt", "json", "youtube"] as const;
 type Subcommand = (typeof SUBCOMMANDS)[number];
 
 export interface ParsedArgs {
@@ -94,6 +95,7 @@ async function run(args: ParsedArgs): Promise<void> {
   const fetchers: Record<string, (p: any) => Promise<any>> = {
     html: Fetcher.html.bind(Fetcher),
     markdown: Fetcher.markdown.bind(Fetcher),
+    readable: Fetcher.readable.bind(Fetcher),
     txt: Fetcher.txt.bind(Fetcher),
     json: Fetcher.json.bind(Fetcher),
     youtube: Fetcher.youtubeTranscript.bind(Fetcher),

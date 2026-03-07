@@ -95,6 +95,64 @@ describe("Fetcher — fixture tests", () => {
     });
   });
 
+  describe("readable — real Readability + Turndown", () => {
+    const articleHtml = `<!DOCTYPE html>
+<html>
+  <head><title>Test Article</title></head>
+  <body>
+    <nav><a href="/">Home</a> | <a href="/about">About</a></nav>
+    <article>
+      <h1>The Main Article Title</h1>
+      <p>This is the first paragraph of the article. It contains enough text for Readability to identify it as the main content of the page, which is important for the algorithm to work properly.</p>
+      <p>This is the second paragraph with more substantial content. The Readability algorithm needs a reasonable amount of text to determine what constitutes the main content versus navigation and boilerplate.</p>
+      <p>A third paragraph adds even more weight to the article body. Readability scores content blocks by text density and structural cues to extract the primary content.</p>
+    </article>
+    <aside>
+      <h3>Related Articles</h3>
+      <ul><li>Article 1</li><li>Article 2</li></ul>
+    </aside>
+    <footer><p>Copyright 2024</p></footer>
+  </body>
+</html>`;
+
+    it("extracts article content and converts to markdown", async () => {
+      mockFetchWith(articleHtml);
+      const result = await Fetcher.readable(req({ max_length: 0 }));
+      const md = result.content[0].text;
+
+      expect(result.isError).toBe(false);
+      expect(md).toContain("The Main Article Title");
+      expect(md).toContain("first paragraph");
+      expect(md).toContain("second paragraph");
+    });
+
+    it("strips navigation and boilerplate", async () => {
+      mockFetchWith(articleHtml);
+      const result = await Fetcher.readable(req({ max_length: 0 }));
+      const md = result.content[0].text;
+
+      // Nav links should be stripped
+      expect(md).not.toContain("Home");
+      expect(md).not.toContain("About");
+      // Footer should be stripped
+      expect(md).not.toContain("Copyright 2024");
+    });
+
+    it("returns error for content Readability cannot parse", async () => {
+      mockFetchWith("<html><body></body></html>");
+      const result = await Fetcher.readable(req({ max_length: 0 }));
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("Failed to parse readable content");
+    });
+
+    it("respects max_length", async () => {
+      mockFetchWith(articleHtml);
+      const result = await Fetcher.readable(req({ max_length: 50 }));
+      expect(result.isError).toBe(false);
+      expect(result.content[0].text.length).toBeLessThanOrEqual(50);
+    });
+  });
+
   describe("applyLengthLimits", () => {
     const longContent = "A".repeat(200);
 

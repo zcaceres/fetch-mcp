@@ -150,6 +150,37 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         },
       },
       {
+        name: "fetch_readable",
+        description:
+          "Fetch a website and return its main content parsed by Mozilla Readability, converted to Markdown. Strips away navigation, ads, and boilerplate. Ideal for articles and blog posts.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            url: {
+              type: "string",
+              description: "URL of the website to fetch",
+            },
+            headers: {
+              type: "object",
+              description: "Optional headers to include in the request",
+            },
+            max_length: {
+              type: "number",
+              description: `Maximum number of characters to return (default: ${downloadLimit})`,
+            },
+            start_index: {
+              type: "number",
+              description: "Start content from this character index (default: 0)",
+            },
+            proxy: {
+              type: "string",
+              description: "Optional proxy URL (e.g. 'http://proxy:8080')",
+            },
+          },
+          required: ["url"],
+        },
+      },
+      {
         name: "fetch_youtube_transcript",
         description:
           "Fetch a YouTube video page and extract its captions/transcript",
@@ -202,6 +233,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   if (name === "fetch_json") return Fetcher.json(validatedArgs);
   if (name === "fetch_txt") return Fetcher.txt(validatedArgs);
   if (name === "fetch_markdown") return Fetcher.markdown(validatedArgs);
+  if (name === "fetch_readable") return Fetcher.readable(validatedArgs);
   throw new Error("Tool not found");
 });
 

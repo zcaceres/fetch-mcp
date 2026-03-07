@@ -36,6 +36,7 @@
   "keywords": ["mcp", "fetch", "web", "scrape", "markdown", "youtube", "transcript"],
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.27.1",
+    "@mozilla/readability": "^0.6.0",
     "jsdom": "^28.1.0",
     "private-ip": "^3.0.2",
     "turndown": "^7.2.2",
@@ -44,6 +45,7 @@
   "devDependencies": {
     "@types/bun": "latest",
     "@types/jsdom": "^28.0.0",
+    "@types/mozilla__readability": "^0.4.2",
     "@types/turndown": "^5.0.6"
   }
 }
