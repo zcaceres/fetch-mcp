@@ -22,14 +22,14 @@
   "keywords": [],
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.27.1",
-    "jsdom": "^25.0.1",
+    "jsdom": "^28.1.0",
     "private-ip": "^3.0.2",
     "turndown": "^7.2.2",
-    "zod": "^3.25.76"
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@types/bun": "latest",
-    "@types/jsdom": "^21.1.7",
+    "@types/jsdom": "^28.0.0",
     "@types/turndown": "^5.0.6"
   }
 }
