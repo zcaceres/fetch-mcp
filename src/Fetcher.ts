@@ -1,46 +1,68 @@
 import { JSDOM } from "jsdom";
 import TurndownService from "turndown";
 import is_ip_private from "private-ip";
-import { RequestPayload } from "./types.js";
+import { RequestPayload, YouTubeTranscriptPayload, downloadLimit } from "./types.js";
+import { YouTubeTranscript } from "./YouTubeTranscript.js";
 
 export class Fetcher {
   private static applyLengthLimits(text: string, maxLength: number, startIndex: number): string {
     if (startIndex >= text.length) {
       return "";
     }
-    
+
     const end = maxLength > 0 ? Math.min(startIndex + maxLength, text.length) : text.length;
     return text.substring(startIndex, end);
   }
+
+  private static validateUrl(url: string): void {
+    const parsedUrl = new URL(url);
+    if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
+      throw new Error(
+        `Fetcher blocked URL with disallowed protocol "${parsedUrl.protocol}". Only HTTP and HTTPS are allowed.`,
+      );
+    }
+    const hostname = parsedUrl.hostname;
+    const bareHostname = hostname.startsWith('[') && hostname.endsWith(']')
+      ? hostname.slice(1, -1)
+      : hostname;
+    if (bareHostname === 'localhost' || is_ip_private(bareHostname)) {
+      throw new Error(
+        `Fetcher blocked request to private address "${bareHostname}". This prevents SSRF attacks where a local MCP server could access privileged internal services.`,
+      );
+    }
+  }
+
   private static async _fetch({
     url,
     headers,
+    proxy,
   }: RequestPayload): Promise<Response> {
+    this.validateUrl(url);
+    let response: Response;
     try {
-      if (is_ip_private(url)) {
-        throw new Error(
-          `Fetcher blocked an attempt to fetch a private IP ${url}. This is to prevent a security vulnerability where a local MCP could fetch privileged local IPs and exfiltrate data.`,
-        );
-      }
-      const response = await fetch(url, {
+      response = await fetch(url, {
         headers: {
           "User-Agent":
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
           ...headers,
         },
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error: ${response.status}`);
-      }
-      return response;
+        ...(proxy ? { proxy } : {}),
+      } as RequestInit);
     } catch (e: unknown) {
       if (e instanceof Error) {
         throw new Error(`Failed to fetch ${url}: ${e.message}`);
-      } else {
-        throw new Error(`Failed to fetch ${url}: Unknown error`);
       }
+      throw new Error(`Failed to fetch ${url}: Unknown error`);
     }
+
+    if (response.url && response.url !== url) {
+      this.validateUrl(response.url);
+    }
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch ${url}: HTTP error: ${response.status}`);
+    }
+    return response;
   }
 
   static async html(requestPayload: RequestPayload) {
@@ -51,14 +73,14 @@ export class Fetcher {
       // Apply length limits
       html = this.applyLengthLimits(
         html, 
-        requestPayload.max_length ?? 5000, 
+        requestPayload.max_length ?? downloadLimit,
         requestPayload.start_index ?? 0
       );
-      
+
       return { content: [{ type: "text", text: html }], isError: false };
     } catch (error) {
       return {
-        content: [{ type: "text", text: (error as Error).message }],
+        content: [{ type: "text", text: error instanceof Error ? error.message : String(error) }],
         isError: true,
       };
     }
@@ -73,17 +95,17 @@ export class Fetcher {
       // Apply length limits
       jsonString = this.applyLengthLimits(
         jsonString,
-        requestPayload.max_length ?? 5000,
+        requestPayload.max_length ?? downloadLimit,
         requestPayload.start_index ?? 0
       );
-      
+
       return {
         content: [{ type: "text", text: jsonString }],
         isError: false,
       };
     } catch (error) {
       return {
-        content: [{ type: "text", text: (error as Error).message }],
+        content: [{ type: "text", text: error instanceof Error ? error.message : String(error) }],
         isError: true,
       };
     }
@@ -108,7 +130,7 @@ export class Fetcher {
       // Apply length limits
       normalizedText = this.applyLengthLimits(
         normalizedText,
-        requestPayload.max_length ?? 5000,
+        requestPayload.max_length ?? downloadLimit,
         requestPayload.start_index ?? 0
       );
 
@@ -118,7 +140,108 @@ export class Fetcher {
       };
     } catch (error) {
       return {
-        content: [{ type: "text", text: (error as Error).message }],
+        content: [{ type: "text", text: error instanceof Error ? error.message : String(error) }],
+        isError: true,
+      };
+    }
+  }
+
+  private static async fetchTranscriptViaYtDlp(
+    videoUrl: string,
+    lang: string,
+  ): Promise<{ xml: string; lang: string; langName: string }> {
+    const { execSync } = await import("child_process");
+    const tmpDir = execSync("mktemp -d", { encoding: "utf-8" }).trim();
+    try {
+      execSync(
+        `yt-dlp --write-sub --sub-lang ${lang} --sub-format srv1 --skip-download -o "${tmpDir}/sub" "${videoUrl}" 2>/dev/null`,
+        { encoding: "utf-8", timeout: 30000 },
+      );
+      const { readdirSync, readFileSync } = await import("fs");
+      const files = readdirSync(tmpDir).filter((f: string) => f.endsWith(".srv1"));
+      if (files.length === 0) {
+        throw new Error("yt-dlp did not produce subtitle files");
+      }
+      const file = files[0];
+      const xml = readFileSync(`${tmpDir}/${file}`, "utf-8");
+      const matchedLang = file.match(/\.([^.]+)\.srv1$/)?.[1] ?? lang;
+      return { xml, lang: matchedLang, langName: matchedLang };
+    } finally {
+      execSync(`rm -rf "${tmpDir}"`, { encoding: "utf-8" });
+    }
+  }
+
+  private static async fetchTranscriptDirect(
+    requestPayload: YouTubeTranscriptPayload,
+  ): Promise<{ xml: string; lang: string; langName: string }> {
+    const response = await this._fetch(requestPayload);
+    const html = await response.text();
+
+    const playerResponse = YouTubeTranscript.extractPlayerResponse(html);
+    const tracks = YouTubeTranscript.getCaptionTracks(playerResponse);
+
+    const lang = requestPayload.lang ?? "en";
+    const track =
+      tracks.find((t: any) => t.languageCode === lang) ?? tracks[0];
+
+    const captionUrl = track.baseUrl + (track.baseUrl.includes("fmt=") ? "" : "&fmt=srv1");
+    const captionResponse = await this._fetch({
+      url: captionUrl,
+      headers: requestPayload.headers,
+      proxy: requestPayload.proxy,
+    });
+
+    const xml = await captionResponse.text();
+    return {
+      xml,
+      lang: track.languageCode,
+      langName: track.name?.simpleText ?? "Unknown",
+    };
+  }
+
+  static hasYtDlp: boolean | null = null;
+
+  static checkYtDlp(): boolean {
+    if (this.hasYtDlp !== null) return this.hasYtDlp;
+    try {
+      const { execSync } = require("child_process");
+      execSync("which yt-dlp", { encoding: "utf-8", stdio: "pipe" });
+      this.hasYtDlp = true;
+    } catch {
+      this.hasYtDlp = false;
+    }
+    return this.hasYtDlp;
+  }
+
+  static async youtubeTranscript(requestPayload: YouTubeTranscriptPayload) {
+    try {
+      const lang = requestPayload.lang ?? "en";
+      let result: { xml: string; lang: string; langName: string };
+
+      if (this.checkYtDlp()) {
+        try {
+          result = await this.fetchTranscriptViaYtDlp(requestPayload.url, lang);
+        } catch {
+          result = await this.fetchTranscriptDirect(requestPayload);
+        }
+      } else {
+        result = await this.fetchTranscriptDirect(requestPayload);
+      }
+
+      const lines = YouTubeTranscript.parseTranscriptXml(result.xml);
+      const header = `[Transcript language: ${result.lang} — ${result.langName}]\n\n`;
+      let transcript = header + lines.join("\n");
+
+      transcript = this.applyLengthLimits(
+        transcript,
+        requestPayload.max_length ?? downloadLimit,
+        requestPayload.start_index ?? 0,
+      );
+
+      return { content: [{ type: "text", text: transcript }], isError: false };
+    } catch (error) {
+      return {
+        content: [{ type: "text", text: error instanceof Error ? error.message : String(error) }],
         isError: true,
       };
     }
@@ -134,14 +257,14 @@ export class Fetcher {
       // Apply length limits
       markdown = this.applyLengthLimits(
         markdown,
-        requestPayload.max_length ?? 5000,
+        requestPayload.max_length ?? downloadLimit,
         requestPayload.start_index ?? 0
       );
-      
+
       return { content: [{ type: "text", text: markdown }], isError: false };
     } catch (error) {
       return {
-        content: [{ type: "text", text: (error as Error).message }],
+        content: [{ type: "text", text: error instanceof Error ? error.message : String(error) }],
         isError: true,
       };
     }

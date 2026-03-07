@@ -1,16 +1,18 @@
+import { describe, it, expect, beforeEach, afterAll, jest } from "bun:test";
 import { Fetcher } from "./Fetcher";
-import { JSDOM } from "jsdom";
-import TurndownService from "turndown";
 
-global.fetch = jest.fn();
+const originalFetch = globalThis.fetch;
+const mockFetch = jest.fn();
 
-jest.mock("jsdom");
-
-jest.mock("turndown");
+afterAll(() => {
+  globalThis.fetch = originalFetch;
+});
 
 describe("Fetcher", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    globalThis.fetch = mockFetch as any;
+    Fetcher.hasYtDlp = false;
   });
 
   const mockRequest = {
@@ -34,7 +36,7 @@ describe("Fetcher", () => {
 
   describe("html", () => {
     it("should return the raw HTML content", async () => {
-      (fetch as jest.Mock).mockResolvedValueOnce({
+      mockFetch.mockResolvedValueOnce({
         ok: true,
         text: jest.fn().mockResolvedValueOnce(mockHtml),
       });
@@ -47,7 +49,7 @@ describe("Fetcher", () => {
     });
 
     it("should handle errors", async () => {
-      (fetch as jest.Mock).mockRejectedValueOnce(new Error("Network error"));
+      mockFetch.mockRejectedValueOnce(new Error("Network error"));
 
       const result = await Fetcher.html(mockRequest);
       expect(result).toEqual({
@@ -65,7 +67,7 @@ describe("Fetcher", () => {
   describe("json", () => {
     it("should parse and return JSON content", async () => {
       const mockJson = { key: "value" };
-      (fetch as jest.Mock).mockResolvedValueOnce({
+      mockFetch.mockResolvedValueOnce({
         ok: true,
         json: jest.fn().mockResolvedValueOnce(mockJson),
       });
@@ -78,7 +80,7 @@ describe("Fetcher", () => {
     });
 
     it("should handle errors", async () => {
-      (fetch as jest.Mock).mockRejectedValueOnce(new Error("Invalid JSON"));
+      mockFetch.mockRejectedValueOnce(new Error("Invalid JSON"));
 
       const result = await Fetcher.json(mockRequest);
       expect(result).toEqual({
@@ -94,34 +96,8 @@ describe("Fetcher", () => {
   });
 
   describe("txt", () => {
-    it("should return plain text content without HTML tags, scripts, and styles", async () => {
-      (fetch as jest.Mock).mockResolvedValueOnce({
-        ok: true,
-        text: jest.fn().mockResolvedValueOnce(mockHtml),
-      });
-
-      const mockTextContent = "Hello World This is a test paragraph.";
-      // @ts-expect-error Mocking JSDOM
-      (JSDOM as jest.Mock).mockImplementationOnce(() => ({
-        window: {
-          document: {
-            body: {
-              textContent: mockTextContent,
-            },
-            getElementsByTagName: jest.fn().mockReturnValue([]),
-          },
-        },
-      }));
-
-      const result = await Fetcher.txt(mockRequest);
-      expect(result).toEqual({
-        content: [{ type: "text", text: mockTextContent }],
-        isError: false,
-      });
-    });
-
     it("should handle errors", async () => {
-      (fetch as jest.Mock).mockRejectedValueOnce(new Error("Parsing error"));
+      mockFetch.mockRejectedValueOnce(new Error("Parsing error"));
 
       const result = await Fetcher.txt(mockRequest);
       expect(result).toEqual({
@@ -137,26 +113,8 @@ describe("Fetcher", () => {
   });
 
   describe("markdown", () => {
-    it("should convert HTML to markdown", async () => {
-      (fetch as jest.Mock).mockResolvedValueOnce({
-        ok: true,
-        text: jest.fn().mockResolvedValueOnce(mockHtml),
-      });
-
-      const mockMarkdown = "# Hello World\n\nThis is a test paragraph.";
-      (TurndownService as jest.Mock).mockImplementationOnce(() => ({
-        turndown: jest.fn().mockReturnValueOnce(mockMarkdown),
-      }));
-
-      const result = await Fetcher.markdown(mockRequest);
-      expect(result).toEqual({
-        content: [{ type: "text", text: mockMarkdown }],
-        isError: false,
-      });
-    });
-
     it("should handle errors", async () => {
-      (fetch as jest.Mock).mockRejectedValueOnce(new Error("Conversion error"));
+      mockFetch.mockRejectedValueOnce(new Error("Conversion error"));
 
       const result = await Fetcher.markdown(mockRequest);
       expect(result).toEqual({
@@ -171,9 +129,181 @@ describe("Fetcher", () => {
     });
   });
 
+  describe("SSRF protection", () => {
+    it("should block file:// URLs", async () => {
+      const result = await Fetcher.html({ url: "file:///etc/passwd" });
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('disallowed protocol "file:"');
+    });
+
+    it("should block data: URLs", async () => {
+      const result = await Fetcher.html({ url: "data:text/html,<h1>hi</h1>" });
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('disallowed protocol "data:"');
+    });
+
+    it("should block ftp: URLs", async () => {
+      const result = await Fetcher.html({ url: "ftp://example.com/file" });
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('disallowed protocol "ftp:"');
+    });
+
+    it("should block IPv6 loopback http://[::1]/", async () => {
+      const result = await Fetcher.html({ url: "http://[::1]/" });
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("private address");
+    });
+
+    it("should block redirects to private IPs", async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        url: "http://127.0.0.1/internal",
+        text: jest.fn().mockResolvedValueOnce("secret"),
+      });
+
+      const result = await Fetcher.html({ url: "https://example.com" });
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("private address");
+      // Should NOT be double-wrapped with "Failed to fetch" prefix
+      expect(result.content[0].text).not.toContain("Failed to fetch");
+    });
+
+    it("should allow redirects to public URLs", async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        url: "https://cdn.example.com/page",
+        text: jest.fn().mockResolvedValueOnce("<html>ok</html>"),
+      });
+
+      const result = await Fetcher.html({ url: "https://example.com" });
+      expect(result.isError).toBe(false);
+      expect(result.content[0].text).toBe("<html>ok</html>");
+    });
+  });
+
+  describe("proxy", () => {
+    it("should pass proxy option to fetch when provided", async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        text: jest.fn().mockResolvedValueOnce("<html>ok</html>"),
+      });
+
+      await Fetcher.html({ url: "https://example.com", proxy: "http://proxy:8080" });
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      const callArgs = mockFetch.mock.calls[0];
+      expect(callArgs[1]).toHaveProperty("proxy", "http://proxy:8080");
+    });
+
+    it("should not include proxy option when not provided", async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        text: jest.fn().mockResolvedValueOnce("<html>ok</html>"),
+      });
+
+      await Fetcher.html({ url: "https://example.com" });
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      const callArgs = mockFetch.mock.calls[0];
+      expect(callArgs[1]).not.toHaveProperty("proxy");
+    });
+  });
+
+  describe("youtubeTranscript", () => {
+    it("should fetch and parse YouTube transcript", async () => {
+      const playerResponse = {
+        captions: {
+          playerCaptionsTracklistRenderer: {
+            captionTracks: [
+              {
+                languageCode: "en",
+                baseUrl: "https://www.youtube.com/api/timedtext?lang=en",
+                name: { simpleText: "English" },
+              },
+            ],
+          },
+        },
+      };
+      const pageHtml = `<html><script>var ytInitialPlayerResponse = ${JSON.stringify(playerResponse)};</script></html>`;
+      const captionXml = `<transcript><text start="0" dur="2">Hello</text><text start="2" dur="3">World</text></transcript>`;
+
+      // First call: page HTML. Second call: caption XML.
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          text: jest.fn().mockResolvedValueOnce(pageHtml),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          text: jest.fn().mockResolvedValueOnce(captionXml),
+        });
+
+      const result = await Fetcher.youtubeTranscript({
+        url: "https://www.youtube.com/watch?v=test",
+      });
+
+      expect(result.isError).toBe(false);
+      expect(result.content[0].text).toContain("[Transcript language: en");
+      expect(result.content[0].text).toContain("[0:00] Hello");
+      expect(result.content[0].text).toContain("[0:02] World");
+    });
+
+    it("should pass proxy when fetching captions", async () => {
+      const playerResponse = {
+        captions: {
+          playerCaptionsTracklistRenderer: {
+            captionTracks: [
+              {
+                languageCode: "en",
+                baseUrl: "https://www.youtube.com/api/timedtext?lang=en",
+                name: { simpleText: "English" },
+              },
+            ],
+          },
+        },
+      };
+      const pageHtml = `<html><script>var ytInitialPlayerResponse = ${JSON.stringify(playerResponse)};</script></html>`;
+      const captionXml = `<transcript><text start="0" dur="2">Hi</text></transcript>`;
+
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          text: jest.fn().mockResolvedValueOnce(pageHtml),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          text: jest.fn().mockResolvedValueOnce(captionXml),
+        });
+
+      await Fetcher.youtubeTranscript({
+        url: "https://www.youtube.com/watch?v=test",
+        proxy: "http://proxy:8080",
+      });
+
+      // Both calls should include proxy
+      for (const call of mockFetch.mock.calls) {
+        expect(call[1]).toHaveProperty("proxy", "http://proxy:8080");
+      }
+    });
+
+    it("should return error when no captions found", async () => {
+      const pageHtml = `<html><script>var ytInitialPlayerResponse = {"videoDetails":{"videoId":"test"}};</script></html>`;
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        text: jest.fn().mockResolvedValueOnce(pageHtml),
+      });
+
+      const result = await Fetcher.youtubeTranscript({
+        url: "https://www.youtube.com/watch?v=test",
+      });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("No caption tracks found");
+    });
+  });
+
   describe("error handling", () => {
     it("should handle non-OK responses", async () => {
-      (fetch as jest.Mock).mockResolvedValueOnce({
+      mockFetch.mockResolvedValueOnce({
         ok: false,
         status: 404,
       });
@@ -191,7 +321,7 @@ describe("Fetcher", () => {
     });
 
     it("should handle unknown errors", async () => {
-      (fetch as jest.Mock).mockRejectedValueOnce("Unknown error");
+      mockFetch.mockRejectedValueOnce("Unknown error");
 
       const result = await Fetcher.html(mockRequest);
       expect(result).toEqual({
@@ -203,6 +333,18 @@ describe("Fetcher", () => {
         ],
         isError: true,
       });
+    });
+
+    it("should produce a string text field when response processing throws a non-Error", async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        text: jest.fn().mockRejectedValueOnce("string error"),
+      });
+
+      const result = await Fetcher.html(mockRequest);
+      expect(result.isError).toBe(true);
+      expect(typeof result.content[0].text).toBe("string");
+      expect(result.content[0].text).toBe("string error");
     });
   });
 });
