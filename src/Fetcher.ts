@@ -1,5 +1,6 @@
 import { JSDOM } from "jsdom";
 import TurndownService from "turndown";
+import { Readability } from "@mozilla/readability";
 import is_ip_private from "private-ip";
 import { RequestPayload, YouTubeTranscriptPayload, downloadLimit } from "./types.js";
 import { YouTubeTranscript } from "./YouTubeTranscript.js";
@@ -239,6 +240,37 @@ export class Fetcher {
       );
 
       return { content: [{ type: "text", text: transcript }], isError: false };
+    } catch (error) {
+      return {
+        content: [{ type: "text", text: error instanceof Error ? error.message : String(error) }],
+        isError: true,
+      };
+    }
+  }
+
+  static async readable(requestPayload: RequestPayload) {
+    try {
+      const response = await this._fetch(requestPayload);
+      const html = await response.text();
+
+      const dom = new JSDOM(html, { url: requestPayload.url });
+      const reader = new Readability(dom.window.document);
+      const article = reader.parse();
+
+      if (!article) {
+        throw new Error("Failed to parse readable content from the page");
+      }
+
+      const turndownService = new TurndownService();
+      let content = turndownService.turndown(article.content ?? "");
+
+      content = this.applyLengthLimits(
+        content,
+        requestPayload.max_length ?? downloadLimit,
+        requestPayload.start_index ?? 0
+      );
+
+      return { content: [{ type: "text", text: content }], isError: false };
     } catch (error) {
       return {
         content: [{ type: "text", text: error instanceof Error ? error.message : String(error) }],
