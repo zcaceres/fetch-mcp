@@ -10,11 +10,12 @@ import { RequestPayloadSchema } from "./types.js";
 import { Fetcher } from "./Fetcher.js";
 import process from "process";
 import { downloadLimit } from "./types.js";
+import pkg from "../package.json" with { type: "json" };
 
 const server = new Server(
   {
     name: "zcaceres/fetch",
-    version: "0.1.0",
+    version: pkg.version,
   },
   {
     capabilities: {
@@ -141,22 +142,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
   const validatedArgs = RequestPayloadSchema.parse(args);
 
-  if (request.params.name === "fetch_html") {
-    const fetchResult = await Fetcher.html(validatedArgs);
-    return fetchResult;
-  }
-  if (request.params.name === "fetch_json") {
-    const fetchResult = await Fetcher.json(validatedArgs);
-    return fetchResult;
-  }
-  if (request.params.name === "fetch_txt") {
-    const fetchResult = await Fetcher.txt(validatedArgs);
-    return fetchResult;
-  }
-  if (request.params.name === "fetch_markdown") {
-    const fetchResult = await Fetcher.markdown(validatedArgs);
-    return fetchResult;
-  }
+  if (name === "fetch_html") return Fetcher.html(validatedArgs);
+  if (name === "fetch_json") return Fetcher.json(validatedArgs);
+  if (name === "fetch_txt") return Fetcher.txt(validatedArgs);
+  if (name === "fetch_markdown") return Fetcher.markdown(validatedArgs);
   throw new Error("Tool not found");
 });
 

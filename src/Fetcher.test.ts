@@ -1,8 +1,12 @@
-import { describe, it, expect, beforeEach, jest } from "bun:test";
+import { describe, it, expect, beforeEach, afterAll, jest } from "bun:test";
 import { Fetcher } from "./Fetcher";
 
 const originalFetch = globalThis.fetch;
 const mockFetch = jest.fn();
+
+afterAll(() => {
+  globalThis.fetch = originalFetch;
+});
 
 describe("Fetcher", () => {
   beforeEach(() => {
@@ -121,6 +125,56 @@ describe("Fetcher", () => {
         ],
         isError: true,
       });
+    });
+  });
+
+  describe("SSRF protection", () => {
+    it("should block file:// URLs", async () => {
+      const result = await Fetcher.html({ url: "file:///etc/passwd" });
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('disallowed protocol "file:"');
+    });
+
+    it("should block data: URLs", async () => {
+      const result = await Fetcher.html({ url: "data:text/html,<h1>hi</h1>" });
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('disallowed protocol "data:"');
+    });
+
+    it("should block ftp: URLs", async () => {
+      const result = await Fetcher.html({ url: "ftp://example.com/file" });
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('disallowed protocol "ftp:"');
+    });
+
+    it("should block IPv6 loopback http://[::1]/", async () => {
+      const result = await Fetcher.html({ url: "http://[::1]/" });
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("private address");
+    });
+
+    it("should block redirects to private IPs", async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        url: "http://127.0.0.1/internal",
+        text: jest.fn().mockResolvedValueOnce("secret"),
+      });
+
+      const result = await Fetcher.html({ url: "https://example.com" });
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("private address");
+    });
+
+    it("should allow redirects to public URLs", async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        url: "https://cdn.example.com/page",
+        text: jest.fn().mockResolvedValueOnce("<html>ok</html>"),
+      });
+
+      const result = await Fetcher.html({ url: "https://example.com" });
+      expect(result.isError).toBe(false);
+      expect(result.content[0].text).toBe("<html>ok</html>");
     });
   });
 

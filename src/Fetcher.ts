@@ -8,22 +8,35 @@ export class Fetcher {
     if (startIndex >= text.length) {
       return "";
     }
-    
+
     const end = maxLength > 0 ? Math.min(startIndex + maxLength, text.length) : text.length;
     return text.substring(startIndex, end);
   }
+
+  private static validateUrl(url: string): void {
+    const parsedUrl = new URL(url);
+    if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
+      throw new Error(
+        `Fetcher blocked URL with disallowed protocol "${parsedUrl.protocol}". Only HTTP and HTTPS are allowed.`,
+      );
+    }
+    const hostname = parsedUrl.hostname;
+    const bareHostname = hostname.startsWith('[') && hostname.endsWith(']')
+      ? hostname.slice(1, -1)
+      : hostname;
+    if (bareHostname === 'localhost' || is_ip_private(bareHostname)) {
+      throw new Error(
+        `Fetcher blocked request to private address "${bareHostname}". This prevents SSRF attacks where a local MCP server could access privileged internal services.`,
+      );
+    }
+  }
+
   private static async _fetch({
     url,
     headers,
   }: RequestPayload): Promise<Response> {
+    this.validateUrl(url);
     try {
-      const parsedUrl = new URL(url);
-      const hostname = parsedUrl.hostname;
-      if (hostname === 'localhost' || is_ip_private(hostname)) {
-        throw new Error(
-          `Fetcher blocked an attempt to fetch a private IP ${url}. This is to prevent a security vulnerability where a local MCP could fetch privileged local IPs and exfiltrate data.`,
-        );
-      }
       const response = await fetch(url, {
         headers: {
           "User-Agent":
@@ -31,6 +44,10 @@ export class Fetcher {
           ...headers,
         },
       });
+
+      if (response.url && response.url !== url) {
+        this.validateUrl(response.url);
+      }
 
       if (!response.ok) {
         throw new Error(`HTTP error: ${response.status}`);
