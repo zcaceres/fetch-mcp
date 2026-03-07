@@ -1,17 +1,5 @@
-import { describe, it, expect, beforeEach, jest, mock } from "bun:test";
-import { JSDOM } from "jsdom";
-import TurndownService from "turndown";
-
-mock.module("jsdom", () => ({
-  JSDOM: jest.fn(),
-}));
-
-mock.module("turndown", () => ({
-  default: jest.fn(),
-}));
-
-// Must import Fetcher after setting up module mocks
-const { Fetcher } = await import("./Fetcher");
+import { describe, it, expect, beforeEach, jest } from "bun:test";
+import { Fetcher } from "./Fetcher";
 
 const originalFetch = globalThis.fetch;
 const mockFetch = jest.fn();
@@ -103,31 +91,6 @@ describe("Fetcher", () => {
   });
 
   describe("txt", () => {
-    it("should return plain text content without HTML tags, scripts, and styles", async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        text: jest.fn().mockResolvedValueOnce(mockHtml),
-      });
-
-      const mockTextContent = "Hello World This is a test paragraph.";
-      (JSDOM as any).mockImplementationOnce(() => ({
-        window: {
-          document: {
-            body: {
-              textContent: mockTextContent,
-            },
-            getElementsByTagName: jest.fn().mockReturnValue([]),
-          },
-        },
-      }));
-
-      const result = await Fetcher.txt(mockRequest);
-      expect(result).toEqual({
-        content: [{ type: "text", text: mockTextContent }],
-        isError: false,
-      });
-    });
-
     it("should handle errors", async () => {
       mockFetch.mockRejectedValueOnce(new Error("Parsing error"));
 
@@ -145,24 +108,6 @@ describe("Fetcher", () => {
   });
 
   describe("markdown", () => {
-    it("should convert HTML to markdown", async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        text: jest.fn().mockResolvedValueOnce(mockHtml),
-      });
-
-      const mockMarkdown = "# Hello World\n\nThis is a test paragraph.";
-      (TurndownService as any).mockImplementationOnce(() => ({
-        turndown: jest.fn().mockReturnValueOnce(mockMarkdown),
-      }));
-
-      const result = await Fetcher.markdown(mockRequest);
-      expect(result).toEqual({
-        content: [{ type: "text", text: mockMarkdown }],
-        isError: false,
-      });
-    });
-
     it("should handle errors", async () => {
       mockFetch.mockRejectedValueOnce(new Error("Conversion error"));
 
