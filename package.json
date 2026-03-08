@@ -1,7 +1,7 @@
 {
   "name": "mcp-fetch-server",
   "version": "1.1.0",
-  "description": "An MCP server offering simple HTTP fetch functionality",
+  "description": "MCP server and CLI for fetching web content as HTML, Markdown, plain text, JSON, or YouTube transcripts",
   "type": "module",
   "main": "dist/index.js",
   "license": "MIT",
@@ -24,7 +24,7 @@
   ],
   "scripts": {
     "build": "bun build src/index.ts src/cli.ts --outdir dist --target node",
-    "prepare": "bun run build",
+    "prepublishOnly": "bun run build",
     "dev": "bun run --watch src/index.ts",
     "start": "bun run src/index.ts",
     "test": "bun test"
@@ -32,6 +32,9 @@
   "bin": {
     "mcp-fetch-server": "dist/index.js",
     "mcp-fetch": "dist/cli.js"
+  },
+  "engines": {
+    "node": ">=18"
   },
   "keywords": ["mcp", "fetch", "web", "scrape", "markdown", "youtube", "transcript"],
   "dependencies": {
