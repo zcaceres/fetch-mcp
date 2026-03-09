@@ -2,3 +2,4 @@ node_modules
 dist
 bun.lock
 *.srv1
+.claude

@@ -27,7 +27,8 @@
     "prepublishOnly": "bun run build",
     "dev": "bun run --watch src/index.ts",
     "start": "bun run src/index.ts",
-    "test": "bun test"
+    "test": "bun test",
+    "publish:npm": "bun run build && bun test && npm publish"
   },
   "bin": {
     "mcp-fetch-server": "dist/index.js",
