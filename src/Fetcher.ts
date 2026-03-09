@@ -2,7 +2,8 @@ import { JSDOM } from "jsdom";
 import TurndownService from "turndown";
 import { Readability } from "@mozilla/readability";
 import is_ip_private from "private-ip";
-import { RequestPayload, YouTubeTranscriptPayload, downloadLimit } from "./types.js";
+import dns from "node:dns";
+import { RequestPayload, YouTubeTranscriptPayload, downloadLimit, maxResponseBytes } from "./types.js";
 import { YouTubeTranscript } from "./YouTubeTranscript.js";
 
 export class Fetcher {
@@ -33,12 +34,31 @@ export class Fetcher {
     }
   }
 
+  private static async validateResolvedIp(url: string): Promise<void> {
+    const hostname = new URL(url).hostname;
+    const bareHostname = hostname.startsWith('[') && hostname.endsWith(']')
+      ? hostname.slice(1, -1)
+      : hostname;
+    try {
+      const { address } = await dns.promises.lookup(bareHostname);
+      if (is_ip_private(address)) {
+        throw new Error(
+          `Fetcher blocked request: hostname "${bareHostname}" resolved to private IP "${address}". This prevents DNS rebinding SSRF attacks.`,
+        );
+      }
+    } catch (e) {
+      if (e instanceof Error && e.message.includes('Fetcher blocked')) throw e;
+      // DNS lookup failures (e.g. non-resolvable hostnames) are not SSRF — let fetch handle them
+    }
+  }
+
   private static async _fetch({
     url,
     headers,
     proxy,
   }: RequestPayload): Promise<Response> {
     this.validateUrl(url);
+    await this.validateResolvedIp(url);
     let response: Response;
     try {
       response = await fetch(url, {
@@ -47,6 +67,8 @@ export class Fetcher {
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
           ...headers,
         },
+        // Note: proxy is a Bun-specific fetch option. On Node.js, this option is silently ignored.
+        // To use a proxy on Node.js, you would need an HTTP agent library like http-proxy-agent.
         ...(proxy ? { proxy } : {}),
       } as RequestInit);
     } catch (e: unknown) {
@@ -58,18 +80,48 @@ export class Fetcher {
 
     if (response.url && response.url !== url) {
       this.validateUrl(response.url);
+      await this.validateResolvedIp(response.url);
     }
 
     if (!response.ok) {
       throw new Error(`Failed to fetch ${url}: HTTP error: ${response.status}`);
     }
+
+    const contentLength = response.headers?.get?.("content-length");
+    if (contentLength && parseInt(contentLength, 10) > maxResponseBytes) {
+      throw new Error(`Response too large: ${contentLength} bytes exceeds ${maxResponseBytes} byte limit`);
+    }
+
     return response;
+  }
+
+  private static async readResponseText(response: Response): Promise<string> {
+    if (!response.body) return response.text();
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let result = "";
+    let bytesRead = 0;
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        bytesRead += value.byteLength;
+        if (bytesRead > maxResponseBytes) {
+          throw new Error(`Response too large: exceeded ${maxResponseBytes} byte limit while reading`);
+        }
+        result += decoder.decode(value, { stream: true });
+      }
+      result += decoder.decode();
+      return result;
+    } finally {
+      reader.cancel();
+    }
   }
 
   static async html(requestPayload: RequestPayload) {
     try {
       const response = await this._fetch(requestPayload);
-      let html = await response.text();
+      let html = await this.readResponseText(response);
       
       // Apply length limits
       html = this.applyLengthLimits(
@@ -90,7 +142,8 @@ export class Fetcher {
   static async json(requestPayload: RequestPayload) {
     try {
       const response = await this._fetch(requestPayload);
-      const json = await response.json();
+      const text = await this.readResponseText(response);
+      const json = JSON.parse(text);
       let jsonString = JSON.stringify(json);
       
       // Apply length limits
@@ -115,7 +168,7 @@ export class Fetcher {
   static async txt(requestPayload: RequestPayload) {
     try {
       const response = await this._fetch(requestPayload);
-      const html = await response.text();
+      const html = await this.readResponseText(response);
 
       const dom = new JSDOM(html);
       const document = dom.window.document;
@@ -151,12 +204,22 @@ export class Fetcher {
     videoUrl: string,
     lang: string,
   ): Promise<{ xml: string; lang: string; langName: string }> {
-    const { execSync } = await import("child_process");
+    if (!/^[a-zA-Z0-9-]+$/.test(lang)) {
+      throw new Error(`Invalid language code: "${lang}". Only letters, digits, and hyphens are allowed.`);
+    }
+    const { execFileSync, execSync } = await import("child_process");
     const tmpDir = execSync("mktemp -d", { encoding: "utf-8" }).trim();
     try {
-      execSync(
-        `yt-dlp --write-sub --sub-lang ${lang} --sub-format srv1 --skip-download -o "${tmpDir}/sub" "${videoUrl}" 2>/dev/null`,
-        { encoding: "utf-8", timeout: 30000 },
+      execFileSync(
+        "yt-dlp",
+        [
+          "--write-sub", "--sub-lang", lang,
+          "--sub-format", "srv1",
+          "--skip-download",
+          "-o", `${tmpDir}/sub`,
+          videoUrl,
+        ],
+        { encoding: "utf-8", timeout: 30000, stdio: ["pipe", "pipe", "pipe"] },
       );
       const { readdirSync, readFileSync } = await import("fs");
       const files = readdirSync(tmpDir).filter((f: string) => f.endsWith(".srv1"));
@@ -168,7 +231,8 @@ export class Fetcher {
       const matchedLang = file.match(/\.([^.]+)\.srv1$/)?.[1] ?? lang;
       return { xml, lang: matchedLang, langName: matchedLang };
     } finally {
-      execSync(`rm -rf "${tmpDir}"`, { encoding: "utf-8" });
+      const { rmSync } = await import("fs");
+      rmSync(tmpDir, { recursive: true, force: true });
     }
   }
 
@@ -176,7 +240,7 @@ export class Fetcher {
     requestPayload: YouTubeTranscriptPayload,
   ): Promise<{ xml: string; lang: string; langName: string }> {
     const response = await this._fetch(requestPayload);
-    const html = await response.text();
+    const html = await this.readResponseText(response);
 
     const playerResponse = YouTubeTranscript.extractPlayerResponse(html);
     const tracks = YouTubeTranscript.getCaptionTracks(playerResponse);
@@ -192,7 +256,7 @@ export class Fetcher {
       proxy: requestPayload.proxy,
     });
 
-    const xml = await captionResponse.text();
+    const xml = await this.readResponseText(captionResponse);
     return {
       xml,
       lang: track.languageCode,
@@ -202,10 +266,10 @@ export class Fetcher {
 
   static hasYtDlp: boolean | null = null;
 
-  static checkYtDlp(): boolean {
+  static async checkYtDlp(): Promise<boolean> {
     if (this.hasYtDlp !== null) return this.hasYtDlp;
     try {
-      const { execSync } = require("child_process");
+      const { execSync } = await import("child_process");
       execSync("which yt-dlp", { encoding: "utf-8", stdio: "pipe" });
       this.hasYtDlp = true;
     } catch {
@@ -219,7 +283,11 @@ export class Fetcher {
       const lang = requestPayload.lang ?? "en";
       let result: { xml: string; lang: string; langName: string };
 
-      if (this.checkYtDlp()) {
+      if (await this.checkYtDlp()) {
+        // Validate lang before attempting yt-dlp — this is a security check that must not be swallowed
+        if (!/^[a-zA-Z0-9-]+$/.test(lang)) {
+          throw new Error(`Invalid language code: "${lang}". Only letters, digits, and hyphens are allowed.`);
+        }
         try {
           result = await this.fetchTranscriptViaYtDlp(requestPayload.url, lang);
         } catch {
@@ -251,7 +319,7 @@ export class Fetcher {
   static async readable(requestPayload: RequestPayload) {
     try {
       const response = await this._fetch(requestPayload);
-      const html = await response.text();
+      const html = await this.readResponseText(response);
 
       const dom = new JSDOM(html, { url: requestPayload.url });
       const reader = new Readability(dom.window.document);
@@ -282,7 +350,7 @@ export class Fetcher {
   static async markdown(requestPayload: RequestPayload) {
     try {
       const response = await this._fetch(requestPayload);
-      const html = await response.text();
+      const html = await this.readResponseText(response);
       const turndownService = new TurndownService();
       let markdown = turndownService.turndown(html);
       

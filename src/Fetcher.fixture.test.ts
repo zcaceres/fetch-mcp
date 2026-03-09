@@ -1,5 +1,8 @@
-import { describe, it, expect, afterEach, jest } from "bun:test";
+import { describe, it, expect, afterEach, beforeEach, jest } from "bun:test";
+import dns from "node:dns";
 import { Fetcher } from "./Fetcher";
+
+const originalLookup = dns.promises.lookup;
 
 const sampleHtml = `<!DOCTYPE html>
 <html>
@@ -36,8 +39,13 @@ function mockFetchWith(content: string, contentType = "text/html") {
 const originalFetch = globalThis.fetch;
 
 describe("Fetcher — fixture tests", () => {
+  beforeEach(() => {
+    dns.promises.lookup = (async () => ({ address: "93.184.216.34", family: 4 })) as any;
+  });
+
   afterEach(() => {
     globalThis.fetch = originalFetch;
+    dns.promises.lookup = originalLookup;
   });
 
   const req = (overrides?: Partial<{ max_length: number; start_index: number }>) => ({

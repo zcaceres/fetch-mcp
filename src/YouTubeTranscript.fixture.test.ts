@@ -1,6 +1,9 @@
-import { describe, it, expect, afterEach, jest } from "bun:test";
+import { describe, it, expect, afterEach, beforeEach, jest } from "bun:test";
+import dns from "node:dns";
 import { YouTubeTranscript } from "./YouTubeTranscript";
 import { Fetcher } from "./Fetcher";
+
+const originalLookup = dns.promises.lookup;
 
 // Real caption XML from YouTube video jNQXAC9IVRw ("Me at the zoo")
 // Downloaded via yt-dlp --sub-format srv1
@@ -53,8 +56,13 @@ const realPageHtml = `<!DOCTYPE html><html><head><title>Me at the zoo - YouTube<
 const originalFetch = globalThis.fetch;
 
 describe("YouTubeTranscript — fixture tests", () => {
+  beforeEach(() => {
+    dns.promises.lookup = (async () => ({ address: "93.184.216.34", family: 4 })) as any;
+  });
+
   afterEach(() => {
     globalThis.fetch = originalFetch;
+    dns.promises.lookup = originalLookup;
     Fetcher.hasYtDlp = null;
   });
 

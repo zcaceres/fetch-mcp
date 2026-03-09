@@ -59,6 +59,16 @@ export function parseArgs(argv: string[]): ParsedArgs {
     process.stderr.write(`Missing URL for "${subcommand}" command\n`);
     process.exit(1);
   }
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      process.stderr.write(`Invalid URL protocol "${parsed.protocol}". Only http: and https: are allowed.\n`);
+      process.exit(1);
+    }
+  } catch {
+    process.stderr.write(`Invalid URL: ${url}\n`);
+    process.exit(1);
+  }
 
   const result: ParsedArgs = { subcommand: subcommand as Subcommand, url };
 
@@ -66,19 +76,39 @@ export function parseArgs(argv: string[]): ParsedArgs {
     const flag = argv[i];
     const value = argv[i + 1];
     switch (flag) {
-      case "--max-length":
-        result.maxLength = parseInt(value, 10);
+      case "--max-length": {
+        const parsed = parseInt(value, 10);
+        if (isNaN(parsed) || parsed < 0) {
+          process.stderr.write(`${flag} requires a non-negative integer\n`);
+          process.exit(1);
+        }
+        result.maxLength = parsed;
         i++;
         break;
-      case "--start-index":
-        result.startIndex = parseInt(value, 10);
+      }
+      case "--start-index": {
+        const parsed = parseInt(value, 10);
+        if (isNaN(parsed) || parsed < 0) {
+          process.stderr.write(`${flag} requires a non-negative integer\n`);
+          process.exit(1);
+        }
+        result.startIndex = parsed;
         i++;
         break;
+      }
       case "--proxy":
+        if (!value || value.startsWith("--")) {
+          process.stderr.write(`${flag} requires a value\n`);
+          process.exit(1);
+        }
         result.proxy = value;
         i++;
         break;
       case "--lang":
+        if (!value || value.startsWith("--")) {
+          process.stderr.write(`${flag} requires a value\n`);
+          process.exit(1);
+        }
         result.lang = value;
         i++;
         break;
