@@ -210,6 +210,26 @@ describe("parseArgs", () => {
     expect(cap.stderr).toContain("--proxy requires a value");
   });
 
+  it("exits with error on invalid URL", () => {
+    const cap = captureExit();
+    try {
+      parseArgs(["html", "not-a-url"]);
+    } catch {}
+    restoreIO();
+    expect(cap.code).toBe(1);
+    expect(cap.stderr).toContain("Invalid URL");
+  });
+
+  it("exits with error on non-http URL", () => {
+    const cap = captureExit();
+    try {
+      parseArgs(["html", "file:///etc/passwd"]);
+    } catch {}
+    restoreIO();
+    expect(cap.code).toBe(1);
+    expect(cap.stderr).toContain("Invalid URL protocol");
+  });
+
   it("parses all subcommands", () => {
     for (const cmd of ["html", "markdown", "readable", "txt", "json", "youtube"] as const) {
       const result = parseArgs([cmd, "https://example.com"]);

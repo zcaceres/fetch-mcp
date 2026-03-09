@@ -59,6 +59,16 @@ export function parseArgs(argv: string[]): ParsedArgs {
     process.stderr.write(`Missing URL for "${subcommand}" command\n`);
     process.exit(1);
   }
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      process.stderr.write(`Invalid URL protocol "${parsed.protocol}". Only http: and https: are allowed.\n`);
+      process.exit(1);
+    }
+  } catch {
+    process.stderr.write(`Invalid URL: ${url}\n`);
+    process.exit(1);
+  }
 
   const result: ParsedArgs = { subcommand: subcommand as Subcommand, url };
 

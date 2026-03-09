@@ -74,7 +74,7 @@ describe("Fetcher", () => {
       const mockJson = { key: "value" };
       mockFetch.mockResolvedValueOnce({
         ok: true,
-        json: jest.fn().mockResolvedValueOnce(mockJson),
+        text: jest.fn().mockResolvedValueOnce(JSON.stringify(mockJson)),
       });
 
       const result = await Fetcher.json(mockRequest);
@@ -495,6 +495,31 @@ describe("Fetcher", () => {
       Fetcher.hasYtDlp = true;
       const result = await Fetcher.checkYtDlp();
       expect(result).toBe(true);
+    });
+  });
+
+  describe("response size limit", () => {
+    it("should reject responses with Content-Length exceeding limit", async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        headers: { get: (h: string) => h === "content-length" ? "999999999999" : null },
+        text: jest.fn().mockResolvedValueOnce("data"),
+      });
+
+      const result = await Fetcher.html(mockRequest);
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("Response too large");
+    });
+
+    it("should allow responses within size limit", async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        headers: { get: (h: string) => h === "content-length" ? "100" : null },
+        text: jest.fn().mockResolvedValueOnce("<html>ok</html>"),
+      });
+
+      const result = await Fetcher.html(mockRequest);
+      expect(result.isError).toBe(false);
     });
   });
 
