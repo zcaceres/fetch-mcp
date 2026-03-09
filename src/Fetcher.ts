@@ -101,18 +101,21 @@ export class Fetcher {
     const decoder = new TextDecoder();
     let result = "";
     let bytesRead = 0;
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      bytesRead += value.byteLength;
-      if (bytesRead > maxResponseBytes) {
-        reader.cancel();
-        throw new Error(`Response too large: exceeded ${maxResponseBytes} byte limit while reading`);
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        bytesRead += value.byteLength;
+        if (bytesRead > maxResponseBytes) {
+          throw new Error(`Response too large: exceeded ${maxResponseBytes} byte limit while reading`);
+        }
+        result += decoder.decode(value, { stream: true });
       }
-      result += decoder.decode(value, { stream: true });
+      result += decoder.decode();
+      return result;
+    } finally {
+      reader.cancel();
     }
-    result += decoder.decode();
-    return result;
   }
 
   static async html(requestPayload: RequestPayload) {
@@ -253,7 +256,7 @@ export class Fetcher {
       proxy: requestPayload.proxy,
     });
 
-    const xml = await captionResponse.text();
+    const xml = await this.readResponseText(captionResponse);
     return {
       xml,
       lang: track.languageCode,

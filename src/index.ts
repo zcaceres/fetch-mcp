@@ -219,6 +219,8 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
   };
 });
 
+const FETCH_TOOLS = new Set(["fetch_html", "fetch_json", "fetch_txt", "fetch_markdown", "fetch_readable"]);
+
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
 
@@ -227,14 +229,17 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     return Fetcher.youtubeTranscript(validatedArgs);
   }
 
+  if (!FETCH_TOOLS.has(name)) {
+    throw new Error(`Tool not found: ${name}`);
+  }
+
   const validatedArgs = RequestPayloadSchema.parse(args);
 
   if (name === "fetch_html") return Fetcher.html(validatedArgs);
   if (name === "fetch_json") return Fetcher.json(validatedArgs);
   if (name === "fetch_txt") return Fetcher.txt(validatedArgs);
   if (name === "fetch_markdown") return Fetcher.markdown(validatedArgs);
-  if (name === "fetch_readable") return Fetcher.readable(validatedArgs);
-  throw new Error("Tool not found");
+  return Fetcher.readable(validatedArgs);
 });
 
 async function main() {
