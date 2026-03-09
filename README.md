@@ -116,6 +116,7 @@ mcp-fetch json https://api.example.com/data --proxy http://proxy:8080
 | Variable | Description |
 |----------|-------------|
 | `DEFAULT_LIMIT` | Default character limit for responses (default: `5000`, set to `0` for no limit) |
+| `MAX_RESPONSE_BYTES` | Maximum response body size in bytes (default: `10485760` / 10 MB) |
 
 Example with a custom limit:
 
@@ -141,7 +142,8 @@ Example with a custom limit:
 - Proxy support for requests behind firewalls
 - Pagination with `max_length` and `start_index`
 - Custom request headers
-- SSRF protection (blocks private/localhost addresses)
+- SSRF protection (blocks private/localhost addresses and DNS rebinding)
+- Response size limits to prevent memory exhaustion
 
 ## Development
 

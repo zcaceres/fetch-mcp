@@ -1,6 +1,6 @@
 {
   "name": "mcp-fetch-server",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "MCP server and CLI for fetching web content as HTML, Markdown, plain text, JSON, or YouTube transcripts",
   "type": "module",
   "main": "dist/index.js",
@@ -37,7 +37,15 @@
   "engines": {
     "node": ">=18"
   },
-  "keywords": ["mcp", "fetch", "web", "scrape", "markdown", "youtube", "transcript"],
+  "keywords": [
+    "mcp",
+    "fetch",
+    "web",
+    "scrape",
+    "markdown",
+    "youtube",
+    "transcript"
+  ],
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.27.1",
     "@mozilla/readability": "^0.6.0",
