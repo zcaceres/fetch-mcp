@@ -2,9 +2,9 @@
 
 ![fetch mcp logo](logo.jpg)
 
-This MCP server provides functionality to fetch web content in various formats, including HTML, JSON, plain text, and Markdown.
+[![npm version](https://img.shields.io/npm/v/mcp-fetch-server.svg)](https://www.npmjs.com/package/mcp-fetch-server)
 
-[Available on NPM](https://www.npmjs.com/package/mcp-fetch-server)
+This MCP server provides functionality to fetch web content in various formats, including HTML, JSON, plain text, and Markdown.
 
 <a href="https://glama.ai/mcp/servers/nu09wf23ao">
   <img width="380" height="200" src="https://glama.ai/mcp/servers/nu09wf23ao/badge" alt="Fetch Server MCP server" />
