@@ -66,14 +66,26 @@ export function parseArgs(argv: string[]): ParsedArgs {
     const flag = argv[i];
     const value = argv[i + 1];
     switch (flag) {
-      case "--max-length":
-        result.maxLength = parseInt(value, 10);
+      case "--max-length": {
+        const parsed = parseInt(value, 10);
+        if (isNaN(parsed)) {
+          process.stderr.write(`${flag} requires a numeric value\n`);
+          process.exit(1);
+        }
+        result.maxLength = parsed;
         i++;
         break;
-      case "--start-index":
-        result.startIndex = parseInt(value, 10);
+      }
+      case "--start-index": {
+        const parsed = parseInt(value, 10);
+        if (isNaN(parsed)) {
+          process.stderr.write(`${flag} requires a numeric value\n`);
+          process.exit(1);
+        }
+        result.startIndex = parsed;
         i++;
         break;
+      }
       case "--proxy":
         result.proxy = value;
         i++;

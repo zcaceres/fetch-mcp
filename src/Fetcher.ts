@@ -2,6 +2,7 @@ import { JSDOM } from "jsdom";
 import TurndownService from "turndown";
 import { Readability } from "@mozilla/readability";
 import is_ip_private from "private-ip";
+import dns from "node:dns";
 import { RequestPayload, YouTubeTranscriptPayload, downloadLimit } from "./types.js";
 import { YouTubeTranscript } from "./YouTubeTranscript.js";
 
@@ -33,12 +34,31 @@ export class Fetcher {
     }
   }
 
+  private static async validateResolvedIp(url: string): Promise<void> {
+    const hostname = new URL(url).hostname;
+    const bareHostname = hostname.startsWith('[') && hostname.endsWith(']')
+      ? hostname.slice(1, -1)
+      : hostname;
+    try {
+      const { address } = await dns.promises.lookup(bareHostname);
+      if (is_ip_private(address)) {
+        throw new Error(
+          `Fetcher blocked request: hostname "${bareHostname}" resolved to private IP "${address}". This prevents DNS rebinding SSRF attacks.`,
+        );
+      }
+    } catch (e) {
+      if (e instanceof Error && e.message.includes('Fetcher blocked')) throw e;
+      // DNS lookup failures (e.g. non-resolvable hostnames) are not SSRF — let fetch handle them
+    }
+  }
+
   private static async _fetch({
     url,
     headers,
     proxy,
   }: RequestPayload): Promise<Response> {
     this.validateUrl(url);
+    await this.validateResolvedIp(url);
     let response: Response;
     try {
       response = await fetch(url, {
@@ -47,6 +67,8 @@ export class Fetcher {
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
           ...headers,
         },
+        // Note: proxy is a Bun-specific fetch option. On Node.js, this option is silently ignored.
+        // To use a proxy on Node.js, you would need an HTTP agent library like http-proxy-agent.
         ...(proxy ? { proxy } : {}),
       } as RequestInit);
     } catch (e: unknown) {
@@ -58,6 +80,7 @@ export class Fetcher {
 
     if (response.url && response.url !== url) {
       this.validateUrl(response.url);
+      await this.validateResolvedIp(response.url);
     }
 
     if (!response.ok) {
@@ -151,6 +174,9 @@ export class Fetcher {
     videoUrl: string,
     lang: string,
   ): Promise<{ xml: string; lang: string; langName: string }> {
+    if (!/^[a-zA-Z-]+$/.test(lang)) {
+      throw new Error(`Invalid language code: "${lang}". Only letters and hyphens are allowed.`);
+    }
     const { execSync } = await import("child_process");
     const tmpDir = execSync("mktemp -d", { encoding: "utf-8" }).trim();
     try {
@@ -202,10 +228,10 @@ export class Fetcher {
 
   static hasYtDlp: boolean | null = null;
 
-  static checkYtDlp(): boolean {
+  static async checkYtDlp(): Promise<boolean> {
     if (this.hasYtDlp !== null) return this.hasYtDlp;
     try {
-      const { execSync } = require("child_process");
+      const { execSync } = await import("child_process");
       execSync("which yt-dlp", { encoding: "utf-8", stdio: "pipe" });
       this.hasYtDlp = true;
     } catch {
@@ -219,7 +245,11 @@ export class Fetcher {
       const lang = requestPayload.lang ?? "en";
       let result: { xml: string; lang: string; langName: string };
 
-      if (this.checkYtDlp()) {
+      if (await this.checkYtDlp()) {
+        // Validate lang before attempting yt-dlp — this is a security check that must not be swallowed
+        if (!/^[a-zA-Z-]+$/.test(lang)) {
+          throw new Error(`Invalid language code: "${lang}". Only letters and hyphens are allowed.`);
+        }
         try {
           result = await this.fetchTranscriptViaYtDlp(requestPayload.url, lang);
         } catch {

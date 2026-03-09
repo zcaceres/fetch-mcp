@@ -1,11 +1,14 @@
-import { describe, it, expect, beforeEach, afterAll, jest } from "bun:test";
+import { describe, it, expect, beforeEach, afterAll, jest, spyOn } from "bun:test";
+import dns from "node:dns";
 import { Fetcher } from "./Fetcher";
 
 const originalFetch = globalThis.fetch;
 const mockFetch = jest.fn();
+const originalLookup = dns.promises.lookup;
 
 afterAll(() => {
   globalThis.fetch = originalFetch;
+  dns.promises.lookup = originalLookup;
 });
 
 describe("Fetcher", () => {
@@ -13,6 +16,8 @@ describe("Fetcher", () => {
     jest.clearAllMocks();
     globalThis.fetch = mockFetch as any;
     Fetcher.hasYtDlp = false;
+    // Default: resolve all hostnames to a public IP so existing tests aren't affected
+    dns.promises.lookup = (async () => ({ address: "93.184.216.34", family: 4 })) as any;
   });
 
   const mockRequest = {
@@ -344,6 +349,123 @@ describe("Fetcher", () => {
 
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain("No caption tracks found");
+    });
+  });
+
+  describe("DNS rebinding SSRF protection", () => {
+    it("should block hostnames that resolve to private IPs", async () => {
+      const lookupSpy = spyOn(dns.promises, "lookup").mockResolvedValueOnce({
+        address: "127.0.0.1",
+        family: 4,
+      } as any);
+
+      const result = await Fetcher.html({ url: "https://evil.example.com" });
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("resolved to private IP");
+      expect(result.content[0].text).toContain("DNS rebinding");
+      lookupSpy.mockRestore();
+    });
+
+    it("should block post-redirect hostnames that resolve to private IPs", async () => {
+      const lookupSpy = spyOn(dns.promises, "lookup")
+        .mockResolvedValueOnce({ address: "93.184.216.34", family: 4 } as any) // pre-fetch: public
+        .mockResolvedValueOnce({ address: "10.0.0.1", family: 4 } as any); // post-redirect: private
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        url: "https://internal.evil.com/secret",
+        text: jest.fn().mockResolvedValueOnce("secret data"),
+      });
+
+      const result = await Fetcher.html({ url: "https://example.com" });
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("resolved to private IP");
+      lookupSpy.mockRestore();
+    });
+
+    it("should allow hostnames that resolve to public IPs", async () => {
+      const lookupSpy = spyOn(dns.promises, "lookup").mockResolvedValueOnce({
+        address: "93.184.216.34",
+        family: 4,
+      } as any);
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        text: jest.fn().mockResolvedValueOnce("<html>ok</html>"),
+      });
+
+      const result = await Fetcher.html({ url: "https://example.com" });
+      expect(result.isError).toBe(false);
+      lookupSpy.mockRestore();
+    });
+  });
+
+  describe("yt-dlp lang sanitization", () => {
+    it("should reject lang with shell metacharacters", async () => {
+      Fetcher.hasYtDlp = true;
+
+      const result = await Fetcher.youtubeTranscript({
+        url: "https://www.youtube.com/watch?v=test",
+        lang: "en; rm -rf /",
+      });
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("Invalid language code");
+    });
+
+    it("should reject lang with command substitution", async () => {
+      Fetcher.hasYtDlp = true;
+
+      const result = await Fetcher.youtubeTranscript({
+        url: "https://www.youtube.com/watch?v=test",
+        lang: "$(whoami)",
+      });
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("Invalid language code");
+    });
+
+    it("should accept valid language codes", async () => {
+      Fetcher.hasYtDlp = true;
+      // This will fail at yt-dlp execution (not installed in test), falling back to direct fetch
+      // which will also fail since we haven't mocked fetch — but it should NOT fail at lang validation
+      const lookupSpy = spyOn(dns.promises, "lookup").mockResolvedValue({
+        address: "93.184.216.34",
+        family: 4,
+      } as any);
+
+      const playerResponse = {
+        captions: {
+          playerCaptionsTracklistRenderer: {
+            captionTracks: [{ languageCode: "pt-BR", baseUrl: "https://youtube.com/api/timedtext?lang=pt-BR", name: { simpleText: "Portuguese" } }],
+          },
+        },
+      };
+      const pageHtml = `<html><script>var ytInitialPlayerResponse = ${JSON.stringify(playerResponse)};</script></html>`;
+      const captionXml = `<transcript><text start="0" dur="2">Olá</text></transcript>`;
+
+      mockFetch
+        .mockResolvedValueOnce({ ok: true, text: jest.fn().mockResolvedValueOnce(pageHtml) })
+        .mockResolvedValueOnce({ ok: true, text: jest.fn().mockResolvedValueOnce(captionXml) });
+
+      const result = await Fetcher.youtubeTranscript({
+        url: "https://www.youtube.com/watch?v=test",
+        lang: "pt-BR",
+      });
+      expect(result.isError).toBe(false);
+      lookupSpy.mockRestore();
+    });
+  });
+
+  describe("checkYtDlp", () => {
+    it("should return a promise (async)", () => {
+      Fetcher.hasYtDlp = null;
+      const result = Fetcher.checkYtDlp();
+      expect(result).toBeInstanceOf(Promise);
+    });
+
+    it("should return cached value when already checked", async () => {
+      Fetcher.hasYtDlp = true;
+      const result = await Fetcher.checkYtDlp();
+      expect(result).toBe(true);
     });
   });
 

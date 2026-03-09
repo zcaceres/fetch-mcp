@@ -130,6 +130,36 @@ describe("parseArgs", () => {
     expect(cap.stderr).toContain("Unknown flag: --unknown");
   });
 
+  it("exits with error when --max-length has no value", () => {
+    const cap = captureExit();
+    try {
+      parseArgs(["html", "https://example.com", "--max-length"]);
+    } catch {}
+    restoreIO();
+    expect(cap.code).toBe(1);
+    expect(cap.stderr).toContain("--max-length requires a numeric value");
+  });
+
+  it("exits with error when --start-index has no value", () => {
+    const cap = captureExit();
+    try {
+      parseArgs(["html", "https://example.com", "--start-index"]);
+    } catch {}
+    restoreIO();
+    expect(cap.code).toBe(1);
+    expect(cap.stderr).toContain("--start-index requires a numeric value");
+  });
+
+  it("exits with error when --max-length has non-numeric value", () => {
+    const cap = captureExit();
+    try {
+      parseArgs(["html", "https://example.com", "--max-length", "abc"]);
+    } catch {}
+    restoreIO();
+    expect(cap.code).toBe(1);
+    expect(cap.stderr).toContain("--max-length requires a numeric value");
+  });
+
   it("parses all subcommands", () => {
     for (const cmd of ["html", "markdown", "readable", "txt", "json", "youtube"] as const) {
       const result = parseArgs([cmd, "https://example.com"]);
