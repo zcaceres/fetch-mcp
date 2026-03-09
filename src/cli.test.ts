@@ -137,7 +137,7 @@ describe("parseArgs", () => {
     } catch {}
     restoreIO();
     expect(cap.code).toBe(1);
-    expect(cap.stderr).toContain("--max-length requires a numeric value");
+    expect(cap.stderr).toContain("--max-length requires a non-negative integer");
   });
 
   it("exits with error when --start-index has no value", () => {
@@ -147,7 +147,7 @@ describe("parseArgs", () => {
     } catch {}
     restoreIO();
     expect(cap.code).toBe(1);
-    expect(cap.stderr).toContain("--start-index requires a numeric value");
+    expect(cap.stderr).toContain("--start-index requires a non-negative integer");
   });
 
   it("exits with error when --max-length has non-numeric value", () => {
@@ -157,7 +157,57 @@ describe("parseArgs", () => {
     } catch {}
     restoreIO();
     expect(cap.code).toBe(1);
-    expect(cap.stderr).toContain("--max-length requires a numeric value");
+    expect(cap.stderr).toContain("--max-length requires a non-negative integer");
+  });
+
+  it("exits with error when --max-length is negative", () => {
+    const cap = captureExit();
+    try {
+      parseArgs(["html", "https://example.com", "--max-length", "-1"]);
+    } catch {}
+    restoreIO();
+    expect(cap.code).toBe(1);
+    expect(cap.stderr).toContain("--max-length requires a non-negative integer");
+  });
+
+  it("exits with error when --start-index is negative", () => {
+    const cap = captureExit();
+    try {
+      parseArgs(["html", "https://example.com", "--start-index", "-5"]);
+    } catch {}
+    restoreIO();
+    expect(cap.code).toBe(1);
+    expect(cap.stderr).toContain("--start-index requires a non-negative integer");
+  });
+
+  it("exits with error when --proxy has no value", () => {
+    const cap = captureExit();
+    try {
+      parseArgs(["html", "https://example.com", "--proxy"]);
+    } catch {}
+    restoreIO();
+    expect(cap.code).toBe(1);
+    expect(cap.stderr).toContain("--proxy requires a value");
+  });
+
+  it("exits with error when --lang has no value", () => {
+    const cap = captureExit();
+    try {
+      parseArgs(["html", "https://example.com", "--lang"]);
+    } catch {}
+    restoreIO();
+    expect(cap.code).toBe(1);
+    expect(cap.stderr).toContain("--lang requires a value");
+  });
+
+  it("exits with error when --proxy value looks like a flag", () => {
+    const cap = captureExit();
+    try {
+      parseArgs(["html", "https://example.com", "--proxy", "--max-length", "100"]);
+    } catch {}
+    restoreIO();
+    expect(cap.code).toBe(1);
+    expect(cap.stderr).toContain("--proxy requires a value");
   });
 
   it("parses all subcommands", () => {

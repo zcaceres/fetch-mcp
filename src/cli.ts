@@ -68,8 +68,8 @@ export function parseArgs(argv: string[]): ParsedArgs {
     switch (flag) {
       case "--max-length": {
         const parsed = parseInt(value, 10);
-        if (isNaN(parsed)) {
-          process.stderr.write(`${flag} requires a numeric value\n`);
+        if (isNaN(parsed) || parsed < 0) {
+          process.stderr.write(`${flag} requires a non-negative integer\n`);
           process.exit(1);
         }
         result.maxLength = parsed;
@@ -78,8 +78,8 @@ export function parseArgs(argv: string[]): ParsedArgs {
       }
       case "--start-index": {
         const parsed = parseInt(value, 10);
-        if (isNaN(parsed)) {
-          process.stderr.write(`${flag} requires a numeric value\n`);
+        if (isNaN(parsed) || parsed < 0) {
+          process.stderr.write(`${flag} requires a non-negative integer\n`);
           process.exit(1);
         }
         result.startIndex = parsed;
@@ -87,10 +87,18 @@ export function parseArgs(argv: string[]): ParsedArgs {
         break;
       }
       case "--proxy":
+        if (!value || value.startsWith("--")) {
+          process.stderr.write(`${flag} requires a value\n`);
+          process.exit(1);
+        }
         result.proxy = value;
         i++;
         break;
       case "--lang":
+        if (!value || value.startsWith("--")) {
+          process.stderr.write(`${flag} requires a value\n`);
+          process.exit(1);
+        }
         result.lang = value;
         i++;
         break;

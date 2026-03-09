@@ -453,6 +453,35 @@ describe("Fetcher", () => {
       expect(result.isError).toBe(false);
       lookupSpy.mockRestore();
     });
+
+    it("should accept language codes with digits like es-419", async () => {
+      Fetcher.hasYtDlp = true;
+      const lookupSpy = spyOn(dns.promises, "lookup").mockResolvedValue({
+        address: "93.184.216.34",
+        family: 4,
+      } as any);
+
+      const playerResponse = {
+        captions: {
+          playerCaptionsTracklistRenderer: {
+            captionTracks: [{ languageCode: "es-419", baseUrl: "https://youtube.com/api/timedtext?lang=es-419", name: { simpleText: "Spanish (Latin America)" } }],
+          },
+        },
+      };
+      const pageHtml = `<html><script>var ytInitialPlayerResponse = ${JSON.stringify(playerResponse)};</script></html>`;
+      const captionXml = `<transcript><text start="0" dur="2">Hola</text></transcript>`;
+
+      mockFetch
+        .mockResolvedValueOnce({ ok: true, text: jest.fn().mockResolvedValueOnce(pageHtml) })
+        .mockResolvedValueOnce({ ok: true, text: jest.fn().mockResolvedValueOnce(captionXml) });
+
+      const result = await Fetcher.youtubeTranscript({
+        url: "https://www.youtube.com/watch?v=test",
+        lang: "es-419",
+      });
+      expect(result.isError).toBe(false);
+      lookupSpy.mockRestore();
+    });
   });
 
   describe("checkYtDlp", () => {
