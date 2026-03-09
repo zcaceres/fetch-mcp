@@ -1,6 +1,6 @@
 {
   "name": "mcp-fetch-server",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "MCP server and CLI for fetching web content as HTML, Markdown, plain text, JSON, or YouTube transcripts",
   "type": "module",
   "main": "dist/index.js",
