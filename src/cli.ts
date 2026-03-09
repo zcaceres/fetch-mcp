@@ -118,7 +118,20 @@ async function run(args: ParsedArgs): Promise<void> {
   process.stdout.write(text);
 }
 
-if (import.meta.url === `file://${process.argv[1]}` || process.argv[1]?.endsWith("/cli.js")) {
+import { realpathSync } from "fs";
+import { fileURLToPath } from "url";
+
+function isMainModule(): boolean {
+  try {
+    const scriptPath = fileURLToPath(import.meta.url);
+    const argPath = realpathSync(process.argv[1]);
+    return scriptPath === argPath;
+  } catch {
+    return process.argv[1]?.endsWith("/cli.js") || process.argv[1]?.endsWith("/mcp-fetch") || false;
+  }
+}
+
+if (isMainModule()) {
   const args = parseArgs(process.argv.slice(2));
   run(args).catch((err) => {
     process.stderr.write(String(err?.message ?? err) + "\n");

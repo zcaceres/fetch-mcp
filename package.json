@@ -23,7 +23,7 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "bun build src/index.ts src/cli.ts --outdir dist --target node",
+    "build": "bun build src/index.ts src/cli.ts --outdir dist --target node --external jsdom --external @mozilla/readability --external turndown",
     "prepublishOnly": "bun run build",
     "dev": "bun run --watch src/index.ts",
     "start": "bun run src/index.ts",
