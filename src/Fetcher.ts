@@ -1,6 +1,5 @@
 import { JSDOM } from "jsdom";
-import TurndownService from "turndown";
-import { Readability } from "@mozilla/readability";
+import { readdown } from "readdown";
 import is_ip_private from "private-ip";
 import dns from "node:dns";
 import { RequestPayload, YouTubeTranscriptPayload, downloadLimit, maxResponseBytes } from "./types.js";
@@ -321,16 +320,8 @@ export class Fetcher {
       const response = await this._fetch(requestPayload);
       const html = await this.readResponseText(response);
 
-      const dom = new JSDOM(html, { url: requestPayload.url });
-      const reader = new Readability(dom.window.document);
-      const article = reader.parse();
-
-      if (!article) {
-        throw new Error("Failed to parse readable content from the page");
-      }
-
-      const turndownService = new TurndownService();
-      let content = turndownService.turndown(article.content ?? "");
+      const result = readdown(html, { url: requestPayload.url, includeHeader: false });
+      let content = result.markdown;
 
       content = this.applyLengthLimits(
         content,
@@ -351,9 +342,9 @@ export class Fetcher {
     try {
       const response = await this._fetch(requestPayload);
       const html = await this.readResponseText(response);
-      const turndownService = new TurndownService();
-      let markdown = turndownService.turndown(html);
-      
+      const result = readdown(html, { url: requestPayload.url, includeHeader: false, raw: true });
+      let markdown = result.markdown;
+
       // Apply length limits
       markdown = this.applyLengthLimits(
         markdown,
