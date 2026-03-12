@@ -50,7 +50,6 @@
     "@modelcontextprotocol/sdk": "^1.27.1",
     "@mozilla/readability": "^0.6.0",
     "jsdom": "^28.1.0",
-    "private-ip": "^3.0.2",
     "turndown": "^7.2.2",
     "zod": "^4.3.6"
   },

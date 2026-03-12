@@ -1,8 +1,60 @@
 import { JSDOM } from "jsdom";
 import TurndownService from "turndown";
 import { Readability } from "@mozilla/readability";
-import is_ip_private from "private-ip";
 import dns from "node:dns";
+import net from "node:net";
+
+/**
+ * Check if an IP address belongs to any reserved/non-public range.
+ * Replaces the `private-ip` package which missed multicast (CVE-2025-8020).
+ */
+export function isReservedIP(ip: string): boolean {
+  if (net.isIPv4(ip)) {
+    const [a, b, c] = ip.split('.').map(Number);
+
+    return (
+      (a === 0) ||                                        // 0.0.0.0/8        - "This" network
+      (a === 10) ||                                       // 10.0.0.0/8       - Private (RFC 1918)
+      (a === 100 && b >= 64 && b <= 127) ||               // 100.64.0.0/10    - Shared address space (CGN)
+      (a === 127) ||                                      // 127.0.0.0/8      - Loopback
+      (a === 169 && b === 254) ||                         // 169.254.0.0/16   - Link-local
+      (a === 172 && b >= 16 && b <= 31) ||                // 172.16.0.0/12    - Private (RFC 1918)
+      (a === 192 && b === 0 && c === 0) ||                // 192.0.0.0/24     - IETF protocol assignments
+      (a === 192 && b === 0 && c === 2) ||                // 192.0.2.0/24     - TEST-NET-1
+      (a === 192 && b === 88 && c === 99) ||              // 192.88.99.0/24   - 6to4 relay anycast
+      (a === 192 && b === 168) ||                         // 192.168.0.0/16   - Private (RFC 1918)
+      (a === 198 && (b === 18 || b === 19)) ||            // 198.18.0.0/15    - Benchmarking
+      (a === 198 && b === 51 && c === 100) ||             // 198.51.100.0/24  - TEST-NET-2
+      (a === 203 && b === 0 && c === 113) ||              // 203.0.113.0/24   - TEST-NET-3
+      (a >= 224 && a <= 239) ||                           // 224.0.0.0/4      - Multicast (CVE-2025-8020)
+      (a >= 240)                                          // 240.0.0.0/4      - Reserved + 255.255.255.255 broadcast
+    );
+  }
+
+  if (net.isIPv6(ip)) {
+    const normalized = ip.toLowerCase();
+    return (
+      normalized === '::' ||                              // Unspecified
+      normalized === '::1' ||                             // Loopback
+      (() => {                                              // IPv4-mapped — check embedded v4 address
+        const m = normalized.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
+        return m ? isReservedIP(m[1]) : false;
+      })() ||
+      /^64:ff9b::/i.test(normalized) ||                   // NAT64
+      /^100::/i.test(normalized) ||                       // Discard prefix
+      /^2001:db8:/i.test(normalized) ||                   // Documentation
+      /^2001::/i.test(normalized) ||                      // Teredo
+      /^2002:/i.test(normalized) ||                       // 6to4
+      /^fc/i.test(normalized) ||                          // Unique local (fc00::/7)
+      /^fd/i.test(normalized) ||                          // Unique local (fc00::/7)
+      /^fe[89ab]/i.test(normalized) ||                    // Link-local (fe80::/10)
+      /^ff/i.test(normalized)                             // Multicast
+    );
+  }
+
+  // Not a valid IP — treat as reserved (fail closed)
+  return true;
+}
 import { RequestPayload, YouTubeTranscriptPayload, downloadLimit, maxResponseBytes } from "./types.js";
 import { YouTubeTranscript } from "./YouTubeTranscript.js";
 
@@ -27,7 +79,7 @@ export class Fetcher {
     const bareHostname = hostname.startsWith('[') && hostname.endsWith(']')
       ? hostname.slice(1, -1)
       : hostname;
-    if (bareHostname === 'localhost' || is_ip_private(bareHostname)) {
+    if (bareHostname === 'localhost' || (net.isIP(bareHostname) && isReservedIP(bareHostname))) {
       throw new Error(
         `Fetcher blocked request to private address "${bareHostname}". This prevents SSRF attacks where a local MCP server could access privileged internal services.`,
       );
@@ -41,7 +93,7 @@ export class Fetcher {
       : hostname;
     try {
       const { address } = await dns.promises.lookup(bareHostname);
-      if (is_ip_private(address)) {
+      if (isReservedIP(address)) {
         throw new Error(
           `Fetcher blocked request: hostname "${bareHostname}" resolved to private IP "${address}". This prevents DNS rebinding SSRF attacks.`,
         );
