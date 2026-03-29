@@ -34,6 +34,10 @@ All tools accept the following common parameters:
 
 - **fetch_youtube_transcript** — Fetch a YouTube video's captions/transcript. Uses `yt-dlp` if available, otherwise extracts directly from the page. Accepts an additional `lang` parameter (default: `"en"`) to select the caption language.
 
+## Hosted deployment
+
+A hosted deployment is available on [Fronteir AI](https://fronteir.ai/mcp/zcaceres-fetch-mcp).
+
 ## Installation
 
 ### As an MCP server
