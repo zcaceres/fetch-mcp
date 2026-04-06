@@ -51,13 +51,25 @@ describe("parseArgs", () => {
       "https://example.com",
       "--max-length", "1000",
       "--start-index", "50",
-      "--proxy", "http://proxy:8080",
     ]);
     expect(result.subcommand).toBe("markdown");
     expect(result.url).toBe("https://example.com");
     expect(result.maxLength).toBe(1000);
     expect(result.startIndex).toBe(50);
-    expect(result.proxy).toBe("http://proxy:8080");
+  });
+
+  it("rejects --proxy flag (proxy is server-configured only)", () => {
+    const cap = captureExit();
+    try {
+      parseArgs([
+        "markdown",
+        "https://example.com",
+        "--proxy", "http://proxy:8080",
+      ]);
+    } catch {}
+    restoreIO();
+    expect(cap.code).toBe(1);
+    expect(cap.stderr).toContain("Unknown flag: --proxy");
   });
 
   it("parses youtube with --lang flag", () => {
@@ -180,16 +192,6 @@ describe("parseArgs", () => {
     expect(cap.stderr).toContain("--start-index requires a non-negative integer");
   });
 
-  it("exits with error when --proxy has no value", () => {
-    const cap = captureExit();
-    try {
-      parseArgs(["html", "https://example.com", "--proxy"]);
-    } catch {}
-    restoreIO();
-    expect(cap.code).toBe(1);
-    expect(cap.stderr).toContain("--proxy requires a value");
-  });
-
   it("exits with error when --lang has no value", () => {
     const cap = captureExit();
     try {
@@ -198,16 +200,6 @@ describe("parseArgs", () => {
     restoreIO();
     expect(cap.code).toBe(1);
     expect(cap.stderr).toContain("--lang requires a value");
-  });
-
-  it("exits with error when --proxy value looks like a flag", () => {
-    const cap = captureExit();
-    try {
-      parseArgs(["html", "https://example.com", "--proxy", "--max-length", "100"]);
-    } catch {}
-    restoreIO();
-    expect(cap.code).toBe(1);
-    expect(cap.stderr).toContain("--proxy requires a value");
   });
 
   it("exits with error on invalid URL", () => {

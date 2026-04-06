@@ -50,10 +50,6 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               type: "number",
               description: "Start content from this character index (default: 0)",
             },
-            proxy: {
-              type: "string",
-              description: "Optional proxy URL (e.g. 'http://proxy:8080')",
-            },
           },
           required: ["url"],
         },
@@ -79,10 +75,6 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             start_index: {
               type: "number",
               description: "Start content from this character index (default: 0)",
-            },
-            proxy: {
-              type: "string",
-              description: "Optional proxy URL (e.g. 'http://proxy:8080')",
             },
           },
           required: ["url"],
@@ -111,10 +103,6 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               type: "number",
               description: "Start content from this character index (default: 0)",
             },
-            proxy: {
-              type: "string",
-              description: "Optional proxy URL (e.g. 'http://proxy:8080')",
-            },
           },
           required: ["url"],
         },
@@ -140,10 +128,6 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             start_index: {
               type: "number",
               description: "Start content from this character index (default: 0)",
-            },
-            proxy: {
-              type: "string",
-              description: "Optional proxy URL (e.g. 'http://proxy:8080')",
             },
           },
           required: ["url"],
@@ -172,10 +156,6 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               type: "number",
               description: "Start content from this character index (default: 0)",
             },
-            proxy: {
-              type: "string",
-              description: "Optional proxy URL (e.g. 'http://proxy:8080')",
-            },
           },
           required: ["url"],
         },
@@ -202,10 +182,6 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             start_index: {
               type: "number",
               description: "Start content from this character index (default: 0)",
-            },
-            proxy: {
-              type: "string",
-              description: "Optional proxy URL (e.g. 'http://proxy:8080')",
             },
             lang: {
               type: "string",

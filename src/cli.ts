@@ -19,10 +19,12 @@ Commands:
 Flags:
   --max-length <N>   Maximum characters to return
   --start-index <N>  Start from this character index
-  --proxy <URL>      Proxy URL
   --lang <code>      Language code for YouTube transcripts (default: en)
   --help             Show this help message
   --version          Show version
+
+Proxy:
+  Set the PROXY_URL environment variable to route all requests through a proxy.
 `;
 
 const SUBCOMMANDS = ["html", "markdown", "readable", "txt", "json", "youtube"] as const;
@@ -33,7 +35,6 @@ export interface ParsedArgs {
   url: string;
   maxLength?: number;
   startIndex?: number;
-  proxy?: string;
   lang?: string;
 }
 
@@ -96,14 +97,6 @@ export function parseArgs(argv: string[]): ParsedArgs {
         i++;
         break;
       }
-      case "--proxy":
-        if (!value || value.startsWith("--")) {
-          process.stderr.write(`${flag} requires a value\n`);
-          process.exit(1);
-        }
-        result.proxy = value;
-        i++;
-        break;
       case "--lang":
         if (!value || value.startsWith("--")) {
           process.stderr.write(`${flag} requires a value\n`);
@@ -134,7 +127,6 @@ async function run(args: ParsedArgs): Promise<void> {
   const payload: RequestPayload & { lang?: string } = { url: args.url };
   if (args.maxLength !== undefined) payload.max_length = args.maxLength;
   if (args.startIndex !== undefined) payload.start_index = args.startIndex;
-  if (args.proxy) payload.proxy = args.proxy;
   if (args.lang) payload.lang = args.lang;
 
   const result = await fetchers[args.subcommand](payload);

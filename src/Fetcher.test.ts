@@ -233,16 +233,17 @@ describe("Fetcher", () => {
   });
 
   describe("proxy", () => {
-    it("should pass proxy option to fetch when provided", async () => {
+    it("should not pass user-supplied proxy option to fetch (SSRF prevention)", async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
         text: jest.fn().mockResolvedValueOnce("<html>ok</html>"),
       });
 
-      await Fetcher.html({ url: "https://example.com", proxy: "http://proxy:8080" });
+      // Even if a proxy field is somehow present on the payload, _fetch ignores it
+      await Fetcher.html({ url: "https://example.com" } as any);
       expect(mockFetch).toHaveBeenCalledTimes(1);
       const callArgs = mockFetch.mock.calls[0];
-      expect(callArgs[1]).toHaveProperty("proxy", "http://proxy:8080");
+      expect(callArgs[1]).not.toHaveProperty("proxy");
     });
 
     it("should not include proxy option when not provided", async () => {
@@ -297,7 +298,7 @@ describe("Fetcher", () => {
       expect(result.content[0].text).toContain("[0:02] World");
     });
 
-    it("should pass proxy when fetching captions", async () => {
+    it("should not pass user-supplied proxy when fetching captions", async () => {
       const playerResponse = {
         captions: {
           playerCaptionsTracklistRenderer: {
@@ -326,12 +327,11 @@ describe("Fetcher", () => {
 
       await Fetcher.youtubeTranscript({
         url: "https://www.youtube.com/watch?v=test",
-        proxy: "http://proxy:8080",
       });
 
-      // Both calls should include proxy
+      // No calls should include a user-supplied proxy
       for (const call of mockFetch.mock.calls) {
-        expect(call[1]).toHaveProperty("proxy", "http://proxy:8080");
+        expect(call[1]).not.toHaveProperty("proxy");
       }
     });
 

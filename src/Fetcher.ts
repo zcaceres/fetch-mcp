@@ -3,7 +3,7 @@ import TurndownService from "turndown";
 import { Readability } from "@mozilla/readability";
 import is_ip_private from "private-ip";
 import dns from "node:dns";
-import { RequestPayload, YouTubeTranscriptPayload, downloadLimit, maxResponseBytes } from "./types.js";
+import { RequestPayload, YouTubeTranscriptPayload, downloadLimit, maxResponseBytes, configuredProxy } from "./types.js";
 import { YouTubeTranscript } from "./YouTubeTranscript.js";
 
 export class Fetcher {
@@ -55,7 +55,6 @@ export class Fetcher {
   private static async _fetch({
     url,
     headers,
-    proxy,
   }: RequestPayload): Promise<Response> {
     this.validateUrl(url);
     await this.validateResolvedIp(url);
@@ -67,9 +66,9 @@ export class Fetcher {
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
           ...headers,
         },
-        // Note: proxy is a Bun-specific fetch option. On Node.js, this option is silently ignored.
-        // To use a proxy on Node.js, you would need an HTTP agent library like http-proxy-agent.
-        ...(proxy ? { proxy } : {}),
+        // Proxy is only used when configured server-side via PROXY_URL env var.
+        // User-supplied proxy values are intentionally ignored to prevent SSRF bypass.
+        ...(configuredProxy ? { proxy: configuredProxy } : {}),
       } as RequestInit);
     } catch (e: unknown) {
       if (e instanceof Error) {
@@ -253,7 +252,6 @@ export class Fetcher {
     const captionResponse = await this._fetch({
       url: captionUrl,
       headers: requestPayload.headers,
-      proxy: requestPayload.proxy,
     });
 
     const xml = await this.readResponseText(captionResponse);
