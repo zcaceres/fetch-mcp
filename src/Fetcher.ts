@@ -6,6 +6,8 @@ import dns from "node:dns";
 import { RequestPayload, YouTubeTranscriptPayload, downloadLimit, maxResponseBytes } from "./types.js";
 import { YouTubeTranscript } from "./YouTubeTranscript.js";
 
+const MAX_REDIRECTS = 20;
+
 export class Fetcher {
   private static applyLengthLimits(text: string, maxLength: number, startIndex: number): string {
     if (startIndex >= text.length) {
@@ -34,22 +36,50 @@ export class Fetcher {
     }
   }
 
-  private static async validateResolvedIp(url: string): Promise<void> {
-    const hostname = new URL(url).hostname;
+  /**
+   * Resolve DNS for the given URL's hostname, validate that the resolved IP
+   * is not private, and return a rewritten URL that uses the resolved IP
+   * directly. This eliminates DNS rebinding TOCTOU attacks by ensuring the
+   * validated IP is the one actually connected to.
+   *
+   * Returns { pinnedUrl, hostname } where pinnedUrl has the IP in place of
+   * the hostname, and hostname is the original hostname (for Host header / SNI).
+   */
+  private static async resolveAndPin(url: string): Promise<{ pinnedUrl: string; hostname: string }> {
+    const parsedUrl = new URL(url);
+    const hostname = parsedUrl.hostname;
     const bareHostname = hostname.startsWith('[') && hostname.endsWith(']')
       ? hostname.slice(1, -1)
       : hostname;
+
+    let resolvedAddress: string;
+    let family: number;
     try {
-      const { address } = await dns.promises.lookup(bareHostname);
-      if (is_ip_private(address)) {
-        throw new Error(
-          `Fetcher blocked request: hostname "${bareHostname}" resolved to private IP "${address}". This prevents DNS rebinding SSRF attacks.`,
-        );
-      }
+      const result = await dns.promises.lookup(bareHostname);
+      resolvedAddress = result.address;
+      family = result.family;
     } catch (e) {
       if (e instanceof Error && e.message.includes('Fetcher blocked')) throw e;
-      // DNS lookup failures (e.g. non-resolvable hostnames) are not SSRF — let fetch handle them
+      // DNS lookup failures (e.g. non-resolvable hostnames) are not SSRF — let fetch handle them.
+      // Return the original URL unpinned so fetch produces a normal DNS error.
+      return { pinnedUrl: url, hostname: bareHostname };
     }
+
+    if (is_ip_private(resolvedAddress)) {
+      throw new Error(
+        `Fetcher blocked request: hostname "${bareHostname}" resolved to private IP "${resolvedAddress}". This prevents DNS rebinding SSRF attacks.`,
+      );
+    }
+
+    // Rewrite the URL to use the resolved IP directly, preventing re-resolution
+    const pinnedUrl = new URL(url);
+    if (family === 6) {
+      pinnedUrl.hostname = `[${resolvedAddress}]`;
+    } else {
+      pinnedUrl.hostname = resolvedAddress;
+    }
+
+    return { pinnedUrl: pinnedUrl.toString(), hostname: bareHostname };
   }
 
   private static async _fetch({
@@ -58,41 +88,76 @@ export class Fetcher {
     proxy,
   }: RequestPayload): Promise<Response> {
     this.validateUrl(url);
-    await this.validateResolvedIp(url);
-    let response: Response;
-    try {
-      response = await fetch(url, {
-        headers: {
-          "User-Agent":
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-          ...headers,
-        },
-        // Note: proxy is a Bun-specific fetch option. On Node.js, this option is silently ignored.
-        // To use a proxy on Node.js, you would need an HTTP agent library like http-proxy-agent.
-        ...(proxy ? { proxy } : {}),
-      } as RequestInit);
-    } catch (e: unknown) {
-      if (e instanceof Error) {
-        throw new Error(`Failed to fetch ${url}: ${e.message}`);
+    const { pinnedUrl, hostname } = await this.resolveAndPin(url);
+
+    const parsedUrl = new URL(url);
+    const originalHost = parsedUrl.host; // includes port if non-default
+
+    let currentUrl = pinnedUrl;
+    let currentOriginalHost = originalHost;
+    let currentHostname = hostname;
+
+    for (let redirectCount = 0; redirectCount <= MAX_REDIRECTS; redirectCount++) {
+      let response: Response;
+      try {
+        response = await fetch(currentUrl, {
+          headers: {
+            "User-Agent":
+              "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            ...headers,
+            "Host": currentOriginalHost,
+          },
+          redirect: "manual",
+          // Note: proxy is a Bun-specific fetch option. On Node.js, this option is silently ignored.
+          // To use a proxy on Node.js, you would need an HTTP agent library like http-proxy-agent.
+          ...(proxy ? { proxy } : {}),
+          // Set TLS SNI to the original hostname for HTTPS
+          ...(new URL(currentUrl).protocol === 'https:' ? { tls: { serverName: currentHostname } } : {}),
+        } as RequestInit);
+      } catch (e: unknown) {
+        if (e instanceof Error) {
+          throw new Error(`Failed to fetch ${url}: ${e.message}`);
+        }
+        throw new Error(`Failed to fetch ${url}: Unknown error`);
       }
-      throw new Error(`Failed to fetch ${url}: Unknown error`);
+
+      // Handle redirects manually to validate each hop
+      if (response.status >= 300 && response.status < 400) {
+        const location = response.headers.get("location");
+        if (!location) {
+          throw new Error(`Failed to fetch ${url}: Redirect with no Location header`);
+        }
+
+        // Resolve relative redirects against the original (non-pinned) URL
+        const originalUrl = new URL(currentUrl);
+        originalUrl.hostname = currentHostname.includes(':')
+          ? `[${currentHostname}]`
+          : currentHostname;
+        const redirectTarget = new URL(location, originalUrl.toString()).toString();
+
+        // Validate and pin the redirect target before following
+        this.validateUrl(redirectTarget);
+        const redirectParsed = new URL(redirectTarget);
+        const redirectResult = await this.resolveAndPin(redirectTarget);
+        currentUrl = redirectResult.pinnedUrl;
+        currentOriginalHost = redirectParsed.host;
+        currentHostname = redirectResult.hostname;
+        continue;
+      }
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch ${url}: HTTP error: ${response.status}`);
+      }
+
+      const contentLength = response.headers?.get?.("content-length");
+      if (contentLength && parseInt(contentLength, 10) > maxResponseBytes) {
+        throw new Error(`Response too large: ${contentLength} bytes exceeds ${maxResponseBytes} byte limit`);
+      }
+
+      return response;
     }
 
-    if (response.url && response.url !== url) {
-      this.validateUrl(response.url);
-      await this.validateResolvedIp(response.url);
-    }
-
-    if (!response.ok) {
-      throw new Error(`Failed to fetch ${url}: HTTP error: ${response.status}`);
-    }
-
-    const contentLength = response.headers?.get?.("content-length");
-    if (contentLength && parseInt(contentLength, 10) > maxResponseBytes) {
-      throw new Error(`Response too large: ${contentLength} bytes exceeds ${maxResponseBytes} byte limit`);
-    }
-
-    return response;
+    throw new Error(`Failed to fetch ${url}: Too many redirects (max ${MAX_REDIRECTS})`);
   }
 
   private static async readResponseText(response: Response): Promise<string> {
