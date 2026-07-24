@@ -217,7 +217,7 @@ export class Fetcher {
           "--sub-format", "srv1",
           "--skip-download",
           "-o", `${tmpDir}/sub`,
-          videoUrl,
+          "--", videoUrl,
         ],
         { encoding: "utf-8", timeout: 30000, stdio: ["pipe", "pipe", "pipe"] },
       );
