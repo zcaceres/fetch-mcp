@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { spawn } from "node:child_process";
 import path from "node:path";
+import { RequestPayloadSchema, YouTubeTranscriptPayloadSchema } from "./types";
 
 function runMcpSession(messages: object[]): Promise<any[]> {
   return new Promise((resolve, reject) => {
@@ -99,5 +100,24 @@ describe("MCP server capabilities", () => {
       "fetch_readable",
       "fetch_youtube_transcript",
     ]);
+
+    // Proxy must be configured via operator env vars, not caller-supplied MCP tool arguments
+    for (const tool of toolsResp.result.tools) {
+      expect(tool.inputSchema.properties).not.toHaveProperty("proxy");
+    }
+  });
+
+  it("strips caller-supplied proxy from MCP Zod schemas", () => {
+    const req = RequestPayloadSchema.parse({
+      url: "https://example.com",
+      proxy: "http://127.0.0.1:8080",
+    });
+    expect("proxy" in req).toBe(false);
+
+    const yt = YouTubeTranscriptPayloadSchema.parse({
+      url: "https://www.youtube.com/watch?v=abc",
+      proxy: "http://127.0.0.1:8080",
+    });
+    expect("proxy" in yt).toBe(false);
   });
 });

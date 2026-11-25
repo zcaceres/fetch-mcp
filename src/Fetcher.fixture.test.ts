@@ -27,24 +27,25 @@ const sampleHtml = `<!DOCTYPE html>
   </body>
 </html>`;
 
-function mockFetchWith(content: string, contentType = "text/html") {
-  globalThis.fetch = jest.fn().mockResolvedValue({
+function mockTransportWith(content: string, contentType = "text/html") {
+  Fetcher.transport = jest.fn().mockResolvedValue({
+    status: 200,
     ok: true,
-    text: () => Promise.resolve(content),
-    json: () => Promise.resolve(JSON.parse(content)),
-    headers: new Headers({ "content-type": contentType }),
+    url: "https://example.com",
+    headers: { "content-type": contentType },
+    text: content,
   }) as any;
 }
 
-const originalFetch = globalThis.fetch;
+const originalTransport = Fetcher.transport;
 
 describe("Fetcher — fixture tests", () => {
   beforeEach(() => {
-    dns.promises.lookup = (async () => ({ address: "93.184.216.34", family: 4 })) as any;
+    dns.promises.lookup = (async () => [{ address: "93.184.216.34", family: 4 }]) as any;
   });
 
   afterEach(() => {
-    globalThis.fetch = originalFetch;
+    Fetcher.transport = originalTransport;
     dns.promises.lookup = originalLookup;
   });
 
@@ -55,7 +56,7 @@ describe("Fetcher — fixture tests", () => {
 
   describe("txt — real JSDOM parsing", () => {
     it("strips scripts, styles, and normalizes whitespace", async () => {
-      mockFetchWith(sampleHtml);
+      mockTransportWith(sampleHtml);
       const result = await Fetcher.txt(req({ max_length: 0 }));
       const text = result.content[0].text;
 
@@ -74,7 +75,7 @@ describe("Fetcher — fixture tests", () => {
     });
 
     it("returns empty string for body-less HTML", async () => {
-      mockFetchWith("<html><head><title>No body</title></head></html>");
+      mockTransportWith("<html><head><title>No body</title></head></html>");
       const result = await Fetcher.txt(req({ max_length: 0 }));
       expect(result.content[0].text).toBe("");
     });
@@ -82,7 +83,7 @@ describe("Fetcher — fixture tests", () => {
 
   describe("markdown — real Turndown conversion", () => {
     it("converts headings, links, and lists to markdown", async () => {
-      mockFetchWith(sampleHtml);
+      mockTransportWith(sampleHtml);
       const result = await Fetcher.markdown(req({ max_length: 0 }));
       const md = result.content[0].text;
 
@@ -96,7 +97,7 @@ describe("Fetcher — fixture tests", () => {
     });
 
     it("handles plain text input gracefully", async () => {
-      mockFetchWith("Just plain text, no HTML.");
+      mockTransportWith("Just plain text, no HTML.");
       const result = await Fetcher.markdown(req({ max_length: 0 }));
       expect(result.content[0].text).toContain("Just plain text");
       expect(result.isError).toBe(false);
@@ -124,7 +125,7 @@ describe("Fetcher — fixture tests", () => {
 </html>`;
 
     it("extracts article content and converts to markdown", async () => {
-      mockFetchWith(articleHtml);
+      mockTransportWith(articleHtml);
       const result = await Fetcher.readable(req({ max_length: 0 }));
       const md = result.content[0].text;
 
@@ -135,7 +136,7 @@ describe("Fetcher — fixture tests", () => {
     });
 
     it("strips navigation and boilerplate", async () => {
-      mockFetchWith(articleHtml);
+      mockTransportWith(articleHtml);
       const result = await Fetcher.readable(req({ max_length: 0 }));
       const md = result.content[0].text;
 
@@ -147,14 +148,14 @@ describe("Fetcher — fixture tests", () => {
     });
 
     it("returns error for content Readability cannot parse", async () => {
-      mockFetchWith("<html><body></body></html>");
+      mockTransportWith("<html><body></body></html>");
       const result = await Fetcher.readable(req({ max_length: 0 }));
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain("Failed to parse readable content");
     });
 
     it("respects max_length", async () => {
-      mockFetchWith(articleHtml);
+      mockTransportWith(articleHtml);
       const result = await Fetcher.readable(req({ max_length: 50 }));
       expect(result.isError).toBe(false);
       expect(result.content[0].text.length).toBeLessThanOrEqual(50);
@@ -165,32 +166,32 @@ describe("Fetcher — fixture tests", () => {
     const longContent = "A".repeat(200);
 
     it("truncates to max_length", async () => {
-      mockFetchWith(longContent);
+      mockTransportWith(longContent);
       const result = await Fetcher.html(req({ max_length: 50 }));
       expect(result.content[0].text).toHaveLength(50);
     });
 
     it("skips start_index characters", async () => {
-      mockFetchWith("abcdefghij");
+      mockTransportWith("abcdefghij");
       const result = await Fetcher.html(req({ max_length: 5, start_index: 3 }));
       expect(result.content[0].text).toBe("defgh");
     });
 
     it("returns empty when start_index exceeds length", async () => {
-      mockFetchWith("short");
+      mockTransportWith("short");
       const result = await Fetcher.html(req({ max_length: 10, start_index: 100 }));
       expect(result.content[0].text).toBe("");
     });
 
     it("returns full content when max_length is 0 (unlimited)", async () => {
-      mockFetchWith(longContent);
+      mockTransportWith(longContent);
       const result = await Fetcher.html(req({ max_length: 0 }));
       expect(result.content[0].text).toBe(longContent);
     });
 
     it("applies defaults (max_length=5000) when not specified", async () => {
       const bigContent = "B".repeat(10000);
-      mockFetchWith(bigContent);
+      mockTransportWith(bigContent);
       const result = await Fetcher.html(req());
       expect(result.content[0].text).toHaveLength(5000);
     });

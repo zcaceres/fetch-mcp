@@ -1,23 +1,27 @@
 import { describe, it, expect, beforeEach, afterAll, jest, spyOn } from "bun:test";
 import dns from "node:dns";
 import { Fetcher } from "./Fetcher";
+import { safeHttpGet, type HttpResponse } from "./httpClient";
 
-const originalFetch = globalThis.fetch;
-const mockFetch = jest.fn();
+const originalTransport = Fetcher.transport;
+const mockTransport = jest.fn();
 const originalLookup = dns.promises.lookup;
 
+function okResponse(text: string, url = "https://example.com"): HttpResponse {
+  return { status: 200, ok: true, url, headers: {}, text };
+}
+
 afterAll(() => {
-  globalThis.fetch = originalFetch;
+  Fetcher.transport = originalTransport;
   dns.promises.lookup = originalLookup;
 });
 
 describe("Fetcher", () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    globalThis.fetch = mockFetch as any;
+    Fetcher.transport = mockTransport as any;
     Fetcher.hasYtDlp = false;
-    // Default: resolve all hostnames to a public IP so existing tests aren't affected
-    dns.promises.lookup = (async () => ({ address: "93.184.216.34", family: 4 })) as any;
+    dns.promises.lookup = (async () => [{ address: "93.184.216.34", family: 4 }]) as any;
   });
 
   const mockRequest = {
@@ -41,10 +45,7 @@ describe("Fetcher", () => {
 
   describe("html", () => {
     it("should return the raw HTML content", async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        text: jest.fn().mockResolvedValueOnce(mockHtml),
-      });
+      mockTransport.mockResolvedValueOnce(okResponse(mockHtml));
 
       const result = await Fetcher.html(mockRequest);
       expect(result).toEqual({
@@ -54,7 +55,7 @@ describe("Fetcher", () => {
     });
 
     it("should handle errors", async () => {
-      mockFetch.mockRejectedValueOnce(new Error("Network error"));
+      mockTransport.mockRejectedValueOnce(new Error("Network error"));
 
       const result = await Fetcher.html(mockRequest);
       expect(result).toEqual({
@@ -72,10 +73,7 @@ describe("Fetcher", () => {
   describe("json", () => {
     it("should parse and return JSON content", async () => {
       const mockJson = { key: "value" };
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        text: jest.fn().mockResolvedValueOnce(JSON.stringify(mockJson)),
-      });
+      mockTransport.mockResolvedValueOnce(okResponse(JSON.stringify(mockJson)));
 
       const result = await Fetcher.json(mockRequest);
       expect(result).toEqual({
@@ -85,7 +83,7 @@ describe("Fetcher", () => {
     });
 
     it("should handle errors", async () => {
-      mockFetch.mockRejectedValueOnce(new Error("Invalid JSON"));
+      mockTransport.mockRejectedValueOnce(new Error("Invalid JSON"));
 
       const result = await Fetcher.json(mockRequest);
       expect(result).toEqual({
@@ -102,7 +100,7 @@ describe("Fetcher", () => {
 
   describe("txt", () => {
     it("should handle errors", async () => {
-      mockFetch.mockRejectedValueOnce(new Error("Parsing error"));
+      mockTransport.mockRejectedValueOnce(new Error("Parsing error"));
 
       const result = await Fetcher.txt(mockRequest);
       expect(result).toEqual({
@@ -133,10 +131,7 @@ describe("Fetcher", () => {
     `;
 
     it("should return readable content as markdown", async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        text: jest.fn().mockResolvedValueOnce(articleHtml),
-      });
+      mockTransport.mockResolvedValueOnce(okResponse(articleHtml));
 
       const result = await Fetcher.readable(mockRequest);
       expect(result.isError).toBe(false);
@@ -144,10 +139,7 @@ describe("Fetcher", () => {
     });
 
     it("should return error when Readability cannot parse", async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        text: jest.fn().mockResolvedValueOnce("<html><body></body></html>"),
-      });
+      mockTransport.mockResolvedValueOnce(okResponse("<html><body></body></html>"));
 
       const result = await Fetcher.readable(mockRequest);
       expect(result.isError).toBe(true);
@@ -155,7 +147,7 @@ describe("Fetcher", () => {
     });
 
     it("should handle fetch errors", async () => {
-      mockFetch.mockRejectedValueOnce(new Error("Network error"));
+      mockTransport.mockRejectedValueOnce(new Error("Network error"));
 
       const result = await Fetcher.readable(mockRequest);
       expect(result.isError).toBe(true);
@@ -165,7 +157,7 @@ describe("Fetcher", () => {
 
   describe("markdown", () => {
     it("should handle errors", async () => {
-      mockFetch.mockRejectedValueOnce(new Error("Conversion error"));
+      mockTransport.mockRejectedValueOnce(new Error("Conversion error"));
 
       const result = await Fetcher.markdown(mockRequest);
       expect(result).toEqual({
@@ -185,6 +177,7 @@ describe("Fetcher", () => {
       const result = await Fetcher.html({ url: "file:///etc/passwd" });
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain('disallowed protocol "file:"');
+      expect(mockTransport).not.toHaveBeenCalled();
     });
 
     it("should block data: URLs", async () => {
@@ -205,56 +198,45 @@ describe("Fetcher", () => {
       expect(result.content[0].text).toContain("private address");
     });
 
-    it("should block redirects to private IPs", async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        url: "http://127.0.0.1/internal",
-        text: jest.fn().mockResolvedValueOnce("secret"),
-      });
+    it("should block IPv4-mapped IPv6 loopback http://[::ffff:127.0.0.1]/", async () => {
+      const result = await Fetcher.html({ url: "http://[::ffff:127.0.0.1]/" });
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("private address");
+    });
+
+    it("should block IPv4-mapped IPv6 IMDS http://[::ffff:169.254.169.254]/", async () => {
+      const result = await Fetcher.html({ url: "http://[::ffff:169.254.169.254]/latest/meta-data/" });
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("private address");
+    });
+
+    it("should propagate SSRF errors from transport without double-wrapping", async () => {
+      mockTransport.mockRejectedValueOnce(
+        new Error('Fetcher blocked request to private address "127.0.0.1".'),
+      );
 
       const result = await Fetcher.html({ url: "https://example.com" });
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain("private address");
-      // Should NOT be double-wrapped with "Failed to fetch" prefix
       expect(result.content[0].text).not.toContain("Failed to fetch");
-    });
-
-    it("should allow redirects to public URLs", async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        url: "https://cdn.example.com/page",
-        text: jest.fn().mockResolvedValueOnce("<html>ok</html>"),
-      });
-
-      const result = await Fetcher.html({ url: "https://example.com" });
-      expect(result.isError).toBe(false);
-      expect(result.content[0].text).toBe("<html>ok</html>");
     });
   });
 
-  describe("proxy", () => {
-    it("should pass proxy option to fetch when provided", async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        text: jest.fn().mockResolvedValueOnce("<html>ok</html>"),
-      });
+  describe("proxy (CLI / operator env)", () => {
+    it("should forward explicit proxy option to transport when provided", async () => {
+      mockTransport.mockResolvedValueOnce(okResponse("<html>ok</html>"));
 
       await Fetcher.html({ url: "https://example.com", proxy: "http://proxy:8080" });
-      expect(mockFetch).toHaveBeenCalledTimes(1);
-      const callArgs = mockFetch.mock.calls[0];
-      expect(callArgs[1]).toHaveProperty("proxy", "http://proxy:8080");
+      expect(mockTransport).toHaveBeenCalledTimes(1);
+      expect(mockTransport.mock.calls[0][0]).toHaveProperty("proxy", "http://proxy:8080");
     });
 
-    it("should not include proxy option when not provided", async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        text: jest.fn().mockResolvedValueOnce("<html>ok</html>"),
-      });
+    it("should leave proxy undefined when not provided", async () => {
+      mockTransport.mockResolvedValueOnce(okResponse("<html>ok</html>"));
 
       await Fetcher.html({ url: "https://example.com" });
-      expect(mockFetch).toHaveBeenCalledTimes(1);
-      const callArgs = mockFetch.mock.calls[0];
-      expect(callArgs[1]).not.toHaveProperty("proxy");
+      expect(mockTransport).toHaveBeenCalledTimes(1);
+      expect(mockTransport.mock.calls[0][0].proxy).toBeUndefined();
     });
   });
 
@@ -276,16 +258,9 @@ describe("Fetcher", () => {
       const pageHtml = `<html><script>var ytInitialPlayerResponse = ${JSON.stringify(playerResponse)};</script></html>`;
       const captionXml = `<transcript><text start="0" dur="2">Hello</text><text start="2" dur="3">World</text></transcript>`;
 
-      // First call: page HTML. Second call: caption XML.
-      mockFetch
-        .mockResolvedValueOnce({
-          ok: true,
-          text: jest.fn().mockResolvedValueOnce(pageHtml),
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          text: jest.fn().mockResolvedValueOnce(captionXml),
-        });
+      mockTransport
+        .mockResolvedValueOnce(okResponse(pageHtml))
+        .mockResolvedValueOnce(okResponse(captionXml));
 
       const result = await Fetcher.youtubeTranscript({
         url: "https://www.youtube.com/watch?v=test",
@@ -314,34 +289,24 @@ describe("Fetcher", () => {
       const pageHtml = `<html><script>var ytInitialPlayerResponse = ${JSON.stringify(playerResponse)};</script></html>`;
       const captionXml = `<transcript><text start="0" dur="2">Hi</text></transcript>`;
 
-      mockFetch
-        .mockResolvedValueOnce({
-          ok: true,
-          text: jest.fn().mockResolvedValueOnce(pageHtml),
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          text: jest.fn().mockResolvedValueOnce(captionXml),
-        });
+      mockTransport
+        .mockResolvedValueOnce(okResponse(pageHtml))
+        .mockResolvedValueOnce(okResponse(captionXml));
 
       await Fetcher.youtubeTranscript({
         url: "https://www.youtube.com/watch?v=test",
         proxy: "http://proxy:8080",
       });
 
-      // Both calls should include proxy
-      for (const call of mockFetch.mock.calls) {
-        expect(call[1]).toHaveProperty("proxy", "http://proxy:8080");
+      for (const call of mockTransport.mock.calls) {
+        expect(call[0]).toHaveProperty("proxy", "http://proxy:8080");
       }
     });
 
     it("should return error when no captions found", async () => {
       const pageHtml = `<html><script>var ytInitialPlayerResponse = {"videoDetails":{"videoId":"test"}};</script></html>`;
 
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        text: jest.fn().mockResolvedValueOnce(pageHtml),
-      });
+      mockTransport.mockResolvedValueOnce(okResponse(pageHtml));
 
       const result = await Fetcher.youtubeTranscript({
         url: "https://www.youtube.com/watch?v=test",
@@ -352,50 +317,17 @@ describe("Fetcher", () => {
     });
   });
 
-  describe("DNS rebinding SSRF protection", () => {
+  describe("DNS rebinding SSRF protection via real transport", () => {
     it("should block hostnames that resolve to private IPs", async () => {
-      const lookupSpy = spyOn(dns.promises, "lookup").mockResolvedValueOnce({
-        address: "127.0.0.1",
-        family: 4,
-      } as any);
+      Fetcher.transport = safeHttpGet;
+      const lookupSpy = spyOn(dns.promises, "lookup").mockResolvedValueOnce([
+        { address: "127.0.0.1", family: 4 },
+      ] as any);
 
       const result = await Fetcher.html({ url: "https://evil.example.com" });
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain("resolved to private IP");
       expect(result.content[0].text).toContain("DNS rebinding");
-      lookupSpy.mockRestore();
-    });
-
-    it("should block post-redirect hostnames that resolve to private IPs", async () => {
-      const lookupSpy = spyOn(dns.promises, "lookup")
-        .mockResolvedValueOnce({ address: "93.184.216.34", family: 4 } as any) // pre-fetch: public
-        .mockResolvedValueOnce({ address: "10.0.0.1", family: 4 } as any); // post-redirect: private
-
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        url: "https://internal.evil.com/secret",
-        text: jest.fn().mockResolvedValueOnce("secret data"),
-      });
-
-      const result = await Fetcher.html({ url: "https://example.com" });
-      expect(result.isError).toBe(true);
-      expect(result.content[0].text).toContain("resolved to private IP");
-      lookupSpy.mockRestore();
-    });
-
-    it("should allow hostnames that resolve to public IPs", async () => {
-      const lookupSpy = spyOn(dns.promises, "lookup").mockResolvedValueOnce({
-        address: "93.184.216.34",
-        family: 4,
-      } as any);
-
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        text: jest.fn().mockResolvedValueOnce("<html>ok</html>"),
-      });
-
-      const result = await Fetcher.html({ url: "https://example.com" });
-      expect(result.isError).toBe(false);
       lookupSpy.mockRestore();
     });
   });
@@ -425,12 +357,6 @@ describe("Fetcher", () => {
 
     it("should accept valid language codes", async () => {
       Fetcher.hasYtDlp = true;
-      // This will fail at yt-dlp execution (not installed in test), falling back to direct fetch
-      // which will also fail since we haven't mocked fetch — but it should NOT fail at lang validation
-      const lookupSpy = spyOn(dns.promises, "lookup").mockResolvedValue({
-        address: "93.184.216.34",
-        family: 4,
-      } as any);
 
       const playerResponse = {
         captions: {
@@ -442,24 +368,19 @@ describe("Fetcher", () => {
       const pageHtml = `<html><script>var ytInitialPlayerResponse = ${JSON.stringify(playerResponse)};</script></html>`;
       const captionXml = `<transcript><text start="0" dur="2">Olá</text></transcript>`;
 
-      mockFetch
-        .mockResolvedValueOnce({ ok: true, text: jest.fn().mockResolvedValueOnce(pageHtml) })
-        .mockResolvedValueOnce({ ok: true, text: jest.fn().mockResolvedValueOnce(captionXml) });
+      mockTransport
+        .mockResolvedValueOnce(okResponse(pageHtml))
+        .mockResolvedValueOnce(okResponse(captionXml));
 
       const result = await Fetcher.youtubeTranscript({
         url: "https://www.youtube.com/watch?v=test",
         lang: "pt-BR",
       });
       expect(result.isError).toBe(false);
-      lookupSpy.mockRestore();
     });
 
     it("should accept language codes with digits like es-419", async () => {
       Fetcher.hasYtDlp = true;
-      const lookupSpy = spyOn(dns.promises, "lookup").mockResolvedValue({
-        address: "93.184.216.34",
-        family: 4,
-      } as any);
 
       const playerResponse = {
         captions: {
@@ -471,16 +392,15 @@ describe("Fetcher", () => {
       const pageHtml = `<html><script>var ytInitialPlayerResponse = ${JSON.stringify(playerResponse)};</script></html>`;
       const captionXml = `<transcript><text start="0" dur="2">Hola</text></transcript>`;
 
-      mockFetch
-        .mockResolvedValueOnce({ ok: true, text: jest.fn().mockResolvedValueOnce(pageHtml) })
-        .mockResolvedValueOnce({ ok: true, text: jest.fn().mockResolvedValueOnce(captionXml) });
+      mockTransport
+        .mockResolvedValueOnce(okResponse(pageHtml))
+        .mockResolvedValueOnce(okResponse(captionXml));
 
       const result = await Fetcher.youtubeTranscript({
         url: "https://www.youtube.com/watch?v=test",
         lang: "es-419",
       });
       expect(result.isError).toBe(false);
-      lookupSpy.mockRestore();
     });
   });
 
@@ -499,35 +419,26 @@ describe("Fetcher", () => {
   });
 
   describe("response size limit", () => {
-    it("should reject responses with Content-Length exceeding limit", async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        headers: { get: (h: string) => h === "content-length" ? "999999999999" : null },
-        text: jest.fn().mockResolvedValueOnce("data"),
-      });
+    it("should propagate Response too large errors without double-wrapping", async () => {
+      mockTransport.mockRejectedValueOnce(
+        new Error("Response too large: 999999999999 bytes exceeds 10485760 byte limit"),
+      );
 
       const result = await Fetcher.html(mockRequest);
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain("Response too large");
-    });
-
-    it("should allow responses within size limit", async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        headers: { get: (h: string) => h === "content-length" ? "100" : null },
-        text: jest.fn().mockResolvedValueOnce("<html>ok</html>"),
-      });
-
-      const result = await Fetcher.html(mockRequest);
-      expect(result.isError).toBe(false);
+      expect(result.content[0].text).not.toContain("Failed to fetch");
     });
   });
 
   describe("error handling", () => {
     it("should handle non-OK responses", async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
+      mockTransport.mockResolvedValueOnce({
         status: 404,
+        ok: false,
+        url: "https://example.com",
+        headers: {},
+        text: "",
       });
 
       const result = await Fetcher.html(mockRequest);
@@ -543,7 +454,7 @@ describe("Fetcher", () => {
     });
 
     it("should handle unknown errors", async () => {
-      mockFetch.mockRejectedValueOnce("Unknown error");
+      mockTransport.mockRejectedValueOnce("Unknown error");
 
       const result = await Fetcher.html(mockRequest);
       expect(result).toEqual({
@@ -555,18 +466,6 @@ describe("Fetcher", () => {
         ],
         isError: true,
       });
-    });
-
-    it("should produce a string text field when response processing throws a non-Error", async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        text: jest.fn().mockRejectedValueOnce("string error"),
-      });
-
-      const result = await Fetcher.html(mockRequest);
-      expect(result.isError).toBe(true);
-      expect(typeof result.content[0].text).toBe("string");
-      expect(result.content[0].text).toBe("string error");
     });
   });
 });
