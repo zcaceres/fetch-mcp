@@ -1,10 +1,12 @@
 import { JSDOM } from "jsdom";
 import TurndownService from "turndown";
 import { Readability } from "@mozilla/readability";
-import is_ip_private from "private-ip";
-import dns from "node:dns";
+import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { RequestPayload, YouTubeTranscriptPayload, downloadLimit, maxResponseBytes } from "./types.js";
 import { YouTubeTranscript } from "./YouTubeTranscript.js";
+import { resolveAndValidateHost, validateUrl, validateYouTubeUrl } from "./ssrf.js";
 
 export class Fetcher {
   private static applyLengthLimits(text: string, maxLength: number, startIndex: number): string {
@@ -17,39 +19,12 @@ export class Fetcher {
   }
 
   private static validateUrl(url: string): void {
-    const parsedUrl = new URL(url);
-    if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
-      throw new Error(
-        `Fetcher blocked URL with disallowed protocol "${parsedUrl.protocol}". Only HTTP and HTTPS are allowed.`,
-      );
-    }
-    const hostname = parsedUrl.hostname;
-    const bareHostname = hostname.startsWith('[') && hostname.endsWith(']')
-      ? hostname.slice(1, -1)
-      : hostname;
-    if (bareHostname === 'localhost' || is_ip_private(bareHostname)) {
-      throw new Error(
-        `Fetcher blocked request to private address "${bareHostname}". This prevents SSRF attacks where a local MCP server could access privileged internal services.`,
-      );
-    }
+    validateUrl(url);
   }
 
   private static async validateResolvedIp(url: string): Promise<void> {
-    const hostname = new URL(url).hostname;
-    const bareHostname = hostname.startsWith('[') && hostname.endsWith(']')
-      ? hostname.slice(1, -1)
-      : hostname;
-    try {
-      const { address } = await dns.promises.lookup(bareHostname);
-      if (is_ip_private(address)) {
-        throw new Error(
-          `Fetcher blocked request: hostname "${bareHostname}" resolved to private IP "${address}". This prevents DNS rebinding SSRF attacks.`,
-        );
-      }
-    } catch (e) {
-      if (e instanceof Error && e.message.includes('Fetcher blocked')) throw e;
-      // DNS lookup failures (e.g. non-resolvable hostnames) are not SSRF — let fetch handle them
-    }
+    const parsedUrl = new URL(url);
+    await resolveAndValidateHost(parsedUrl.hostname);
   }
 
   private static async _fetch({
@@ -203,35 +178,38 @@ export class Fetcher {
   private static async fetchTranscriptViaYtDlp(
     videoUrl: string,
     lang: string,
+    proxy?: string,
   ): Promise<{ xml: string; lang: string; langName: string }> {
     if (!/^[a-zA-Z0-9-]+$/.test(lang)) {
       throw new Error(`Invalid language code: "${lang}". Only letters, digits, and hyphens are allowed.`);
     }
-    const { execFileSync, execSync } = await import("child_process");
-    const tmpDir = execSync("mktemp -d", { encoding: "utf-8" }).trim();
+    const { execFileSync } = await import("child_process");
+    const tmpDir = mkdtempSync(path.join(tmpdir(), "mcp-fetch-"));
     try {
+      const args = [
+        "--write-sub", "--sub-lang", lang,
+        "--sub-format", "srv1",
+        "--skip-download",
+        "-o", path.join(tmpDir, "sub"),
+      ];
+      if (proxy) {
+        args.push("--proxy", proxy);
+      }
+      args.push("--", videoUrl);
       execFileSync(
         "yt-dlp",
-        [
-          "--write-sub", "--sub-lang", lang,
-          "--sub-format", "srv1",
-          "--skip-download",
-          "-o", `${tmpDir}/sub`,
-          videoUrl,
-        ],
+        args,
         { encoding: "utf-8", timeout: 30000, stdio: ["pipe", "pipe", "pipe"] },
       );
-      const { readdirSync, readFileSync } = await import("fs");
       const files = readdirSync(tmpDir).filter((f: string) => f.endsWith(".srv1"));
       if (files.length === 0) {
         throw new Error("yt-dlp did not produce subtitle files");
       }
       const file = files[0];
-      const xml = readFileSync(`${tmpDir}/${file}`, "utf-8");
+      const xml = readFileSync(path.join(tmpDir, file), "utf-8");
       const matchedLang = file.match(/\.([^.]+)\.srv1$/)?.[1] ?? lang;
       return { xml, lang: matchedLang, langName: matchedLang };
     } finally {
-      const { rmSync } = await import("fs");
       rmSync(tmpDir, { recursive: true, force: true });
     }
   }
@@ -280,6 +258,9 @@ export class Fetcher {
 
   static async youtubeTranscript(requestPayload: YouTubeTranscriptPayload) {
     try {
+      const parsedUrl = validateYouTubeUrl(requestPayload.url);
+      await resolveAndValidateHost(parsedUrl.hostname);
+
       const lang = requestPayload.lang ?? "en";
       let result: { xml: string; lang: string; langName: string };
 
@@ -289,7 +270,11 @@ export class Fetcher {
           throw new Error(`Invalid language code: "${lang}". Only letters, digits, and hyphens are allowed.`);
         }
         try {
-          result = await this.fetchTranscriptViaYtDlp(requestPayload.url, lang);
+          result = await this.fetchTranscriptViaYtDlp(
+            requestPayload.url,
+            lang,
+            requestPayload.proxy,
+          );
         } catch {
           result = await this.fetchTranscriptDirect(requestPayload);
         }
