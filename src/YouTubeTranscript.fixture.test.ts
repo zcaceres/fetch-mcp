@@ -53,15 +53,15 @@ const realPlayerResponse = {
 
 const realPageHtml = `<!DOCTYPE html><html><head><title>Me at the zoo - YouTube</title></head><body><script>var ytInitialPlayerResponse = ${JSON.stringify(realPlayerResponse)};</script></body></html>`;
 
-const originalFetch = globalThis.fetch;
+const originalTransport = Fetcher.transport;
 
 describe("YouTubeTranscript — fixture tests", () => {
   beforeEach(() => {
-    dns.promises.lookup = (async () => ({ address: "93.184.216.34", family: 4 })) as any;
+    dns.promises.lookup = (async () => [{ address: "93.184.216.34", family: 4 }]) as any;
   });
 
   afterEach(() => {
-    globalThis.fetch = originalFetch;
+    Fetcher.transport = originalTransport;
     dns.promises.lookup = originalLookup;
     Fetcher.hasYtDlp = null;
   });
@@ -123,20 +123,25 @@ describe("YouTubeTranscript — fixture tests", () => {
     });
   });
 
-  describe("end-to-end with mocked fetch", () => {
+  describe("end-to-end with mocked transport", () => {
     it("fetches page HTML then caption XML and returns formatted transcript", async () => {
       Fetcher.hasYtDlp = false;
-      const mockFetch = jest.fn()
+      const mockTransport = jest.fn()
         .mockResolvedValueOnce({
+          status: 200,
           ok: true,
           url: "https://www.youtube.com/watch?v=jNQXAC9IVRw",
-          text: () => Promise.resolve(realPageHtml),
+          headers: {},
+          text: realPageHtml,
         })
         .mockResolvedValueOnce({
+          status: 200,
           ok: true,
-          text: () => Promise.resolve(realSrv1Xml),
+          url: "https://www.youtube.com/api/timedtext?v=jNQXAC9IVRw&lang=en&fmt=srv1",
+          headers: {},
+          text: realSrv1Xml,
         });
-      globalThis.fetch = mockFetch as any;
+      Fetcher.transport = mockTransport as any;
 
       const result = await Fetcher.youtubeTranscript({
         url: "https://www.youtube.com/watch?v=jNQXAC9IVRw",
@@ -152,17 +157,22 @@ describe("YouTubeTranscript — fixture tests", () => {
 
     it("falls back to first available track when requested lang is missing", async () => {
       Fetcher.hasYtDlp = false;
-      const mockFetch = jest.fn()
+      const mockTransport = jest.fn()
         .mockResolvedValueOnce({
+          status: 200,
           ok: true,
           url: "https://www.youtube.com/watch?v=jNQXAC9IVRw",
-          text: () => Promise.resolve(realPageHtml),
+          headers: {},
+          text: realPageHtml,
         })
         .mockResolvedValueOnce({
+          status: 200,
           ok: true,
-          text: () => Promise.resolve(realSrv1Xml),
+          url: "https://www.youtube.com/api/timedtext?v=jNQXAC9IVRw&lang=en&fmt=srv1",
+          headers: {},
+          text: realSrv1Xml,
         });
-      globalThis.fetch = mockFetch as any;
+      Fetcher.transport = mockTransport as any;
 
       const result = await Fetcher.youtubeTranscript({
         url: "https://www.youtube.com/watch?v=jNQXAC9IVRw",
@@ -176,17 +186,22 @@ describe("YouTubeTranscript — fixture tests", () => {
 
     it("selects the correct language track when available", async () => {
       Fetcher.hasYtDlp = false;
-      const mockFetch = jest.fn()
+      const mockTransport = jest.fn()
         .mockResolvedValueOnce({
+          status: 200,
           ok: true,
           url: "https://www.youtube.com/watch?v=jNQXAC9IVRw",
-          text: () => Promise.resolve(realPageHtml),
+          headers: {},
+          text: realPageHtml,
         })
         .mockResolvedValueOnce({
+          status: 200,
           ok: true,
-          text: () => Promise.resolve(realSrv1Xml),
+          url: "https://www.youtube.com/api/timedtext?v=jNQXAC9IVRw&lang=de&fmt=srv1",
+          headers: {},
+          text: realSrv1Xml,
         });
-      globalThis.fetch = mockFetch as any;
+      Fetcher.transport = mockTransport as any;
 
       const result = await Fetcher.youtubeTranscript({
         url: "https://www.youtube.com/watch?v=jNQXAC9IVRw",
@@ -196,7 +211,7 @@ describe("YouTubeTranscript — fixture tests", () => {
       expect(result.isError).toBe(false);
       expect(result.content[0].text).toContain("[Transcript language: de — German]");
       // Verify the German track URL was fetched
-      expect(mockFetch.mock.calls[1][0]).toContain("lang=de");
+      expect(mockTransport.mock.calls[1][0].url).toContain("lang=de");
     });
   });
 });

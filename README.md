@@ -20,7 +20,6 @@ All tools accept the following common parameters:
 | `headers` | object | No | Custom headers to include in the request |
 | `max_length` | number | No | Maximum characters to return (default: 5000) |
 | `start_index` | number | No | Start from this character index (default: 0) |
-| `proxy` | string | No | Proxy URL (e.g. `http://proxy:8080`) |
 
 - **fetch_html** — Fetch a website and return its raw HTML content.
 
@@ -117,6 +116,10 @@ mcp-fetch json https://api.example.com/data --proxy http://proxy:8080
 |----------|-------------|
 | `DEFAULT_LIMIT` | Default character limit for responses (default: `5000`, set to `0` for no limit) |
 | `MAX_RESPONSE_BYTES` | Maximum response body size in bytes (default: `10485760` / 10 MB) |
+| `HTTPS_PROXY` / `https_proxy` | Proxy URL for `https://` requests (also honored by the MCP server) |
+| `HTTP_PROXY` / `http_proxy` | Proxy URL for `http://` requests (fallback for `https://`) |
+| `ALL_PROXY` / `all_proxy` | Fallback proxy URL for HTTP/HTTPS requests |
+| `NO_PROXY` / `no_proxy` | Comma-separated hostnames/domains that bypass the proxy |
 
 Example with a custom limit:
 
@@ -139,11 +142,11 @@ Example with a custom limit:
 - Fetch web content as HTML, JSON, plain text, or Markdown
 - Extract article content with Mozilla Readability (strips ads, nav, boilerplate)
 - Extract YouTube video transcripts (via `yt-dlp` or direct extraction)
-- Proxy support for requests behind firewalls
+- Operator proxy support via `HTTP_PROXY` / `HTTPS_PROXY` / `ALL_PROXY` / `NO_PROXY` (and `--proxy` in the CLI) on both Node.js and Bun
 - Pagination with `max_length` and `start_index`
 - Custom request headers
-- SSRF protection (blocks private/localhost addresses and DNS rebinding)
-- Response size limits to prevent memory exhaustion
+- Hardened SSRF protection (blocks reserved IPv4/IPv6 ranges including IPv4-mapped IPv6 and multicast, pins DNS resolution to the socket to prevent DNS rebinding, validates every redirect hop before connecting, and restricts YouTube transcript fetching to YouTube domains)
+- Response size limits (enforced on both raw and decompressed streams) to prevent memory exhaustion
 
 ## Development
 

@@ -7,8 +7,11 @@ import path from "node:path";
 import { RequestPayload, YouTubeTranscriptPayload, downloadLimit, maxResponseBytes } from "./types.js";
 import { YouTubeTranscript } from "./YouTubeTranscript.js";
 import { resolveAndValidateHost, validateUrl, validateYouTubeUrl } from "./ssrf.js";
+import { resolveProxyUrl, safeHttpGet, type HttpRequestOptions, type HttpResponse } from "./httpClient.js";
 
 export class Fetcher {
+  static transport: (options: HttpRequestOptions) => Promise<HttpResponse> = safeHttpGet;
+
   private static applyLengthLimits(text: string, maxLength: number, startIndex: number): string {
     if (startIndex >= text.length) {
       return "";
@@ -18,91 +21,51 @@ export class Fetcher {
     return text.substring(startIndex, end);
   }
 
-  private static validateUrl(url: string): void {
-    validateUrl(url);
-  }
-
-  private static async validateResolvedIp(url: string): Promise<void> {
-    const parsedUrl = new URL(url);
-    await resolveAndValidateHost(parsedUrl.hostname);
-  }
-
   private static async _fetch({
     url,
     headers,
     proxy,
-  }: RequestPayload): Promise<Response> {
-    this.validateUrl(url);
-    await this.validateResolvedIp(url);
-    let response: Response;
+  }: RequestPayload): Promise<string> {
+    validateUrl(url);
+    let response: HttpResponse;
     try {
-      response = await fetch(url, {
-        headers: {
-          "User-Agent":
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-          ...headers,
-        },
-        // Note: proxy is a Bun-specific fetch option. On Node.js, this option is silently ignored.
-        // To use a proxy on Node.js, you would need an HTTP agent library like http-proxy-agent.
-        ...(proxy ? { proxy } : {}),
-      } as RequestInit);
+      response = await this.transport({
+        url,
+        headers,
+        proxy,
+        maxBytes: maxResponseBytes,
+      });
     } catch (e: unknown) {
       if (e instanceof Error) {
+        if (
+          e.message.startsWith("Fetcher blocked") ||
+          e.message.startsWith("Response too large") ||
+          e.message.startsWith("Unsupported proxy protocol") ||
+          e.message.startsWith("Failed to fetch ")
+        ) {
+          throw e;
+        }
         throw new Error(`Failed to fetch ${url}: ${e.message}`);
       }
       throw new Error(`Failed to fetch ${url}: Unknown error`);
-    }
-
-    if (response.url && response.url !== url) {
-      this.validateUrl(response.url);
-      await this.validateResolvedIp(response.url);
     }
 
     if (!response.ok) {
       throw new Error(`Failed to fetch ${url}: HTTP error: ${response.status}`);
     }
 
-    const contentLength = response.headers?.get?.("content-length");
-    if (contentLength && parseInt(contentLength, 10) > maxResponseBytes) {
-      throw new Error(`Response too large: ${contentLength} bytes exceeds ${maxResponseBytes} byte limit`);
-    }
-
-    return response;
-  }
-
-  private static async readResponseText(response: Response): Promise<string> {
-    if (!response.body) return response.text();
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    let result = "";
-    let bytesRead = 0;
-    try {
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        bytesRead += value.byteLength;
-        if (bytesRead > maxResponseBytes) {
-          throw new Error(`Response too large: exceeded ${maxResponseBytes} byte limit while reading`);
-        }
-        result += decoder.decode(value, { stream: true });
-      }
-      result += decoder.decode();
-      return result;
-    } finally {
-      reader.cancel();
-    }
+    return response.text;
   }
 
   static async html(requestPayload: RequestPayload) {
     try {
-      const response = await this._fetch(requestPayload);
-      let html = await this.readResponseText(response);
-      
+      let html = await this._fetch(requestPayload);
+
       // Apply length limits
       html = this.applyLengthLimits(
-        html, 
+        html,
         requestPayload.max_length ?? downloadLimit,
-        requestPayload.start_index ?? 0
+        requestPayload.start_index ?? 0,
       );
 
       return { content: [{ type: "text", text: html }], isError: false };
@@ -116,16 +79,15 @@ export class Fetcher {
 
   static async json(requestPayload: RequestPayload) {
     try {
-      const response = await this._fetch(requestPayload);
-      const text = await this.readResponseText(response);
+      const text = await this._fetch(requestPayload);
       const json = JSON.parse(text);
       let jsonString = JSON.stringify(json);
-      
+
       // Apply length limits
       jsonString = this.applyLengthLimits(
         jsonString,
         requestPayload.max_length ?? downloadLimit,
-        requestPayload.start_index ?? 0
+        requestPayload.start_index ?? 0,
       );
 
       return {
@@ -142,8 +104,7 @@ export class Fetcher {
 
   static async txt(requestPayload: RequestPayload) {
     try {
-      const response = await this._fetch(requestPayload);
-      const html = await this.readResponseText(response);
+      const html = await this._fetch(requestPayload);
 
       const dom = new JSDOM(html);
       const document = dom.window.document;
@@ -155,12 +116,12 @@ export class Fetcher {
 
       const text = document.body.textContent || "";
       let normalizedText = text.replace(/\s+/g, " ").trim();
-      
+
       // Apply length limits
       normalizedText = this.applyLengthLimits(
         normalizedText,
         requestPayload.max_length ?? downloadLimit,
-        requestPayload.start_index ?? 0
+        requestPayload.start_index ?? 0,
       );
 
       return {
@@ -217,8 +178,7 @@ export class Fetcher {
   private static async fetchTranscriptDirect(
     requestPayload: YouTubeTranscriptPayload,
   ): Promise<{ xml: string; lang: string; langName: string }> {
-    const response = await this._fetch(requestPayload);
-    const html = await this.readResponseText(response);
+    const html = await this._fetch(requestPayload);
 
     const playerResponse = YouTubeTranscript.extractPlayerResponse(html);
     const tracks = YouTubeTranscript.getCaptionTracks(playerResponse);
@@ -228,13 +188,12 @@ export class Fetcher {
       tracks.find((t: any) => t.languageCode === lang) ?? tracks[0];
 
     const captionUrl = track.baseUrl + (track.baseUrl.includes("fmt=") ? "" : "&fmt=srv1");
-    const captionResponse = await this._fetch({
+    const xml = await this._fetch({
       url: captionUrl,
       headers: requestPayload.headers,
       proxy: requestPayload.proxy,
     });
 
-    const xml = await this.readResponseText(captionResponse);
     return {
       xml,
       lang: track.languageCode,
@@ -261,6 +220,10 @@ export class Fetcher {
       const parsedUrl = validateYouTubeUrl(requestPayload.url);
       await resolveAndValidateHost(parsedUrl.hostname);
 
+      const resolvedProxy = requestPayload.proxy
+        ? resolveProxyUrl(parsedUrl, requestPayload.proxy)?.href
+        : undefined;
+
       const lang = requestPayload.lang ?? "en";
       let result: { xml: string; lang: string; langName: string };
 
@@ -273,7 +236,7 @@ export class Fetcher {
           result = await this.fetchTranscriptViaYtDlp(
             requestPayload.url,
             lang,
-            requestPayload.proxy,
+            resolvedProxy,
           );
         } catch {
           result = await this.fetchTranscriptDirect(requestPayload);
@@ -303,8 +266,7 @@ export class Fetcher {
 
   static async readable(requestPayload: RequestPayload) {
     try {
-      const response = await this._fetch(requestPayload);
-      const html = await this.readResponseText(response);
+      const html = await this._fetch(requestPayload);
 
       const dom = new JSDOM(html, { url: requestPayload.url });
       const reader = new Readability(dom.window.document);
@@ -320,7 +282,7 @@ export class Fetcher {
       content = this.applyLengthLimits(
         content,
         requestPayload.max_length ?? downloadLimit,
-        requestPayload.start_index ?? 0
+        requestPayload.start_index ?? 0,
       );
 
       return { content: [{ type: "text", text: content }], isError: false };
@@ -334,16 +296,15 @@ export class Fetcher {
 
   static async markdown(requestPayload: RequestPayload) {
     try {
-      const response = await this._fetch(requestPayload);
-      const html = await this.readResponseText(response);
+      const html = await this._fetch(requestPayload);
       const turndownService = new TurndownService();
       let markdown = turndownService.turndown(html);
-      
+
       // Apply length limits
       markdown = this.applyLengthLimits(
         markdown,
         requestPayload.max_length ?? downloadLimit,
-        requestPayload.start_index ?? 0
+        requestPayload.start_index ?? 0,
       );
 
       return { content: [{ type: "text", text: markdown }], isError: false };
