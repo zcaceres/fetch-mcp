@@ -62,12 +62,16 @@ Rules for every document:
 ## Commands
 
 ```bash
-bun test                       # unit and integration tests
-bun run build                  # build dist/index.js and dist/cli.js
+bun run harness                   # the harness, interactive: type help
+bun run harness run <file|folder> # replay scenarios; exits 1 if any prints something else
+bun run harness run <…> --write   # accept what they print now
+bun test                          # unit, integration, and scenario tests
+bun run typecheck                 # tsc --noEmit
+bun run lint                      # biome ci .  (bun run lint:fix to fix)
+bun run build                     # build dist/index.js and dist/cli.js
 ```
 
-Run checks before calling a change done. (Per D11, `typescript` + `typecheck`, Biome lint, and a Bun-runnable DD harness
-+ `scenarios/` runner will be added as part of the redesign.)
+Run `bun run lint`, `bun run typecheck`, `bun test`, and `bun run harness run scenarios` before calling a change done.
 
 ## Commits
 

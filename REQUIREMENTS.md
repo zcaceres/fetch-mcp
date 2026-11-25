@@ -8,9 +8,7 @@ and a withdrawn decision keeps its heading as one line.
 
 What each journey's users can do and see is in its acceptance criteria, which cite these rules:
 
-<!-- One line per journey, added by /dd-journey:
-- **<Journey>:** <who, from where to where> ([acceptance criteria](docs/journeys/<journey>/acceptance-criteria.md)).
--->
+- **Fetch Web Content:** an Agent or CLI User fetches a public web Target URL in a Format and receives a Windowed Excerpt ([acceptance criteria](docs/journeys/fetch-web-content/acceptance-criteria.md)).
 
 ## Sources
 
@@ -37,8 +35,9 @@ noun marked *(derived)* is computed from others, never stored, and its entry say
 ### Nouns
 
 - **Target URL:** an `http:` or `https:` URL identifying a public web resource or YouTube video (D3, D4, D8).
-- **Format:** the requested output representation — `html`, `markdown`, `readable`, `text`, `json`, or `youtube-transcript` (D3, D4).
-- **Fetch Request:** an actor's request carrying a Target URL, desired Format, optional custom request headers, optional Window bounds (`startIndex`, `maxLength`), and (for `youtube-transcript`) an optional caption language code (D4, D6).
+- **Format:** the requested output representation — one of the five web formats (`html`, `markdown`, `readable`, `text`, `json`, modeled as `WebFormat`) or `youtube-transcript` (D3, D4, D19).
+- **Window:** the non-negative integer character bounds (`startIndex`, `maxLength`) selecting a Windowed Excerpt from Rendered Output or Transcript (D4, D9, D19).
+- **Fetch Request:** an actor's request carrying a Target URL, desired Format, optional custom request headers, optional Window (`startIndex`, `maxLength`), and (for `youtube-transcript`) an optional caption language code (D4, D6, D19).
 - **Raw Response:** the bounded HTTP response status, headers, final URL, and decoded UTF-8 body retrieved from an origin server (D4, D9).
 - **Proxy Policy:** the effective proxy routing rule (direct or HTTP/HTTPS/SOCKS proxy URL) resolved from Operator environment variables (`HTTPS_PROXY`, `HTTP_PROXY`, `ALL_PROXY`, `NO_PROXY`) or a CLI User's explicit `--proxy` override (D2, D4, D5, D6).
 - **Rendered Output** *(derived)*: the string produced by transforming a Raw Response into the requested Format (`html`, `markdown`, `readable`, `text`, or `json`); never stored (D4).
@@ -68,15 +67,16 @@ system computes a value for us, its rule for it is recorded here, as that system
 ## Functional Requirements
 
 ### Web Content Fetching
-- An Agent or CLI User can `fetch` a public `http:` or `https:` Target URL and receive its Rendered Output as `html`, `markdown`, `readable`, `text`, or `json` (D1, D3, D4, D12).
-- `fetch` follows up to 10 HTTP redirects, validating every redirect hop against SSRF rules and stripping `Authorization`, `Cookie`, and `Proxy-Authorization` headers across origin boundaries (D8, D9, I1, I4).
-- `fetch` returns a Windowed Excerpt sliced by `startIndex` (default `0`) and `maxLength` (default `DEFAULT_LIMIT` = `5000`; `0` = unlimited), returning `""` when `startIndex` is at or beyond the output length (D4, D9, D14, U2).
-- Non-2xx HTTP responses, invalid JSON payloads for `json` format, and pages unparseable by Readability for `readable` format fail explicitly with typed domain errors (D14).
+- An Agent or CLI User can `fetch` a public `http:` or `https:` Target URL and receive its Rendered Output as `html`, `markdown`, `readable`, `text`, or `json`, with single-attempt delivery, case-insensitive `User-Agent`/`Accept-Encoding` defaulting, and header CR/LF rejection (D1, D3, D4, D12, D16, D18).
+- `fetch` follows up to 10 HTTP redirects, validating every redirect hop against SSRF rules, stripping `Authorization`, `Cookie`, and `Proxy-Authorization` headers across origin boundaries, and treating redirect statuses without a `Location` header as non-2xx HTTP errors (D8, D9, D14, D17, I1, I4).
+- `fetch` rejects clearly binary `Content-Type` responses with a typed error, decodes text-based responses as UTF-8, decompresses `gzip`/`deflate`/`br` responses, and passes unknown `Content-Encoding` values through unchanged (D17, I5).
+- `fetch` returns a Windowed Excerpt (sliced text only) selected by `startIndex` (default `0`) and `maxLength` (default `DEFAULT_LIMIT` = `5000`; `0` = unlimited), returning `""` when `startIndex` is at or beyond the output length (D4, D9, D14, D15).
+- Non-2xx HTTP responses, invalid JSON payloads for `json` format, and pages unparseable by Readability for `readable` format fail explicitly with typed domain errors (D14, D16).
 
 ### YouTube Transcript Fetching
 - An Agent or CLI User can `fetch transcript` for an allowlisted YouTube Target URL with an optional caption language code (default `"en"`) and Window bounds (D3, D4, D7, D12, I3, U1).
 - `fetch transcript` tries local `yt-dlp` first when present on `PATH` and falls back to direct YouTube watch-page and caption-XML extraction if `yt-dlp` is unavailable or fails, without swallowing validation or SSRF errors (D7, I3).
-- `fetch transcript` returns a Windowed Excerpt of the Transcript, formatted as a language header followed by timestamped caption lines (D4, D9, U1, U2).
+- `fetch transcript` returns a Windowed Excerpt of the Transcript, formatted as a language header followed by timestamped caption lines (D4, D9, D15, U1).
 
 ### Interfaces & Proxy Routing
 - The MCP stdio server (`mcp-fetch-server`) exposes six tools aligned to Terminology: `fetch_html`, `fetch_markdown`, `fetch_readable`, `fetch_text`, `fetch_json`, and `fetch_transcript`, accepting custom request headers and never accepting a caller-supplied `proxy` parameter (D1, D6, D10, D12, I6).
@@ -176,12 +176,31 @@ for an undecided rule and will change with it.
 
 - **Decided (2026-11-25):** Non-2xx HTTP responses, invalid JSON in `json` format, unparseable Readability documents in `readable` format, and SSRF/limit/timeout violations all return typed domain errors (`Result`), mapped to `isError: true` in MCP responses and `stderr` + exit code `1` in the CLI. A `startIndex` at or beyond output length returns an empty Windowed Excerpt (`""`).
 
+### D15. Windowed Excerpt returns sliced text only
+
+- **Decided (2026-11-25):** `Windowed Excerpt` returns only the sliced character substring with no appended truncation footer or inline metadata, keeping machine-parseable formats (such as JSON and HTML) unmodified. Resolves U2.
+
+### D16. Web Format rendering rules
+
+- **Decided (2026-11-25):** Rendering rules for web formats are: `html` returns the unmodified response text; `json` parses via `JSON.parse` and re-serializes compactly via `JSON.stringify` (failing on invalid JSON); `text` removes `<script>` and `<style>` elements, extracts `body.textContent`, and collapses/trims whitespace; `markdown` strips `<script>` and `<style>` elements before Turndown conversion; `readable` extracts the main article with Mozilla Readability, converts `article.content` with Turndown, and prepends `# <article.title>\n\n` when a non-empty title is present (failing if Readability returns `null`).
+
+### D17. Binary Content-Type guard and HTTP response decoding
+
+- **Decided (2026-11-25):** `fetch` rejects clearly binary `Content-Type` responses (`image/*`, `audio/*`, `video/*`, `application/octet-stream`, `application/pdf`, `application/zip`, `font/*`) with a typed error. Text-based or missing `Content-Type` responses are decoded as UTF-8. Redirect statuses (`301`, `302`, `303`, `307`, `308`) with no `Location` header are treated as non-2xx HTTP errors. Supported `Content-Encoding` values (`gzip`, `x-gzip`, `deflate`, `br`) are decompressed under `MAX_RESPONSE_BYTES` (I5); unknown encodings are passed through unchanged.
+
+### D18. Single-attempt delivery and request header hygiene
+
+- **Decided (2026-11-25):** `fetch` is strictly single-attempt (never auto-retries 5xx, connection, or timeout errors). Default `User-Agent` and `Accept-Encoding` (`gzip, deflate, br`) headers are applied only when the caller has not supplied them (checked case-insensitively). Custom header names or values containing CR (`\r`) or LF (`\n`) control characters are rejected with a typed validation error.
+
+### D19. Window noun and WebFormat subset
+
+- **Decided (2026-11-25):** Formalize **Window** (`startIndex`, `maxLength`) as a Terminology noun, and define `WebFormat` as the five non-transcript web variants of **Format** (`html`, `markdown`, `readable`, `text`, `json`) used by `fetch`.
+
 ## Undecided Questions
 
 | # | Question | Meanwhile |
 |---|---|---|
 | U1 | (`fetch-transcript`) When a requested `lang` caption track does not exist on a YouTube video, should `fetch transcript` fall back to the first available track or return a typed error? | Fall back to the first available track and report the actual language in the Transcript header. |
-| U2 | (`fetch-web-content`) Should `Windowed Excerpt` return only the sliced text, or also include truncation metadata / continuation hints (total length, next `startIndex`)? | Return only the sliced text (matching v1.2.0). |
 | U3 | (`proxy-and-limits`) For SOCKS proxies, should `socks5://` and `socks5h://` both delegate hostname DNS to the proxy per D8, or distinguish local vs. proxy DNS by scheme? | Delegate hostname DNS to the proxy for all SOCKS schemes (matching HTTP/HTTPS proxies under D8). |
 | U4 | (`mcp-interface`) Should `tools/list` reject unrecognized pagination cursors with `-32602` (issue #49 SHOULD item), and when should MCP `2026-07-28` `server/discover` (issue #50) be adopted? | Follow `@modelcontextprotocol/sdk` defaults on `2025-11-25`. |
 
@@ -191,3 +210,4 @@ Pointers only, so an old reference to a U# still leads somewhere. The decision s
 
 | # | Resolved by |
 |---|---|
+| U2 | D15 |

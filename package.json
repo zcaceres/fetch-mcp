@@ -27,7 +27,11 @@
     "prepublishOnly": "bun run build",
     "dev": "bun run --watch src/index.ts",
     "start": "bun run src/index.ts",
+    "harness": "bun run cli/main.ts",
     "test": "bun test",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome ci .",
+    "lint:fix": "biome check --write .",
     "publish:npm": "bun run build && bun test && npm publish"
   },
   "bin": {
@@ -54,9 +58,11 @@
     "zod": "^4.6.7"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.6.9",
     "@types/bun": "^1.4.5",
     "@types/jsdom": "^28.0.0",
     "@types/mozilla__readability": "^0.4.2",
-    "@types/turndown": "^5.0.6"
+    "@types/turndown": "^5.0.6",
+    "typescript": "^7.0.2"
   }
 }

@@ -252,7 +252,7 @@ function openConnectTunnel(
         servername: net.isIP(targetHost) ? undefined : targetHost,
       });
 
-      tlsSocket.once("error", (err) => {
+      tlsSocket.once("error", (err: Error) => {
         if (!settled) {
           settled = true;
           reject(err);
