@@ -6,7 +6,7 @@ export const TargetUrl = (value: string): TargetUrl => value as TargetUrl;
 export type ResolvedIp = Brand<string, 'ResolvedIp'>;
 export const ResolvedIp = (value: string): ResolvedIp => value as ResolvedIp;
 
-export const WEB_FORMATS = ['html'] as const;
+export const WEB_FORMATS = ['html', 'markdown', 'readable', 'text', 'json'] as const;
 export type WebFormat = (typeof WEB_FORMATS)[number];
 
 export type Headers = Readonly<Record<string, string>>;
@@ -54,4 +54,6 @@ export type FetchError =
   | { readonly kind: 'blocked_url'; readonly message: string }
   | { readonly kind: 'too_many_redirects'; readonly message: string }
   | { readonly kind: 'http_error'; readonly message: string }
-  | { readonly kind: 'network_error'; readonly message: string };
+  | { readonly kind: 'network_error'; readonly message: string }
+  | { readonly kind: 'unsupported_content_type'; readonly message: string }
+  | { readonly kind: 'parse_error'; readonly message: string };

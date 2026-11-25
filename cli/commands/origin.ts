@@ -2,12 +2,12 @@ import { err, ok } from '../../src/shared/result.ts';
 import type { Command } from '../command.ts';
 
 const USAGE =
-  'usage: origin serve <url> <status> <body...> | origin redirect <url> <status> <location> | origin fail <url> <reason...> | origin last-headers <url>';
+  'usage: origin serve <url> <status> <body...> | origin header <url> <name> <value...> | origin redirect <url> <status> <location> | origin fail <url> <reason...> | origin last-headers <url>';
 
 export const originCommand: Command = {
   kind: 'world',
   usage:
-    'origin serve <url> <status> <body...> | origin redirect <url> <status> <location> | origin fail <url> <reason...> | origin last-headers <url>',
+    'origin serve <url> <status> <body...> | origin header <url> <name> <value...> | origin redirect <url> <status> <location> | origin fail <url> <reason...> | origin last-headers <url>',
   summary: 'configure and inspect mocked Remote Origin Server responses and failures',
   run: async (args, world) => {
     const [action, url, ...rest] = args;
@@ -22,6 +22,17 @@ export const originCommand: Command = {
       }
       world.origin.serve(url, status, bodyParts.join(' '));
       return ok([`origin: ${status} ${url}`]);
+    }
+
+    if (action === 'header') {
+      const [name, ...valueParts] = rest;
+      if (!url || !name || valueParts.length === 0) {
+        return err('usage: origin header <url> <name> <value...>');
+      }
+      const value = valueParts.join(' ');
+      const updated = world.origin.header(url, name, value);
+      if (!updated.ok) return updated;
+      return ok([`origin: header ${url} ${name}: ${value}`]);
     }
 
     if (action === 'redirect') {

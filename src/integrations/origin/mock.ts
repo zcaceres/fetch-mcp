@@ -9,6 +9,7 @@ type OriginEntry =
 export type OriginMock = {
   readonly get: HttpGetPort;
   readonly serve: (url: string, status: number, body: string, headers?: Headers) => void;
+  readonly header: (url: string, name: string, value: string) => Result<void, string>;
   readonly redirect: (url: string, status: number, location: string) => void;
   readonly fail: (url: string, reason: string) => void;
   readonly lastHeaders: (url: string) => Headers | undefined;
@@ -49,6 +50,15 @@ export const createOriginMock = (): OriginMock => {
     get,
     serve: (url, status, body, headers = {}) => {
       routes.set(normalizeKey(url), { kind: 'response', status, headers, body });
+    },
+    header: (url, name, value) => {
+      const key = normalizeKey(url);
+      const existing = routes.get(key);
+      if (existing?.kind !== 'response') {
+        return err(`No served response registered for ${url}`);
+      }
+      routes.set(key, { ...existing, headers: { ...existing.headers, [name]: value } });
+      return ok(undefined);
     },
     redirect: (url, status, location) => {
       routes.set(normalizeKey(url), { kind: 'response', status, headers: { location }, body: '' });

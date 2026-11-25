@@ -1,3 +1,6 @@
+import { Readability } from '@mozilla/readability';
+import { JSDOM } from 'jsdom';
+import TurndownService from 'turndown';
 import { err, ok, type Result } from '../shared/result.ts';
 import {
   type FetchError,
@@ -12,7 +15,13 @@ import {
   WEB_FORMATS,
   type WebFormat,
 } from './nouns.ts';
-import { isIpLiteral, isReservedIp, normalizeHostname, stripCrossOriginHeaders } from './queries.ts';
+import {
+  isBinaryContentType,
+  isIpLiteral,
+  isReservedIp,
+  normalizeHostname,
+  stripCrossOriginHeaders,
+} from './queries.ts';
 
 export const DEFAULT_LIMIT = 5000;
 export const MAX_REDIRECTS = 10;
@@ -145,6 +154,22 @@ export const validateRedirectHop = (
   });
 };
 
+const findHeaderCaseInsensitive = (headers: Headers, name: string): string | undefined => {
+  const lower = name.toLowerCase();
+  for (const [key, value] of Object.entries(headers)) {
+    if (key.toLowerCase() === lower) return value;
+  }
+  return undefined;
+};
+
+const stripScriptAndStyle = (document: Document): void => {
+  for (const tag of ['script', 'style']) {
+    for (const el of Array.from(document.getElementsByTagName(tag))) {
+      el.remove();
+    }
+  }
+};
+
 /**
  * Evaluates a Raw Response for a Fetch Request and produces Rendered Output (D14, D16, D17).
  */
@@ -156,9 +181,64 @@ export const evaluateResponse = (request: FetchRequest, response: RawResponse): 
     });
   }
 
+  const contentType = findHeaderCaseInsensitive(response.headers, 'content-type');
+  if (isBinaryContentType(contentType)) {
+    const mediaType = (contentType?.split(';')[0] ?? '').trim().toLowerCase();
+    return err({
+      kind: 'unsupported_content_type',
+      message: `Unsupported binary Content-Type "${mediaType}" fetching ${request.url}`,
+    });
+  }
+
   switch (request.format) {
     case 'html':
       return ok(RenderedOutput(response.body));
+
+    case 'json': {
+      try {
+        const parsed: unknown = JSON.parse(response.body);
+        return ok(RenderedOutput(JSON.stringify(parsed)));
+      } catch {
+        return err({
+          kind: 'parse_error',
+          message: `Invalid JSON response from ${request.url}`,
+        });
+      }
+    }
+
+    case 'text': {
+      const dom = new JSDOM(response.body);
+      stripScriptAndStyle(dom.window.document);
+      const rawText = dom.window.document.body?.textContent ?? '';
+      return ok(RenderedOutput(rawText.replace(/\s+/g, ' ').trim()));
+    }
+
+    case 'markdown': {
+      const dom = new JSDOM(response.body);
+      stripScriptAndStyle(dom.window.document);
+      const turndown = new TurndownService();
+      const bodyHtml = dom.window.document.body?.innerHTML ?? '';
+      return ok(RenderedOutput(turndown.turndown(bodyHtml)));
+    }
+
+    case 'readable': {
+      const dom = new JSDOM(response.body, { url: request.url });
+      const reader = new Readability(dom.window.document);
+      const article = reader.parse();
+      if (!article) {
+        return err({
+          kind: 'parse_error',
+          message: `Failed to parse readable content from ${request.url}`,
+        });
+      }
+      const turndown = new TurndownService();
+      const bodyMarkdown = turndown.turndown(article.content ?? '');
+      const title = (article.title ?? '').trim();
+      const combined =
+        title.length > 0 ? (bodyMarkdown.length > 0 ? `# ${title}\n\n${bodyMarkdown}` : `# ${title}`) : bodyMarkdown;
+      return ok(RenderedOutput(combined));
+    }
+
     default:
       return request.format satisfies never;
   }

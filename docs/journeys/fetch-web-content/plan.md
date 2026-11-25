@@ -28,7 +28,7 @@ Where this journey lives in the code. Each noun is a type in the context's `noun
 
 | Context | Nouns | Verbs | Queries | Harness commands |
 |---|---|---|---|---|
-| `src/fetching/` | `TargetUrl`, `WebFormat`, `Window`, `FetchRequest`, `RawResponse`, `RenderedOutput`, `WindowedExcerpt`, `FetchError` | `prepareFetch`, `validateResolvedIps`, `validateRedirectHop`, `evaluateResponse` | `normalizeHostname`, `isIpLiteral`, `isReservedIp`, `stripCrossOriginHeaders`, `windowedExcerpt` | `fetch <format> <url> [--start-index N] [--max-length N] [--header K:V]` |
+| `src/fetching/` | `TargetUrl`, `WebFormat`, `Window`, `FetchRequest`, `RawResponse`, `RenderedOutput`, `WindowedExcerpt`, `FetchError` | `prepareFetch`, `validateResolvedIps`, `validateRedirectHop`, `evaluateResponse` | `normalizeHostname`, `isIpLiteral`, `isReservedIp`, `isBinaryContentType`, `stripCrossOriginHeaders`, `windowedExcerpt` | `fetch <format> <url> [--start-index N] [--max-length N] [--header K:V]` |
 
 ## External systems
 
@@ -53,15 +53,16 @@ turned up. Each has a [spec](specs/) and a scenario in `scenarios/fetch-web-cont
    ([spec](specs/01-basic-html-fetch/spec.md), `scenarios/fetch-web-content/01-basic-html-fetch.txt`)
 2. **02 — SSRF & Redirects.** Full IANA-reserved IPv4/IPv6 + IPv4-mapped IPv6 + multicast + malformed IP blocking, DNS lookup validation & rebinding refusal, redirect following up to 10 hops with relative `Location`, per-hop SSRF checks, cross-origin sensitive header stripping, and missing-`Location` refusal. Covers FW-3, FW-4 (harness validation), FW-6.
    ([spec](specs/02-ssrf-and-redirects/spec.md), `scenarios/fetch-web-content/02-ssrf-and-redirects.txt`)
+3. **03 — Formats & Content Guards.** Adds `json` (parse/stringify + invalid JSON error), `text` (DOM script/style stripping + whitespace collapse), `markdown` (script/style stripping + Turndown), `readable` (Readability + Turndown with `# <title>` + parse error), and binary `Content-Type` rejection. Covers FW-9, FW-11, FW-12, FW-13.
+   ([spec](specs/03-formats-and-content-guards/spec.md), `scenarios/fetch-web-content/03-formats-and-content-guards.txt`)
 
 ### Next
 
 In the order we expect to build them; reorder freely. Each says where it came from: criteria, a finding (a
 `/dd-verify` note) or a decision.
 
-1. **03 — Formats & Content Guards.** Adds `json` (parse/stringify + invalid JSON error), `text` (DOM script/style stripping + whitespace collapse), `markdown` (script/style stripping + Turndown), `readable` (Readability + Turndown with `# <title>` + parse error), and binary `Content-Type` rejection. From FW-9, FW-11, FW-12, FW-13.
-2. **04 — Limits, Compression & Timeouts.** Adds `gzip`/`deflate`/`br` decompression, unknown encoding passthrough, `MAX_RESPONSE_BYTES` enforcement on `Content-Length`, raw wire bytes, and decoded streams, `30s` timeout handling, and custom header hygiene (case-insensitive `User-Agent`/`Accept-Encoding` defaults, duplicate case-insensitive caller header handling, and CR/LF rejection). From FW-2, FW-7, FW-8, and `notes/2026-11-25-fetch-web-content-verify.md`.
-3. **05 — Real Transport & CLI Wiring.** Implements the real IP-pinned HTTP(S) client in `src/integrations/origin/client.ts` (wiring validated `ResolvedIp` records directly to sockets to complete FW-4 pinning) + real DNS port in `src/integrations/dns/client.ts`, and wires `mcp-fetch` CLI (`html`, `markdown`, `readable`, `text`, `json`, `--header`, `--max-length`, `--start-index`). From FW-4, FW-15, and `notes/2026-11-25-fetch-web-content-verify.md`.
+1. **04 — Limits, Compression & Timeouts.** Adds `gzip`/`deflate`/`br` decompression, unknown encoding passthrough, `MAX_RESPONSE_BYTES` enforcement on `Content-Length`, raw wire bytes, and decoded streams, `30s` timeout handling, and custom header hygiene (case-insensitive `User-Agent`/`Accept-Encoding` defaults, duplicate case-insensitive caller header handling, and CR/LF rejection). From FW-2, FW-7, FW-8, and `notes/2026-11-25-fetch-web-content-verify.md`.
+2. **05 — Real Transport & CLI Wiring.** Implements the real IP-pinned HTTP(S) client in `src/integrations/origin/client.ts` (wiring validated `ResolvedIp` records directly to sockets to complete FW-4 pinning) + real DNS port in `src/integrations/dns/client.ts`, and wires `mcp-fetch` CLI (`html`, `markdown`, `readable`, `text`, `json`, `--header`, `--max-length`, `--start-index`). From FW-4, FW-15, and `notes/2026-11-25-fetch-web-content-verify.md`.
 
 ## Deferred
 

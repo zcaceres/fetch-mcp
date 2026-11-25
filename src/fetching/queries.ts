@@ -1,6 +1,8 @@
 import { type Headers, type RenderedOutput, type Window, WindowedExcerpt } from './nouns.ts';
 
 const SENSITIVE_CROSS_ORIGIN_HEADERS = new Set(['authorization', 'cookie', 'proxy-authorization']);
+const BINARY_MEDIA_TYPE_PREFIXES = ['image/', 'audio/', 'video/', 'font/'] as const;
+const BINARY_MEDIA_TYPES = new Set(['application/octet-stream', 'application/pdf', 'application/zip']);
 
 const parseIPv4Octets = (ip: string): readonly [number, number, number, number] | null => {
   const parts = ip.split('.');
@@ -170,6 +172,17 @@ export const isReservedIp = (ip: string): boolean => {
     return isReservedIPv6Groups(ipv6);
   }
   return true;
+};
+
+/**
+ * Returns true if `contentType` identifies a clearly binary media type that should not be decoded as text (D17).
+ */
+export const isBinaryContentType = (contentType: string | undefined): boolean => {
+  if (!contentType) return false;
+  const mediaType = (contentType.split(';')[0] ?? '').trim().toLowerCase();
+  if (!mediaType || mediaType === 'image/svg+xml') return false;
+  if (BINARY_MEDIA_TYPES.has(mediaType)) return true;
+  return BINARY_MEDIA_TYPE_PREFIXES.some((prefix) => mediaType.startsWith(prefix));
 };
 
 /**

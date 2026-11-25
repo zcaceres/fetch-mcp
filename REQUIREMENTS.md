@@ -186,7 +186,7 @@ for an undecided rule and will change with it.
 
 ### D17. Binary Content-Type guard and HTTP response decoding
 
-- **Decided (2026-11-25):** `fetch` rejects clearly binary `Content-Type` responses (`image/*`, `audio/*`, `video/*`, `application/octet-stream`, `application/pdf`, `application/zip`, `font/*`) with a typed error. Text-based or missing `Content-Type` responses are decoded as UTF-8. Redirect statuses (`301`, `302`, `303`, `307`, `308`) with no `Location` header are treated as non-2xx HTTP errors. Supported `Content-Encoding` values (`gzip`, `x-gzip`, `deflate`, `br`) are decompressed under `MAX_RESPONSE_BYTES` (I5); unknown encodings are passed through unchanged.
+- **Decided (2026-11-25):** `fetch` rejects clearly binary `Content-Type` responses (`image/*` excluding `image/svg+xml`, `audio/*`, `video/*`, `application/octet-stream`, `application/pdf`, `application/zip`, `font/*`) with a typed error. Text-based, `image/svg+xml`, or missing `Content-Type` responses are decoded as UTF-8. Redirect statuses (`301`, `302`, `303`, `307`, `308`) with no `Location` header are treated as non-2xx HTTP errors. Supported `Content-Encoding` values (`gzip`, `x-gzip`, `deflate`, `br`) are decompressed under `MAX_RESPONSE_BYTES` (I5); unknown encodings are passed through unchanged.
 
 ### D18. Single-attempt delivery and request header hygiene
 

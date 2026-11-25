@@ -1,0 +1,86 @@
+# Slice 03: Formats & Content Guards
+# Covers FW-9, FW-11, FW-12, FW-13
+
+# Binary Content-Type guard rejects images, PDFs, and octet-streams while allowing text/missing Content-Type (FW-9, D14, D17)
+> origin serve https://example.com/photo.png 200 PNGDATA
+origin: 200 https://example.com/photo.png
+
+> origin header https://example.com/photo.png Content-Type image/png
+origin: header https://example.com/photo.png Content-Type: image/png
+
+> fetch html https://example.com/photo.png
+error: Unsupported binary Content-Type "image/png" fetching https://example.com/photo.png
+
+> origin serve https://example.com/doc.pdf 200 %PDF-1.7
+origin: 200 https://example.com/doc.pdf
+
+> origin header https://example.com/doc.pdf Content-Type application/pdf; charset=binary
+origin: header https://example.com/doc.pdf Content-Type: application/pdf; charset=binary
+
+> fetch text https://example.com/doc.pdf
+error: Unsupported binary Content-Type "application/pdf" fetching https://example.com/doc.pdf
+
+> origin serve https://example.com/blob.bin 200 RAWBYTES
+origin: 200 https://example.com/blob.bin
+
+> origin header https://example.com/blob.bin content-type application/octet-stream
+origin: header https://example.com/blob.bin content-type: application/octet-stream
+
+> fetch html https://example.com/blob.bin
+error: Unsupported binary Content-Type "application/octet-stream" fetching https://example.com/blob.bin
+
+# SVG (image/svg+xml) is UTF-8 XML text and allowed by the binary guard (FW-9, D17)
+> origin serve https://example.com/icon.svg 200 <svg><text>Hi</text></svg>
+origin: 200 https://example.com/icon.svg
+
+> origin header https://example.com/icon.svg Content-Type image/svg+xml; charset=utf-8
+origin: header https://example.com/icon.svg Content-Type: image/svg+xml; charset=utf-8
+
+> fetch html https://example.com/icon.svg
+| <svg><text>Hi</text></svg>
+
+# Format json: compact re-serialization of valid JSON and explicit error on invalid JSON (FW-11, D4, D14, D16)
+> origin serve https://example.com/data.json 200 { "a": 1, "b": [2, 3] }
+origin: 200 https://example.com/data.json
+
+> origin header https://example.com/data.json Content-Type application/json; charset=utf-8
+origin: header https://example.com/data.json Content-Type: application/json; charset=utf-8
+
+> fetch json https://example.com/data.json
+| {"a":1,"b":[2,3]}
+
+> origin serve https://example.com/bad.json 200 <html>not json</html>
+origin: 200 https://example.com/bad.json
+
+> fetch json https://example.com/bad.json
+error: Invalid JSON response from https://example.com/bad.json
+
+# Format text: removes script and style elements and collapses whitespace (FW-12, D4, D16)
+> origin serve https://example.com/page.html 200 <html><head><style>body{color:red}</style><script>var secret=1;</script></head><body><h3>Guide</h3> <p>Visit   <a href="https://example.com">home</a>.</p><script>alert(1)</script></body></html>
+origin: 200 https://example.com/page.html
+
+> fetch text https://example.com/page.html
+| Guide Visit home.
+
+# Format markdown: strips script and style elements before Turndown conversion (FW-12, D4, D16)
+> fetch markdown https://example.com/page.html
+| ### Guide
+|
+| Visit [home](https://example.com).
+
+# Format readable: extracts main article with # title heading, strips boilerplate, and fails on unparseable pages (FW-13, D4, D14, D16)
+> origin serve https://example.com/article.html 200 <!DOCTYPE html><html><head><title>Test Article</title></head><body><nav><a href="/">Home</a> | <a href="/about">About</a></nav><article><p>This is the first paragraph of the article and contains plenty of meaningful text so Mozilla Readability identifies it as the primary article content cleanly.</p><p>This is the second paragraph with additional substantial prose so Readability keeps the article body and strips away navigation boilerplate.</p></article><footer><p>Copyright 2026</p></footer></body></html>
+origin: 200 https://example.com/article.html
+
+> fetch readable https://example.com/article.html
+| # Test Article
+|
+| This is the first paragraph of the article and contains plenty of meaningful text so Mozilla Readability identifies it as the primary article content cleanly.
+|
+| This is the second paragraph with additional substantial prose so Readability keeps the article body and strips away navigation boilerplate.
+
+> origin serve https://example.com/empty.html 200 <html><body></body></html>
+origin: 200 https://example.com/empty.html
+
+> fetch readable https://example.com/empty.html
+error: Failed to parse readable content from https://example.com/empty.html

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import { RenderedOutput, ResolvedIp, TargetUrl } from './nouns.ts';
-import { isReservedIp, stripCrossOriginHeaders, windowedExcerpt } from './queries.ts';
+import { isBinaryContentType, isReservedIp, stripCrossOriginHeaders, windowedExcerpt } from './queries.ts';
 import { evaluateResponse, prepareFetch, validateRedirectHop, validateResolvedIps } from './verbs.ts';
 
 describe('fetching domain', () => {
@@ -293,12 +293,51 @@ describe('fetching domain', () => {
     });
   });
 
+  describe('isBinaryContentType', () => {
+    it('flags binary media types with or without parameters (D17)', () => {
+      for (const ct of [
+        'image/png',
+        'IMAGE/JPEG; charset=binary',
+        'audio/mpeg',
+        'video/mp4',
+        'font/woff2',
+        'application/octet-stream',
+        'application/pdf',
+        'application/pdf; charset=utf-8',
+        'application/zip',
+      ]) {
+        expect(isBinaryContentType(ct)).toBe(true);
+      }
+    });
+
+    it('allows text-based, JSON, XML, and missing Content-Type (D17)', () => {
+      for (const ct of [
+        undefined,
+        '',
+        'text/html',
+        'text/html; charset=utf-8',
+        'text/plain',
+        'application/json',
+        'application/ld+json',
+        'application/xml',
+        'application/xhtml+xml',
+        'image/svg+xml',
+        'image/svg+xml; charset=utf-8',
+      ]) {
+        expect(isBinaryContentType(ct)).toBe(false);
+      }
+    });
+  });
+
   describe('evaluateResponse', () => {
-    const reqResult = prepareFetch({ url: 'https://example.com/', format: 'html' });
-    if (!reqResult.ok) throw new Error('expected valid request');
-    const request = reqResult.value;
+    const reqFor = (format: string) => {
+      const r = prepareFetch({ url: 'https://example.com/', format });
+      if (!r.ok) throw new Error(`expected valid request for format ${format}`);
+      return r.value;
+    };
 
     it('returns unmodified HTML for 2xx responses (D16)', () => {
+      const request = reqFor('html');
       const body = '<h1>Hello</h1><script>alert(1)</script>';
       const result = evaluateResponse(request, {
         status: 200,
@@ -310,6 +349,7 @@ describe('fetching domain', () => {
     });
 
     it('returns typed HTTP error for non-2xx responses including 302 without Location (D14, D17)', () => {
+      const request = reqFor('html');
       expect(evaluateResponse(request, { status: 404, url: request.url, headers: {}, body: 'Not Found' })).toEqual({
         ok: false,
         error: { kind: 'http_error', message: 'HTTP error 404 fetching https://example.com/' },
@@ -317,6 +357,111 @@ describe('fetching domain', () => {
       expect(evaluateResponse(request, { status: 302, url: request.url, headers: {}, body: 'Moved' })).toEqual({
         ok: false,
         error: { kind: 'http_error', message: 'HTTP error 302 fetching https://example.com/' },
+      });
+    });
+
+    it('rejects binary Content-Type before rendering (D14, D17)', () => {
+      const request = reqFor('html');
+      expect(
+        evaluateResponse(request, {
+          status: 200,
+          url: request.url,
+          headers: { 'Content-Type': 'image/png; charset=binary' },
+          body: 'PNGDATA',
+        }),
+      ).toEqual({
+        ok: false,
+        error: {
+          kind: 'unsupported_content_type',
+          message: 'Unsupported binary Content-Type "image/png" fetching https://example.com/',
+        },
+      });
+    });
+
+    it('renders json compactly and fails explicitly on invalid JSON (D14, D16)', () => {
+      const request = reqFor('json');
+      expect(
+        evaluateResponse(request, {
+          status: 200,
+          url: request.url,
+          headers: { 'content-type': 'application/json' },
+          body: '{ "a": 1, "b": [2, 3] }',
+        }),
+      ).toEqual({ ok: true, value: RenderedOutput('{"a":1,"b":[2,3]}') });
+
+      expect(
+        evaluateResponse(request, {
+          status: 200,
+          url: request.url,
+          headers: { 'content-type': 'text/html' },
+          body: '<html>not json</html>',
+        }),
+      ).toEqual({
+        ok: false,
+        error: { kind: 'parse_error', message: 'Invalid JSON response from https://example.com/' },
+      });
+    });
+
+    it('renders text stripping script and style and collapsing whitespace (D16)', () => {
+      const request = reqFor('text');
+      const res = evaluateResponse(request, {
+        status: 200,
+        url: request.url,
+        headers: { 'content-type': 'text/html' },
+        body: '<html><head><style>body{color:red}</style><script>var a=1;</script></head><body><h1>Hi</h1>  <p>World</p><script>bad()</script></body></html>',
+      });
+      expect(res).toEqual({ ok: true, value: RenderedOutput('Hi World') });
+
+      const emptyRes = evaluateResponse(request, {
+        status: 200,
+        url: request.url,
+        headers: {},
+        body: '<html><head><title>No body</title></head></html>',
+      });
+      expect(emptyRes).toEqual({ ok: true, value: RenderedOutput('') });
+    });
+
+    it('renders markdown stripping script and style before Turndown conversion (D16)', () => {
+      const request = reqFor('markdown');
+      const res = evaluateResponse(request, {
+        status: 200,
+        url: request.url,
+        headers: { 'content-type': 'text/html' },
+        body: '<html><head><style>p{color:red}</style><script>bad()</script></head><body><h3>Guide</h3><p>Visit <a href="https://example.com">home</a>.</p><script>inline()</script></body></html>',
+      });
+      expect(res).toEqual({ ok: true, value: RenderedOutput('### Guide\n\nVisit [home](https://example.com).') });
+    });
+
+    it('renders readable with # title heading, strips boilerplate, and fails on unparseable pages (D14, D16)', () => {
+      const request = reqFor('readable');
+      const articleHtml =
+        '<!DOCTYPE html><html><head><title>Test Article</title></head><body>' +
+        '<nav><a href="/">Home</a></nav>' +
+        '<article><p>This is the first paragraph of the article and contains plenty of meaningful text so Mozilla Readability identifies it as the primary article content cleanly.</p>' +
+        '<p>This is the second paragraph with additional substantial prose so Readability keeps the article body and strips away navigation boilerplate.</p></article>' +
+        '<footer><p>Copyright 2026</p></footer></body></html>';
+      const res = evaluateResponse(request, {
+        status: 200,
+        url: request.url,
+        headers: { 'content-type': 'text/html' },
+        body: articleHtml,
+      });
+      expect(res.ok).toBe(true);
+      if (res.ok) {
+        expect(res.value.startsWith('# Test Article\n\n')).toBe(true);
+        expect(res.value).toContain('first paragraph');
+        expect(res.value).not.toContain('Copyright 2026');
+      }
+
+      const failRes = evaluateResponse(request, {
+        status: 200,
+        url: request.url,
+        headers: { 'content-type': 'text/html' },
+        body: '<html><body></body></html>',
+      });
+      expect(failRes).toEqual({
+        ok: false,
+        error: { kind: 'parse_error', message: 'Failed to parse readable content from https://example.com/' },
       });
     });
   });

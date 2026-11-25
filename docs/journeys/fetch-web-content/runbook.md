@@ -19,6 +19,7 @@ Every external system is mocked in memory and starts from its fixtures; `reset` 
 |---|---|
 | `scenarios/fetch-web-content/01-basic-html-fetch.txt` | Tracer bullet: `fetch html`, Windowed Excerpt slicing, non-2xx/network error, malformed input & basic SSRF refusal [FW-1, FW-3, FW-5, FW-10, FW-14] |
 | `scenarios/fetch-web-content/02-ssrf-and-redirects.txt` | Full IPv4/IPv6 SSRF blocking, direct DNS validation & rebinding refusal, redirect loop, per-hop SSRF, cross-origin header stripping, missing Location [FW-3, FW-4, FW-6] |
+| `scenarios/fetch-web-content/03-formats-and-content-guards.txt` | Binary Content-Type guard, `json`/`text`/`markdown`/`readable` rendering, invalid JSON & Readability parse errors [FW-9, FW-11, FW-12, FW-13] |
 
 ```bash
 bun run harness run scenarios/fetch-web-content
