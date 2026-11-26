@@ -94,6 +94,10 @@ describe("resolveProxyUrl & isNoProxyMatch", () => {
     expect(isNoProxyMatch(target, "api.internal.example.com:8443")).toBe(true);
     expect(isNoProxyMatch(target, "api.internal.example.com:443")).toBe(false);
     expect(isNoProxyMatch(target, "*")).toBe(true);
+    expect(isNoProxyMatch(target, "*.example.com")).toBe(true);
+    expect(isNoProxyMatch(target, "*.internal.example.com")).toBe(true);
+    expect(isNoProxyMatch(target, "*.other.com")).toBe(false);
+    expect(isNoProxyMatch(target, "*.example.com:443")).toBe(false);
     expect(isNoProxyMatch(target, "other.com")).toBe(false);
 
     expect(
