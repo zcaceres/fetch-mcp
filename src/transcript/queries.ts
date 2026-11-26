@@ -1,4 +1,4 @@
-import { type Transcript, type Window, WindowedExcerpt } from './nouns.ts';
+import { type LanguageCode, type Transcript, type Window, WindowedExcerpt, type YouTubeUrl } from './nouns.ts';
 
 export const ALLOWED_YOUTUBE_HOSTS: ReadonlySet<string> = new Set([
   'youtube.com',
@@ -79,6 +79,30 @@ export const parseCaptionXml = (xml: string): readonly string[] => {
 
   return lines;
 };
+
+/**
+ * Builds the `yt-dlp` argv array with manual + auto-generated subtitles enabled and the `--` end-of-options
+ * sentinel immediately before the Target URL (D21).
+ */
+export const buildYtDlpArgs = (
+  url: YouTubeUrl,
+  lang: LanguageCode,
+  outputTemplate: string,
+  proxy?: string,
+): readonly string[] => [
+  '--write-sub',
+  '--write-auto-sub',
+  '--sub-lang',
+  lang,
+  '--sub-format',
+  'srv1',
+  '--skip-download',
+  '-o',
+  outputTemplate,
+  ...(proxy ? ['--proxy', proxy] : []),
+  '--',
+  url,
+];
 
 /**
  * Slices a Transcript into a Windowed Excerpt (D9, D14, D15, D19).

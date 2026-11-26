@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'bun:test';
+import { err, ok } from '../shared/result.ts';
+import { executeFetchTranscript } from './execute.ts';
 import { LanguageCode, Transcript, YouTubeUrl } from './nouns.ts';
-import { decodeHtmlEntities, isAllowedYouTubeHost, parseCaptionXml, windowedTranscript } from './queries.ts';
+import {
+  buildYtDlpArgs,
+  decodeHtmlEntities,
+  isAllowedYouTubeHost,
+  parseCaptionXml,
+  windowedTranscript,
+} from './queries.ts';
 import { buildTranscript, extractCaptionTracks, prepareTranscriptRequest, selectCaptionTrack } from './verbs.ts';
 
 describe('transcript domain (Slice 01)', () => {
@@ -224,6 +232,163 @@ describe('transcript domain (Slice 01)', () => {
       );
       expect(String(windowedTranscript(t, { startIndex: 0, maxLength: 0 }))).toBe(String(t));
       expect(String(windowedTranscript(t, { startIndex: 500, maxLength: 10 }))).toBe('');
+    });
+  });
+
+  describe('buildYtDlpArgs (D21)', () => {
+    it('builds safe argv with --write-sub, --write-auto-sub, and -- end-of-options sentinel', () => {
+      expect(buildYtDlpArgs(YouTubeUrl('https://www.youtube.com/watch?v=abc'), LanguageCode('en'), '/tmp/sub')).toEqual(
+        [
+          '--write-sub',
+          '--write-auto-sub',
+          '--sub-lang',
+          'en',
+          '--sub-format',
+          'srv1',
+          '--skip-download',
+          '-o',
+          '/tmp/sub',
+          '--',
+          'https://www.youtube.com/watch?v=abc',
+        ],
+      );
+    });
+
+    it('includes --proxy before the -- sentinel when provided', () => {
+      expect(
+        buildYtDlpArgs(
+          YouTubeUrl('https://www.youtube.com/watch?v=abc'),
+          LanguageCode('es'),
+          '/tmp/sub',
+          'http://proxy:8080',
+        ),
+      ).toEqual([
+        '--write-sub',
+        '--write-auto-sub',
+        '--sub-lang',
+        'es',
+        '--sub-format',
+        'srv1',
+        '--skip-download',
+        '-o',
+        '/tmp/sub',
+        '--proxy',
+        'http://proxy:8080',
+        '--',
+        'https://www.youtube.com/watch?v=abc',
+      ]);
+    });
+  });
+
+  describe('executeFetchTranscript primary & fallback (FT-3, FT-4, D7, I3)', () => {
+    it('uses yt-dlp first when available and skips watch-page scraping', async () => {
+      let fetchPageCalls = 0;
+      const result = await executeFetchTranscript(
+        { url: 'https://www.youtube.com/watch?v=yt1', lang: 'en' },
+        {
+          fetchPage: async () => {
+            fetchPageCalls++;
+            return err({ kind: 'fetch_error', message: 'should not be called' });
+          },
+          ytDlp: {
+            isAvailable: async () => true,
+            downloadSubtitles: async () =>
+              ok({
+                xml: '<transcript><text start="2.0" dur="1.0">From yt-dlp</text></transcript>',
+                lang: 'en',
+                langName: 'en',
+              }),
+          },
+        },
+      );
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(String(result.value)).toBe('[Transcript language: en — en]\n\n[0:02] From yt-dlp');
+      }
+      expect(fetchPageCalls).toBe(0);
+    });
+
+    it('falls back to direct extraction when yt-dlp fails or returns empty XML', async () => {
+      const watchHtml =
+        '<html><script>var ytInitialPlayerResponse = {"captions":{"playerCaptionsTracklistRenderer":{"captionTracks":[{"baseUrl":"https://www.youtube.com/api/timedtext?v=fb&lang=en","name":{"simpleText":"English"},"languageCode":"en"}]}}};</script></html>';
+      const captionXml = '<transcript><text start="0" dur="2">Direct fallback</text></transcript>';
+
+      const fetchPage = async (url: string) => ok(url.includes('timedtext') ? captionXml : watchHtml);
+
+      const afterFail = await executeFetchTranscript(
+        { url: 'https://www.youtube.com/watch?v=fb' },
+        {
+          fetchPage,
+          ytDlp: {
+            isAvailable: async () => true,
+            downloadSubtitles: async () => err('yt-dlp exited with 1'),
+          },
+        },
+      );
+      expect(afterFail.ok).toBe(true);
+      if (afterFail.ok) {
+        expect(String(afterFail.value)).toBe('[Transcript language: en — English]\n\n[0:00] Direct fallback');
+      }
+
+      const afterEmptyXml = await executeFetchTranscript(
+        { url: 'https://www.youtube.com/watch?v=fb' },
+        {
+          fetchPage,
+          ytDlp: {
+            isAvailable: async () => true,
+            downloadSubtitles: async () => ok({ xml: '<transcript></transcript>', lang: 'en', langName: 'en' }),
+          },
+        },
+      );
+      expect(afterEmptyXml.ok).toBe(true);
+      if (afterEmptyXml.ok) {
+        expect(String(afterEmptyXml.value)).toBe('[Transcript language: en — English]\n\n[0:00] Direct fallback');
+      }
+    });
+
+    it('never invokes yt-dlp or falls back on validation or checkHost SSRF errors (I2, I3)', async () => {
+      let ytDlpCalls = 0;
+      let fetchPageCalls = 0;
+      const ports = {
+        fetchPage: async () => {
+          fetchPageCalls++;
+          return ok('');
+        },
+        checkHost: async (hostname: string) =>
+          err({
+            kind: 'blocked_url' as const,
+            message: `Blocked Target URL: hostname "${hostname}" resolved to private IP "10.0.0.1"`,
+          }),
+        ytDlp: {
+          isAvailable: async () => true,
+          downloadSubtitles: async () => {
+            ytDlpCalls++;
+            return ok({ xml: '', lang: 'en', langName: 'en' });
+          },
+        },
+      };
+
+      const badLang = await executeFetchTranscript(
+        { url: 'https://www.youtube.com/watch?v=abc', lang: '--exec' },
+        ports,
+      );
+      expect(badLang.ok).toBe(false);
+
+      const badHost = await executeFetchTranscript({ url: 'https://example.com/watch?v=abc' }, ports);
+      expect(badHost.ok).toBe(false);
+
+      const rebind = await executeFetchTranscript({ url: 'https://www.youtube.com/watch?v=rebind' }, ports);
+      expect(rebind).toEqual({
+        ok: false,
+        error: {
+          kind: 'blocked_url',
+          message: 'Blocked Target URL: hostname "www.youtube.com" resolved to private IP "10.0.0.1"',
+        },
+      });
+
+      expect(ytDlpCalls).toBe(0);
+      expect(fetchPageCalls).toBe(0);
     });
   });
 });

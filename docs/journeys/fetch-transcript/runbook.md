@@ -18,6 +18,7 @@ Every external system is mocked in memory and starts from its fixtures; `reset` 
 | Scenario | Shows |
 |---|---|
 | `scenarios/fetch-transcript/01-direct-transcript-extraction.txt` | Tracer bullet: YouTube host allowlist & `lang`/CR-LF validation, direct watch-page + caption XML extraction, exact/prefix `lang` selection & available-language error, `srv1`/`srv3` parsing + entity decoding, empty-XML refusal, and Windowed Excerpt slicing [FT-1, FT-2, FT-5, FT-6, FT-7, FT-8, FT-9] |
+| `scenarios/fetch-transcript/02-ytdlp-primary-and-fallback.txt` | `yt-dlp` primary invocation (`--write-sub`, `--write-auto-sub`, `--` sentinel), direct extraction fallback on failure/empty output, and strict non-swallowing of validation and DNS SSRF errors [FT-3, FT-4] |
 
 ```bash
 bun run harness run scenarios/fetch-transcript

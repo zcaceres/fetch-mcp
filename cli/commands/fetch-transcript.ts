@@ -1,7 +1,9 @@
 import { executeFetch } from '../../src/fetching/execute.ts';
+import { normalizeHostname } from '../../src/fetching/queries.ts';
+import { validateResolvedIps } from '../../src/fetching/verbs.ts';
 import { err, ok, type Result } from '../../src/shared/result.ts';
 import { executeFetchTranscript } from '../../src/transcript/execute.ts';
-import type { FetchPagePort } from '../../src/transcript/ports.ts';
+import type { CheckHostPort, FetchPagePort } from '../../src/transcript/ports.ts';
 import type { Command } from '../command.ts';
 
 const parseNumberArg = (flag: string, raw: string | undefined): Result<number, string> => {
@@ -86,6 +88,19 @@ export const fetchTranscriptCommand: Command = {
       return ok(String(res.value));
     };
 
+    const checkHost: CheckHostPort = async (hostname) => {
+      const host = normalizeHostname(hostname);
+      const lookup = await world.dns.lookup(host);
+      if (!lookup.ok) {
+        return err({ kind: 'blocked_url', message: lookup.error.message });
+      }
+      const validated = validateResolvedIps(host, lookup.value);
+      if (!validated.ok) {
+        return err({ kind: 'blocked_url', message: validated.error.message });
+      }
+      return ok(undefined);
+    };
+
     const result = await executeFetchTranscript(
       {
         url,
@@ -94,7 +109,7 @@ export const fetchTranscriptCommand: Command = {
         ...(startIndex !== undefined ? { startIndex } : {}),
         ...(maxLength !== undefined ? { maxLength } : {}),
       },
-      { fetchPage },
+      { fetchPage, checkHost, ytDlp: world.ytdlp },
     );
 
     if (!result.ok) return err(result.error.message);

@@ -15,8 +15,9 @@ export type ExecuteTranscriptOptions = {
 };
 
 /**
- * Shared port-injected orchestration for `fetch transcript` (direct extraction in Slice 01;
- * yt-dlp primary + fallback added in Slice 02). Performs no direct I/O and imports no other context.
+ * Shared port-injected orchestration for `fetch transcript` (D7, I2, I3).
+ * Validates input and host DNS before invoking `yt-dlp`; never swallows validation or SSRF errors into fallback.
+ * Performs no direct I/O and imports no other context.
  */
 export const executeFetchTranscript = async (
   input: RawTranscriptInput,
@@ -25,6 +26,22 @@ export const executeFetchTranscript = async (
 ): Promise<Result<WindowedExcerpt, TranscriptError>> => {
   const prepared = prepareTranscriptRequest(input, options.defaultLimit ?? DEFAULT_TRANSCRIPT_LIMIT);
   if (!prepared.ok) return prepared;
+
+  if (ports.checkHost) {
+    const hostname = new URL(prepared.value.url).hostname;
+    const hostCheck = await ports.checkHost(hostname);
+    if (!hostCheck.ok) return hostCheck;
+  }
+
+  if (ports.ytDlp && (await ports.ytDlp.isAvailable())) {
+    const sub = await ports.ytDlp.downloadSubtitles(prepared.value.url, prepared.value.lang);
+    if (sub.ok) {
+      const built = buildTranscript(sub.value.xml, sub.value.lang, sub.value.langName);
+      if (built.ok) {
+        return ok(windowedTranscript(built.value, prepared.value.window));
+      }
+    }
+  }
 
   const page = await ports.fetchPage(prepared.value.url, prepared.value.headers);
   if (!page.ok) return page;

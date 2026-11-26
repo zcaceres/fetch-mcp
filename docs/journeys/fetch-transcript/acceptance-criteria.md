@@ -23,7 +23,7 @@ invariants it cites. Scenarios that share an id make up one criterion.
 ## 1. Submit Fetch Request
 
 ```gherkin
-@FT-1 @D4 @D14 @D18 @D19
+@FT-1 @D4 @D14 @D18 @D19 @I3
 Scenario: Malformed Target URL, invalid Window bounds, invalid lang, or CR/LF headers are refused before any I/O
   Given an Agent or CLI User submits a Fetch Request with a malformed URL, negative startIndex/maxLength, invalid lang code, or CR/LF header
   When they fetch transcript
