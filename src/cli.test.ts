@@ -1,239 +1,155 @@
-import { describe, it, expect, jest, beforeEach, afterAll } from "bun:test";
-import { parseArgs, type ParsedArgs } from "./cli";
-import { Fetcher } from "./Fetcher";
+import { describe, expect, it } from 'bun:test';
+import { parseCliArgs, runCli } from './cli.ts';
+import { createDnsMock } from './integrations/dns/mock.ts';
+import { createOriginMock } from './integrations/origin/mock.ts';
 
-// Save originals
-const originalExit = process.exit;
-const originalStdoutWrite = process.stdout.write;
-const originalStderrWrite = process.stderr.write;
+describe('parseCliArgs (D12)', () => {
+  it('parses all six aligned subcommands', () => {
+    for (const cmd of ['html', 'markdown', 'readable', 'text', 'json'] as const) {
+      const result = parseCliArgs([cmd, 'https://example.com']);
+      expect(result.ok).toBe(true);
+      if (result.ok && result.value.kind === 'fetch') {
+        expect(result.value.format).toBe(cmd);
+        expect(result.value.url).toBe('https://example.com');
+      }
+    }
 
-afterAll(() => {
-  process.exit = originalExit;
-  process.stdout.write = originalStdoutWrite;
-  process.stderr.write = originalStderrWrite;
+    const transcript = parseCliArgs(['transcript', 'https://www.youtube.com/watch?v=abc', '--lang', 'es']);
+    expect(transcript).toEqual({
+      ok: true,
+      value: {
+        kind: 'transcript',
+        url: 'https://www.youtube.com/watch?v=abc',
+        headers: {},
+        lang: 'es',
+      },
+    });
+  });
+
+  it('parses repeatable --header flags alongside --max-length, --start-index, and --proxy', () => {
+    const result = parseCliArgs([
+      'markdown',
+      'https://example.com',
+      '--header',
+      'Accept: text/html',
+      '--header',
+      'X-Custom: val:with:colons',
+      '--max-length',
+      '1000',
+      '--start-index',
+      '50',
+      '--proxy',
+      'http://proxy:8080',
+    ]);
+    expect(result).toEqual({
+      ok: true,
+      value: {
+        kind: 'fetch',
+        format: 'markdown',
+        url: 'https://example.com',
+        headers: {
+          Accept: 'text/html',
+          'X-Custom': 'val:with:colons',
+        },
+        maxLength: 1000,
+        startIndex: 50,
+        proxy: 'http://proxy:8080',
+      },
+    });
+  });
+
+  it('handles --help, empty args, and --version', () => {
+    expect(parseCliArgs(['--help'])).toEqual({ ok: true, value: { kind: 'help' } });
+    expect(parseCliArgs([])).toEqual({ ok: true, value: { kind: 'help' } });
+    expect(parseCliArgs(['--version'])).toEqual({ ok: true, value: { kind: 'version' } });
+  });
+
+  it('rejects unknown subcommands (including removed legacy names txt/youtube), missing URL, and invalid flags', () => {
+    expect(parseCliArgs(['txt', 'https://example.com']).ok).toBe(false);
+    expect(parseCliArgs(['youtube', 'https://youtube.com']).ok).toBe(false);
+    expect(parseCliArgs(['foobar', 'https://example.com']).ok).toBe(false);
+    expect(parseCliArgs(['html']).ok).toBe(false);
+    expect(parseCliArgs(['html', 'https://example.com', '--unknown']).ok).toBe(false);
+    expect(parseCliArgs(['html', 'https://example.com', '--max-length']).ok).toBe(false);
+    expect(parseCliArgs(['html', 'https://example.com', '--max-length', 'abc']).ok).toBe(false);
+    expect(parseCliArgs(['html', 'https://example.com', '--max-length', '-1']).ok).toBe(false);
+    expect(parseCliArgs(['html', 'https://example.com', '--start-index', '-5']).ok).toBe(false);
+    expect(parseCliArgs(['html', 'https://example.com', '--header']).ok).toBe(false);
+    expect(parseCliArgs(['html', 'https://example.com', '--header', 'no-colon']).ok).toBe(false);
+    expect(parseCliArgs(['html', 'https://example.com', '--proxy']).ok).toBe(false);
+    expect(parseCliArgs(['html', 'https://example.com', '--proxy', '--max-length', '10']).ok).toBe(false);
+    expect(parseCliArgs(['html', 'https://example.com', '--lang']).ok).toBe(false);
+  });
 });
 
-function captureExit(): { code: number | undefined; stdout: string; stderr: string } {
-  const result = { code: undefined as number | undefined, stdout: "", stderr: "" };
-  process.exit = ((c: number) => {
-    result.code = c;
-    throw new Error("EXIT");
-  }) as any;
-  process.stdout.write = ((s: string) => {
-    result.stdout += s;
-    return true;
-  }) as any;
-  process.stderr.write = ((s: string) => {
-    result.stderr += s;
-    return true;
-  }) as any;
-  return result;
-}
+describe('runCli (FW-15)', () => {
+  it('writes Windowed Excerpt to stdout and returns exit code 0 on success', async () => {
+    const origin = createOriginMock();
+    const dns = createDnsMock();
+    origin.serve('https://example.com/', 200, '<h3>Hello</h3> <p>World</p>');
 
-function restoreIO() {
-  process.exit = originalExit;
-  process.stdout.write = originalStdoutWrite;
-  process.stderr.write = originalStderrWrite;
-}
+    let out = '';
+    let errOut = '';
+    const code = await runCli(
+      ['text', 'https://example.com/', '--header', 'Accept: text/html', '--start-index', '0', '--max-length', '5'],
+      {
+        ports: { httpGet: origin.get, dnsLookup: dns.lookup },
+        stdout: (s) => {
+          out += s;
+        },
+        stderr: (s) => {
+          errOut += s;
+        },
+      },
+    );
 
-describe("parseArgs", () => {
-  it("parses a basic subcommand and URL", () => {
-    // Temporarily override exit/write to prevent test from exiting
-    const orig = process.exit;
-    const result = parseArgs(["html", "https://example.com"]);
-    expect(result.subcommand).toBe("html");
-    expect(result.url).toBe("https://example.com");
+    expect(code).toBe(0);
+    expect(out).toBe('Hello');
+    expect(errOut).toBe('');
+    expect(origin.lastHeaders('https://example.com/')?.Accept).toBe('text/html');
   });
 
-  it("parses all flags", () => {
-    const result = parseArgs([
-      "markdown",
-      "https://example.com",
-      "--max-length", "1000",
-      "--start-index", "50",
-      "--proxy", "http://proxy:8080",
-    ]);
-    expect(result.subcommand).toBe("markdown");
-    expect(result.url).toBe("https://example.com");
-    expect(result.maxLength).toBe(1000);
-    expect(result.startIndex).toBe(50);
-    expect(result.proxy).toBe("http://proxy:8080");
+  it('writes typed error message to stderr and returns exit code 1 on SSRF or HTTP failure', async () => {
+    const origin = createOriginMock();
+    const dns = createDnsMock();
+
+    let out = '';
+    let errOut = '';
+    const code = await runCli(['html', 'http://127.0.0.1/secret'], {
+      ports: { httpGet: origin.get, dnsLookup: dns.lookup },
+      stdout: (s) => {
+        out += s;
+      },
+      stderr: (s) => {
+        errOut += s;
+      },
+    });
+
+    expect(code).toBe(1);
+    expect(out).toBe('');
+    expect(errOut).toBe('Blocked Target URL: private address "127.0.0.1"\n');
   });
 
-  it("parses youtube with --lang flag", () => {
-    const result = parseArgs([
-      "youtube",
-      "https://www.youtube.com/watch?v=abc",
-      "--lang", "es",
-    ]);
-    expect(result.subcommand).toBe("youtube");
-    expect(result.lang).toBe("es");
-  });
+  it('prints usage on --help and version on --version with exit code 0', async () => {
+    let helpOut = '';
+    const helpCode = await runCli(['--help'], {
+      stdout: (s) => {
+        helpOut += s;
+      },
+      stderr: () => {},
+    });
+    expect(helpCode).toBe(0);
+    expect(helpOut).toContain('Usage: mcp-fetch <command> <url> [flags]');
+    expect(helpOut).toContain('--header <Key:Value>');
 
-  it("exits with help on --help", () => {
-    const cap = captureExit();
-    try {
-      parseArgs(["--help"]);
-    } catch {}
-    restoreIO();
-    expect(cap.code).toBe(0);
-    expect(cap.stdout).toContain("Usage:");
-  });
-
-  it("exits with help on empty args", () => {
-    const cap = captureExit();
-    try {
-      parseArgs([]);
-    } catch {}
-    restoreIO();
-    expect(cap.code).toBe(0);
-    expect(cap.stdout).toContain("Usage:");
-  });
-
-  it("exits with version on --version", () => {
-    const cap = captureExit();
-    try {
-      parseArgs(["--version"]);
-    } catch {}
-    restoreIO();
-    expect(cap.code).toBe(0);
-    expect(cap.stdout).toMatch(/^\d+\.\d+\.\d+\n$/);
-  });
-
-  it("exits with error on unknown subcommand", () => {
-    const cap = captureExit();
-    try {
-      parseArgs(["foobar", "https://example.com"]);
-    } catch {}
-    restoreIO();
-    expect(cap.code).toBe(1);
-    expect(cap.stderr).toContain("Unknown command: foobar");
-  });
-
-  it("exits with error on missing URL", () => {
-    const cap = captureExit();
-    try {
-      parseArgs(["html"]);
-    } catch {}
-    restoreIO();
-    expect(cap.code).toBe(1);
-    expect(cap.stderr).toContain("Missing URL");
-  });
-
-  it("exits with error on unknown flag", () => {
-    const cap = captureExit();
-    try {
-      parseArgs(["html", "https://example.com", "--unknown"]);
-    } catch {}
-    restoreIO();
-    expect(cap.code).toBe(1);
-    expect(cap.stderr).toContain("Unknown flag: --unknown");
-  });
-
-  it("exits with error when --max-length has no value", () => {
-    const cap = captureExit();
-    try {
-      parseArgs(["html", "https://example.com", "--max-length"]);
-    } catch {}
-    restoreIO();
-    expect(cap.code).toBe(1);
-    expect(cap.stderr).toContain("--max-length requires a non-negative integer");
-  });
-
-  it("exits with error when --start-index has no value", () => {
-    const cap = captureExit();
-    try {
-      parseArgs(["html", "https://example.com", "--start-index"]);
-    } catch {}
-    restoreIO();
-    expect(cap.code).toBe(1);
-    expect(cap.stderr).toContain("--start-index requires a non-negative integer");
-  });
-
-  it("exits with error when --max-length has non-numeric value", () => {
-    const cap = captureExit();
-    try {
-      parseArgs(["html", "https://example.com", "--max-length", "abc"]);
-    } catch {}
-    restoreIO();
-    expect(cap.code).toBe(1);
-    expect(cap.stderr).toContain("--max-length requires a non-negative integer");
-  });
-
-  it("exits with error when --max-length is negative", () => {
-    const cap = captureExit();
-    try {
-      parseArgs(["html", "https://example.com", "--max-length", "-1"]);
-    } catch {}
-    restoreIO();
-    expect(cap.code).toBe(1);
-    expect(cap.stderr).toContain("--max-length requires a non-negative integer");
-  });
-
-  it("exits with error when --start-index is negative", () => {
-    const cap = captureExit();
-    try {
-      parseArgs(["html", "https://example.com", "--start-index", "-5"]);
-    } catch {}
-    restoreIO();
-    expect(cap.code).toBe(1);
-    expect(cap.stderr).toContain("--start-index requires a non-negative integer");
-  });
-
-  it("exits with error when --proxy has no value", () => {
-    const cap = captureExit();
-    try {
-      parseArgs(["html", "https://example.com", "--proxy"]);
-    } catch {}
-    restoreIO();
-    expect(cap.code).toBe(1);
-    expect(cap.stderr).toContain("--proxy requires a value");
-  });
-
-  it("exits with error when --lang has no value", () => {
-    const cap = captureExit();
-    try {
-      parseArgs(["html", "https://example.com", "--lang"]);
-    } catch {}
-    restoreIO();
-    expect(cap.code).toBe(1);
-    expect(cap.stderr).toContain("--lang requires a value");
-  });
-
-  it("exits with error when --proxy value looks like a flag", () => {
-    const cap = captureExit();
-    try {
-      parseArgs(["html", "https://example.com", "--proxy", "--max-length", "100"]);
-    } catch {}
-    restoreIO();
-    expect(cap.code).toBe(1);
-    expect(cap.stderr).toContain("--proxy requires a value");
-  });
-
-  it("exits with error on invalid URL", () => {
-    const cap = captureExit();
-    try {
-      parseArgs(["html", "not-a-url"]);
-    } catch {}
-    restoreIO();
-    expect(cap.code).toBe(1);
-    expect(cap.stderr).toContain("Invalid URL");
-  });
-
-  it("exits with error on non-http URL", () => {
-    const cap = captureExit();
-    try {
-      parseArgs(["html", "file:///etc/passwd"]);
-    } catch {}
-    restoreIO();
-    expect(cap.code).toBe(1);
-    expect(cap.stderr).toContain("Invalid URL protocol");
-  });
-
-  it("parses all subcommands", () => {
-    for (const cmd of ["html", "markdown", "readable", "txt", "json", "youtube"] as const) {
-      const result = parseArgs([cmd, "https://example.com"]);
-      expect(result.subcommand).toBe(cmd);
-    }
+    let versionOut = '';
+    const versionCode = await runCli(['--version'], {
+      stdout: (s) => {
+        versionOut += s;
+      },
+      stderr: () => {},
+    });
+    expect(versionCode).toBe(0);
+    expect(versionOut).toMatch(/^\d+\.\d+\.\d+\n$/);
   });
 });

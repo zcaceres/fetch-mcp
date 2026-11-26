@@ -1,16 +1,6 @@
-import type { Headers } from '../../src/fetching/nouns.ts';
-import { isIpLiteral, normalizeHostname, windowedExcerpt } from '../../src/fetching/queries.ts';
-import {
-  decodeResponseBody,
-  evaluateResponse,
-  prepareFetch,
-  validateRedirectHop,
-  validateResolvedIps,
-} from '../../src/fetching/verbs.ts';
+import { executeFetch } from '../../src/fetching/execute.ts';
 import { err, ok, type Result } from '../../src/shared/result.ts';
 import type { Command } from '../command.ts';
-
-const REDIRECT_STATUS_CODES = new Set([301, 302, 303, 307, 308]);
 
 const parseNumberArg = (flag: string, raw: string | undefined): Result<number, string> => {
   if (raw === undefined) {
@@ -35,14 +25,6 @@ const parseHeaderArg = (raw: string | undefined): Result<readonly [string, strin
     return err(`Invalid header "${raw}": expected Key:Value`);
   }
   return ok([decoded.slice(0, idx).trim(), decoded.slice(idx + 1).trim()]);
-};
-
-const findHeaderCaseInsensitive = (headers: Headers, target: string): string | undefined => {
-  const lower = target.toLowerCase();
-  for (const [key, value] of Object.entries(headers)) {
-    if (key.toLowerCase() === lower) return value;
-  }
-  return undefined;
 };
 
 export const fetchCommand: Command = {
@@ -82,59 +64,22 @@ export const fetchCommand: Command = {
       }
     }
 
-    const prepared = prepareFetch({
-      url,
-      format,
-      headers,
-      ...(startIndex !== undefined ? { startIndex } : {}),
-      ...(maxLength !== undefined ? { maxLength } : {}),
-    });
-    if (!prepared.ok) return err(prepared.error.message);
+    const result = await executeFetch(
+      {
+        url,
+        format,
+        headers,
+        ...(startIndex !== undefined ? { startIndex } : {}),
+        ...(maxLength !== undefined ? { maxLength } : {}),
+      },
+      {
+        httpGet: world.origin.get,
+        dnsLookup: world.dns.lookup,
+      },
+    );
 
-    let currentUrl = prepared.value.url;
-    let currentHeaders = prepared.value.headers;
-
-    for (let hop = 0; ; hop++) {
-      const host = normalizeHostname(new URL(currentUrl).hostname);
-      if (!isIpLiteral(host)) {
-        const lookup = await world.dns.lookup(host);
-        if (!lookup.ok) return err(lookup.error.message);
-        const validatedIps = validateResolvedIps(host, lookup.value);
-        if (!validatedIps.ok) return err(validatedIps.error.message);
-      }
-
-      const wire = await world.origin.get(currentUrl, currentHeaders);
-      if (!wire.ok) return err(wire.error.message);
-
-      const location = findHeaderCaseInsensitive(wire.value.headers, 'location');
-      if (REDIRECT_STATUS_CODES.has(wire.value.status) && location !== undefined && location.length > 0) {
-        const nextHop = validateRedirectHop(currentUrl, location, currentHeaders, hop);
-        if (!nextHop.ok) return err(nextHop.error.message);
-        currentUrl = nextHop.value.nextUrl;
-        currentHeaders = nextHop.value.headers;
-        continue;
-      }
-
-      const body = decodeResponseBody(currentUrl, wire.value.headers, wire.value.rawBytes);
-      if (!body.ok) return err(body.error.message);
-
-      const rendered = evaluateResponse(
-        { ...prepared.value, url: currentUrl, headers: currentHeaders },
-        {
-          status: wire.value.status,
-          url: wire.value.url,
-          headers: wire.value.headers,
-          body: body.value,
-        },
-      );
-      if (!rendered.ok) return err(rendered.error.message);
-
-      const excerpt = windowedExcerpt(rendered.value, prepared.value.window);
-      if (excerpt.length === 0) {
-        return ok(['(empty)']);
-      }
-      const lines = excerpt.split('\n').map((line) => (line.length > 0 ? `| ${line}` : '|'));
-      return ok(lines);
-    }
+    if (!result.ok) return err(result.error.message);
+    if (result.value.length === 0) return ok(['(empty)']);
+    return ok(result.value.split('\n').map((line) => (line.length > 0 ? `| ${line}` : '|')));
   },
 };

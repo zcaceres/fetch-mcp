@@ -21,6 +21,7 @@ Every external system is mocked in memory and starts from its fixtures; `reset` 
 | `scenarios/fetch-web-content/02-ssrf-and-redirects.txt` | Full IPv4/IPv6 SSRF blocking, direct DNS validation & rebinding refusal, redirect loop, per-hop SSRF, cross-origin header stripping, missing Location [FW-3, FW-4, FW-6] |
 | `scenarios/fetch-web-content/03-formats-and-content-guards.txt` | Binary Content-Type guard, `json`/`text`/`markdown`/`readable` rendering, invalid JSON & Readability parse errors [FW-9, FW-11, FW-12, FW-13] |
 | `scenarios/fetch-web-content/04-limits-compression-and-timeouts.txt` | Default header deduplication & CR/LF rejection, `gzip`/`deflate`/`br` decompression & unknown encoding passthrough, `MAX_RESPONSE_BYTES` on headers/wire/decompressed streams, `30s` single-attempt timeout [FW-2, FW-7, FW-8] |
+| `scenarios/fetch-web-content/05-real-transport-and-cli-wiring.txt` | Validated `ResolvedIp[]` pinning handoff across direct hosts, redirects, and public IP literals via shared `executeFetch` [FW-4, FW-15] |
 
 ```bash
 bun run harness run scenarios/fetch-web-content
@@ -28,7 +29,7 @@ bun run harness run scenarios/fetch-web-content
 
 ## By hand
 
-### 1. Live network CLI smoke check (after Slice 05)
+### 1. Live network CLI smoke check
 
 1. Run `bun run build && node dist/cli.js readable https://example.com --max-length 500`.
    - Prints readable Markdown (beginning with `# Example Domain` if present) to `stdout` and exits `0`. [FW-13, FW-15]

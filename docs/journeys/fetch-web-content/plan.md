@@ -36,7 +36,7 @@ Every system outside ours is mocked in `src/integrations/<system>/`; world comma
 
 | System | What we need from it | World commands |
 |---|---|---|
-| origin (`src/integrations/origin/`) | HTTP(S) `GET` responses (status, headers, redirects, compressed/oversized/corrupted bodies, network errors, `30s` timeouts) | `origin serve`, `origin header`, `origin compress`, `origin repeat`, `origin corrupt`, `origin redirect`, `origin fail`, `origin timeout`, `origin last-headers`, `origin attempts` |
+| origin (`src/integrations/origin/`) | HTTP(S) `GET` responses (status, headers, redirects, compressed/oversized/corrupted bodies, network errors, `30s` timeouts) | `origin serve`, `origin header`, `origin compress`, `origin repeat`, `origin corrupt`, `origin redirect`, `origin fail`, `origin timeout`, `origin last-headers`, `origin last-pinned`, `origin attempts` |
 | dns (`src/integrations/dns/`) | Hostname-to-IP resolution for direct connections | `dns set <host> <ip...>`, `dns empty <host>`, `dns fail <host> <reason...>` |
 
 ## Slices
@@ -56,13 +56,12 @@ turned up. Each has a [spec](specs/) and a scenario in `scenarios/fetch-web-cont
    ([spec](specs/03-formats-and-content-guards/spec.md), `scenarios/fetch-web-content/03-formats-and-content-guards.txt`)
 4. **04 — Limits, Compression & Timeouts.** Adds `gzip`/`deflate`/`br` decompression, unknown encoding passthrough, `MAX_RESPONSE_BYTES` enforcement on `Content-Length`, raw wire bytes, and decoded streams, `30s` timeout handling, and custom header hygiene (case-insensitive `User-Agent`/`Accept-Encoding` defaults, duplicate case-insensitive caller header handling, and CR/LF rejection). Covers FW-2, FW-7, FW-8.
    ([spec](specs/04-limits-compression-and-timeouts/spec.md), `scenarios/fetch-web-content/04-limits-compression-and-timeouts.txt`)
+5. **05 — Real Transport & CLI Wiring.** Implements the real IP-pinned HTTP(S) client in `src/integrations/origin/client.ts` (wiring validated `ResolvedIp` records directly to sockets to complete FW-4 pinning) + real DNS port in `src/integrations/dns/client.ts`, shared `executeFetch`, and rewires `mcp-fetch` CLI (`html`, `markdown`, `readable`, `text`, `json`, `transcript`, `--header`, `--max-length`, `--start-index`). Covers FW-4, FW-15.
+   ([spec](specs/05-real-transport-and-cli-wiring/spec.md), `scenarios/fetch-web-content/05-real-transport-and-cli-wiring.txt`)
 
 ### Next
 
-In the order we expect to build them; reorder freely. Each says where it came from: criteria, a finding (a
-`/dd-verify` note) or a decision.
-
-1. **05 — Real Transport & CLI Wiring.** Implements the real IP-pinned HTTP(S) client in `src/integrations/origin/client.ts` (wiring validated `ResolvedIp` records directly to sockets to complete FW-4 pinning) + real DNS port in `src/integrations/dns/client.ts`, and wires `mcp-fetch` CLI (`html`, `markdown`, `readable`, `text`, `json`, `--header`, `--max-length`, `--start-index`). From FW-4, FW-15, and `notes/2026-11-25-fetch-web-content-verify.md`.
+*(All planned slices for `fetch-web-content` are done.)*
 
 ## Deferred
 

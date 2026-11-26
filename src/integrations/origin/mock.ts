@@ -1,5 +1,5 @@
 import zlib from 'node:zlib';
-import type { FetchError, Headers, TargetUrl, WireResponse } from '../../fetching/nouns.ts';
+import type { FetchError, Headers, ResolvedIp, TargetUrl, WireResponse } from '../../fetching/nouns.ts';
 import type { HttpGetPort } from '../../fetching/ports.ts';
 import { REQUEST_TIMEOUT_MS } from '../../fetching/verbs.ts';
 import { err, ok, type Result } from '../../shared/result.ts';
@@ -30,12 +30,14 @@ export type OriginMock = {
   readonly fail: (url: string, reason: string) => void;
   readonly timeout: (url: string, timeoutMs?: number) => void;
   readonly lastHeaders: (url: string) => Headers | undefined;
+  readonly lastPinned: (url: string) => readonly ResolvedIp[] | undefined;
   readonly attempts: (url: string) => number;
 };
 
 export const createOriginMock = (): OriginMock => {
   const routes = new Map<string, OriginEntry>();
   const recordedHeaders = new Map<string, Headers>();
+  const recordedPinned = new Map<string, readonly ResolvedIp[]>();
   const attemptCounts = new Map<string, number>();
 
   const normalizeKey = (url: string): string => {
@@ -46,9 +48,14 @@ export const createOriginMock = (): OriginMock => {
     }
   };
 
-  const get: HttpGetPort = async (url: TargetUrl, headers: Headers): Promise<Result<WireResponse, FetchError>> => {
+  const get: HttpGetPort = async (
+    url: TargetUrl,
+    headers: Headers,
+    pinnedIps: readonly ResolvedIp[],
+  ): Promise<Result<WireResponse, FetchError>> => {
     const key = normalizeKey(url);
     recordedHeaders.set(key, { ...headers });
+    recordedPinned.set(key, [...pinnedIps]);
     attemptCounts.set(key, (attemptCounts.get(key) ?? 0) + 1);
 
     const entry = routes.get(key);
@@ -123,6 +130,7 @@ export const createOriginMock = (): OriginMock => {
       routes.set(normalizeKey(url), { kind: 'timeout', timeoutMs });
     },
     lastHeaders: (url) => recordedHeaders.get(normalizeKey(url)),
+    lastPinned: (url) => recordedPinned.get(normalizeKey(url)),
     attempts: (url) => attemptCounts.get(normalizeKey(url)) ?? 0,
   };
 };

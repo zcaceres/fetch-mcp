@@ -2,7 +2,7 @@ import { err, ok } from '../../src/shared/result.ts';
 import type { Command } from '../command.ts';
 
 const USAGE =
-  'usage: origin serve|header|compress|repeat|corrupt|redirect|fail|timeout|last-headers|attempts <url> ...';
+  'usage: origin serve|header|compress|repeat|corrupt|redirect|fail|timeout|last-headers|last-pinned|attempts <url> ...';
 
 export const originCommand: Command = {
   kind: 'world',
@@ -107,6 +107,17 @@ export const originCommand: Command = {
         return ok(['(no headers)']);
       }
       return ok(entries.map(([key, value]) => `header: ${key}: ${value}`));
+    }
+
+    if (action === 'last-pinned') {
+      if (!url) {
+        return err('usage: origin last-pinned <url>');
+      }
+      const pinned = world.origin.lastPinned(url);
+      if (pinned === undefined) {
+        return ok(['(not requested)']);
+      }
+      return ok([`pinned: ${pinned.join(', ')}`]);
     }
 
     if (action === 'attempts') {

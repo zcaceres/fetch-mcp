@@ -1,170 +1,308 @@
 #!/usr/bin/env node
 
-import { Fetcher } from "./Fetcher.js";
-import type { RequestPayload, YouTubeTranscriptPayload } from "./types.js";
-import pkg from "../package.json" with { type: "json" };
+import { realpathSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import pkg from '../package.json' with { type: 'json' };
+import { Fetcher } from './Fetcher.ts';
+import { executeFetch } from './fetching/execute.ts';
+import { type Headers, WEB_FORMATS, type WebFormat } from './fetching/nouns.ts';
+import type { FetchPorts } from './fetching/ports.ts';
+import { DEFAULT_LIMIT, MAX_RESPONSE_BYTES } from './fetching/verbs.ts';
+import { createRealDnsLookup } from './integrations/dns/client.ts';
+import { createRealHttpGet } from './integrations/origin/client.ts';
+import { err, ok, type Result } from './shared/result.ts';
 
 const USAGE = `mcp-fetch v${pkg.version}
 
 Usage: mcp-fetch <command> <url> [flags]
 
 Commands:
-  html      Fetch a URL and return raw HTML
-  markdown  Fetch a URL and return Markdown
-  readable  Fetch a URL and return article content as Markdown (via Readability)
-  txt       Fetch a URL and return plain text
-  json      Fetch a URL and return JSON
-  youtube   Fetch a YouTube video transcript
+  html        Fetch a URL and return raw HTML
+  markdown    Fetch a URL and return Markdown
+  readable    Fetch a URL and return article content as Markdown (via Readability)
+  text        Fetch a URL and return plain text
+  json        Fetch a URL and return JSON
+  transcript  Fetch a YouTube video transcript
 
 Flags:
-  --max-length <N>   Maximum characters to return
-  --start-index <N>  Start from this character index
-  --proxy <URL>      Proxy URL
-  --lang <code>      Language code for YouTube transcripts (default: en)
-  --help             Show this help message
-  --version          Show version
+  --header <Key:Value>  Custom request header (repeatable)
+  --max-length <N>      Maximum characters to return
+  --start-index <N>     Start from this character index
+  --proxy <URL>         Proxy URL
+  --lang <code>         Language code for YouTube transcripts (default: en)
+  --help                Show this help message
+  --version             Show version
 `;
 
-const SUBCOMMANDS = ["html", "markdown", "readable", "txt", "json", "youtube"] as const;
-type Subcommand = (typeof SUBCOMMANDS)[number];
+export type CliAction =
+  | { readonly kind: 'help' }
+  | { readonly kind: 'version' }
+  | {
+      readonly kind: 'fetch';
+      readonly format: WebFormat;
+      readonly url: string;
+      readonly headers: Headers;
+      readonly maxLength?: number;
+      readonly startIndex?: number;
+      readonly proxy?: string;
+    }
+  | {
+      readonly kind: 'transcript';
+      readonly url: string;
+      readonly headers: Headers;
+      readonly maxLength?: number;
+      readonly startIndex?: number;
+      readonly proxy?: string;
+      readonly lang?: string;
+    };
 
-export interface ParsedArgs {
-  subcommand: Subcommand;
-  url: string;
-  maxLength?: number;
-  startIndex?: number;
-  proxy?: string;
-  lang?: string;
-}
+export type CliDeps = {
+  readonly ports?: FetchPorts;
+  readonly env?: NodeJS.ProcessEnv;
+  readonly stdout?: (text: string) => void;
+  readonly stderr?: (text: string) => void;
+};
 
-export function parseArgs(argv: string[]): ParsedArgs {
-  if (argv.length === 0 || argv.includes("--help")) {
-    process.stdout.write(USAGE);
-    process.exit(0);
+const isWebFormat = (value: string): value is WebFormat => (WEB_FORMATS as readonly string[]).includes(value);
+
+const parseNonNegativeInt = (flag: string, value: string | undefined): Result<number, string> => {
+  if (value === undefined || !/^\d+$/.test(value)) {
+    return err(`${flag} requires a non-negative integer`);
+  }
+  return ok(Number.parseInt(value, 10));
+};
+
+const parseHeaderFlag = (value: string | undefined): Result<readonly [string, string], string> => {
+  if (value === undefined || value.startsWith('--')) {
+    return err('--header requires a Key:Value argument');
+  }
+  const idx = value.indexOf(':');
+  if (idx <= 0) {
+    return err(`Invalid --header "${value}": expected Key:Value`);
+  }
+  return ok([value.slice(0, idx).trim(), value.slice(idx + 1).trim()]);
+};
+
+export const parseCliArgs = (argv: readonly string[]): Result<CliAction, string> => {
+  if (argv.length === 0 || argv.includes('--help')) {
+    return ok({ kind: 'help' });
+  }
+  if (argv.includes('--version')) {
+    return ok({ kind: 'version' });
   }
 
-  if (argv.includes("--version")) {
-    process.stdout.write(pkg.version + "\n");
-    process.exit(0);
-  }
-
-  const subcommand = argv[0] as string;
-  if (!SUBCOMMANDS.includes(subcommand as Subcommand)) {
-    process.stderr.write(`Unknown command: ${subcommand}\n\n${USAGE}`);
-    process.exit(1);
+  const subcommand = argv[0];
+  if (subcommand === undefined || (!isWebFormat(subcommand) && subcommand !== 'transcript')) {
+    return err(`Unknown command: ${subcommand ?? ''}\n\n${USAGE}`);
   }
 
   const url = argv[1];
-  if (!url || url.startsWith("--")) {
-    process.stderr.write(`Missing URL for "${subcommand}" command\n`);
-    process.exit(1);
-  }
-  try {
-    const parsed = new URL(url);
-    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-      process.stderr.write(`Invalid URL protocol "${parsed.protocol}". Only http: and https: are allowed.\n`);
-      process.exit(1);
-    }
-  } catch {
-    process.stderr.write(`Invalid URL: ${url}\n`);
-    process.exit(1);
+  if (url === undefined || url.startsWith('--')) {
+    return err(`Missing URL for "${subcommand}" command`);
   }
 
-  const result: ParsedArgs = { subcommand: subcommand as Subcommand, url };
+  const headers: Record<string, string> = {};
+  let maxLength: number | undefined;
+  let startIndex: number | undefined;
+  let proxy: string | undefined;
+  let lang: string | undefined;
 
   for (let i = 2; i < argv.length; i++) {
     const flag = argv[i];
     const value = argv[i + 1];
     switch (flag) {
-      case "--max-length": {
-        const parsed = parseInt(value, 10);
-        if (isNaN(parsed) || parsed < 0) {
-          process.stderr.write(`${flag} requires a non-negative integer\n`);
-          process.exit(1);
-        }
-        result.maxLength = parsed;
+      case '--header': {
+        const parsed = parseHeaderFlag(value);
+        if (!parsed.ok) return parsed;
+        const [k, v] = parsed.value;
+        headers[k] = v;
         i++;
         break;
       }
-      case "--start-index": {
-        const parsed = parseInt(value, 10);
-        if (isNaN(parsed) || parsed < 0) {
-          process.stderr.write(`${flag} requires a non-negative integer\n`);
-          process.exit(1);
-        }
-        result.startIndex = parsed;
+      case '--max-length': {
+        const parsed = parseNonNegativeInt(flag, value);
+        if (!parsed.ok) return parsed;
+        maxLength = parsed.value;
         i++;
         break;
       }
-      case "--proxy":
-        if (!value || value.startsWith("--")) {
-          process.stderr.write(`${flag} requires a value\n`);
-          process.exit(1);
-        }
-        result.proxy = value;
+      case '--start-index': {
+        const parsed = parseNonNegativeInt(flag, value);
+        if (!parsed.ok) return parsed;
+        startIndex = parsed.value;
         i++;
         break;
-      case "--lang":
-        if (!value || value.startsWith("--")) {
-          process.stderr.write(`${flag} requires a value\n`);
-          process.exit(1);
+      }
+      case '--proxy':
+        if (value === undefined || value.startsWith('--')) {
+          return err('--proxy requires a value');
         }
-        result.lang = value;
+        proxy = value;
+        i++;
+        break;
+      case '--lang':
+        if (value === undefined || value.startsWith('--')) {
+          return err('--lang requires a value');
+        }
+        lang = value;
         i++;
         break;
       default:
-        process.stderr.write(`Unknown flag: ${flag}\n`);
-        process.exit(1);
+        return err(`Unknown flag: ${flag ?? ''}`);
     }
   }
 
-  return result;
-}
-
-async function run(args: ParsedArgs): Promise<void> {
-  const fetchers: Record<string, (p: any) => Promise<any>> = {
-    html: Fetcher.html.bind(Fetcher),
-    markdown: Fetcher.markdown.bind(Fetcher),
-    readable: Fetcher.readable.bind(Fetcher),
-    txt: Fetcher.txt.bind(Fetcher),
-    json: Fetcher.json.bind(Fetcher),
-    youtube: Fetcher.youtubeTranscript.bind(Fetcher),
-  };
-
-  const payload: RequestPayload & { lang?: string } = { url: args.url };
-  if (args.maxLength !== undefined) payload.max_length = args.maxLength;
-  if (args.startIndex !== undefined) payload.start_index = args.startIndex;
-  if (args.proxy) payload.proxy = args.proxy;
-  if (args.lang) payload.lang = args.lang;
-
-  const result = await fetchers[args.subcommand](payload);
-  const text = result.content[0].text;
-
-  if (result.isError) {
-    process.stderr.write(text + "\n");
-    process.exit(1);
+  if (subcommand === 'transcript') {
+    return ok({
+      kind: 'transcript',
+      url,
+      headers,
+      ...(maxLength !== undefined ? { maxLength } : {}),
+      ...(startIndex !== undefined ? { startIndex } : {}),
+      ...(proxy !== undefined ? { proxy } : {}),
+      ...(lang !== undefined ? { lang } : {}),
+    });
   }
 
-  process.stdout.write(text);
-}
+  return ok({
+    kind: 'fetch',
+    format: subcommand,
+    url,
+    headers,
+    ...(maxLength !== undefined ? { maxLength } : {}),
+    ...(startIndex !== undefined ? { startIndex } : {}),
+    ...(proxy !== undefined ? { proxy } : {}),
+  });
+};
 
-import { realpathSync } from "fs";
-import { fileURLToPath } from "url";
+const parsePositiveEnvInt = (raw: string | undefined, fallback: number, allowZero: boolean): number => {
+  if (raw === undefined) return fallback;
+  const n = Number.parseInt(raw, 10);
+  if (Number.isNaN(n) || (allowZero ? n < 0 : n <= 0)) return fallback;
+  return n;
+};
 
-function isMainModule(): boolean {
+const hasEnvProxy = (env: NodeJS.ProcessEnv): boolean =>
+  Boolean(env.HTTPS_PROXY || env.https_proxy || env.HTTP_PROXY || env.http_proxy || env.ALL_PROXY || env.all_proxy);
+
+export const runCli = async (argv: readonly string[], deps: CliDeps = {}): Promise<number> => {
+  const stdout = deps.stdout ?? ((text: string) => process.stdout.write(text));
+  const stderr = deps.stderr ?? ((text: string) => process.stderr.write(text));
+  const env = deps.env ?? process.env;
+
+  const parsed = parseCliArgs(argv);
+  if (!parsed.ok) {
+    stderr(`${parsed.error}\n`);
+    return 1;
+  }
+
+  const action = parsed.value;
+  switch (action.kind) {
+    case 'help':
+      stdout(USAGE);
+      return 0;
+
+    case 'version':
+      stdout(`${pkg.version}\n`);
+      return 0;
+
+    case 'transcript': {
+      const payload = {
+        url: action.url,
+        ...(Object.keys(action.headers).length > 0 ? { headers: { ...action.headers } } : {}),
+        ...(action.maxLength !== undefined ? { max_length: action.maxLength } : {}),
+        ...(action.startIndex !== undefined ? { start_index: action.startIndex } : {}),
+        ...(action.proxy !== undefined ? { proxy: action.proxy } : {}),
+        ...(action.lang !== undefined ? { lang: action.lang } : {}),
+      };
+      const result = await Fetcher.youtubeTranscript(payload);
+      const text = result.content[0]?.text ?? '';
+      if (result.isError) {
+        stderr(`${text}\n`);
+        return 1;
+      }
+      stdout(text);
+      return 0;
+    }
+
+    case 'fetch': {
+      // Proxy routing waits on the `proxy-and-limits` journey; fall back to legacy Fetcher only when proxy is configured and no custom ports were injected.
+      if (!deps.ports && (action.proxy !== undefined || hasEnvProxy(env))) {
+        const legacyPayload = {
+          url: action.url,
+          ...(Object.keys(action.headers).length > 0 ? { headers: { ...action.headers } } : {}),
+          ...(action.maxLength !== undefined ? { max_length: action.maxLength } : {}),
+          ...(action.startIndex !== undefined ? { start_index: action.startIndex } : {}),
+          ...(action.proxy !== undefined ? { proxy: action.proxy } : {}),
+        };
+        const legacy =
+          action.format === 'html'
+            ? await Fetcher.html(legacyPayload)
+            : action.format === 'markdown'
+              ? await Fetcher.markdown(legacyPayload)
+              : action.format === 'readable'
+                ? await Fetcher.readable(legacyPayload)
+                : action.format === 'text'
+                  ? await Fetcher.txt(legacyPayload)
+                  : await Fetcher.json(legacyPayload);
+        const text = legacy.content[0]?.text ?? '';
+        if (legacy.isError) {
+          stderr(`${text}\n`);
+          return 1;
+        }
+        stdout(text);
+        return 0;
+      }
+
+      const defaultLimit = parsePositiveEnvInt(env.DEFAULT_LIMIT, DEFAULT_LIMIT, true);
+      const maxResponseBytes = parsePositiveEnvInt(env.MAX_RESPONSE_BYTES, MAX_RESPONSE_BYTES, false);
+      const ports: FetchPorts = deps.ports ?? {
+        httpGet: createRealHttpGet({ maxBytes: maxResponseBytes }),
+        dnsLookup: createRealDnsLookup(),
+      };
+
+      const result = await executeFetch(
+        {
+          url: action.url,
+          format: action.format,
+          headers: action.headers,
+          ...(action.maxLength !== undefined ? { maxLength: action.maxLength } : {}),
+          ...(action.startIndex !== undefined ? { startIndex: action.startIndex } : {}),
+        },
+        ports,
+        { defaultLimit, maxResponseBytes },
+      );
+
+      if (!result.ok) {
+        stderr(`${result.error.message}\n`);
+        return 1;
+      }
+      stdout(result.value);
+      return 0;
+    }
+
+    default:
+      return action satisfies never;
+  }
+};
+
+const isMainModule = (): boolean => {
   try {
     const scriptPath = fileURLToPath(import.meta.url);
-    const argPath = realpathSync(process.argv[1]);
-    return scriptPath === argPath;
+    const arg = process.argv[1];
+    if (!arg) return false;
+    return scriptPath === realpathSync(arg);
   } catch {
-    return process.argv[1]?.endsWith("/cli.js") || process.argv[1]?.endsWith("/mcp-fetch") || false;
+    return process.argv[1]?.endsWith('/cli.js') || process.argv[1]?.endsWith('/mcp-fetch') || false;
   }
-}
+};
 
 if (isMainModule()) {
-  const args = parseArgs(process.argv.slice(2));
-  run(args).catch((err) => {
-    process.stderr.write(String(err?.message ?? err) + "\n");
-    process.exit(1);
-  });
+  runCli(process.argv.slice(2))
+    .then((code) => process.exit(code))
+    .catch((error: unknown) => {
+      const message = error instanceof Error ? error.message : String(error);
+      process.stderr.write(`${message}\n`);
+      process.exit(1);
+    });
 }

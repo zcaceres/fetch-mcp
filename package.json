@@ -39,7 +39,7 @@
     "mcp-fetch": "dist/cli.js"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=20"
   },
   "keywords": [
     "mcp",
