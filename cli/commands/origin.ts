@@ -2,12 +2,11 @@ import { err, ok } from '../../src/shared/result.ts';
 import type { Command } from '../command.ts';
 
 const USAGE =
-  'usage: origin serve <url> <status> <body...> | origin header <url> <name> <value...> | origin redirect <url> <status> <location> | origin fail <url> <reason...> | origin last-headers <url>';
+  'usage: origin serve|header|compress|repeat|corrupt|redirect|fail|timeout|last-headers|attempts <url> ...';
 
 export const originCommand: Command = {
   kind: 'world',
-  usage:
-    'origin serve <url> <status> <body...> | origin header <url> <name> <value...> | origin redirect <url> <status> <location> | origin fail <url> <reason...> | origin last-headers <url>',
+  usage: USAGE,
   summary: 'configure and inspect mocked Remote Origin Server responses and failures',
   run: async (args, world) => {
     const [action, url, ...rest] = args;
@@ -35,6 +34,37 @@ export const originCommand: Command = {
       return ok([`origin: header ${url} ${name}: ${value}`]);
     }
 
+    if (action === 'compress') {
+      const [encoding, ...bodyParts] = rest;
+      if (!url || !encoding) {
+        return err('usage: origin compress <url> <encoding> <body...>');
+      }
+      world.origin.compress(url, encoding, bodyParts.join(' '));
+      return ok([`origin: compress ${encoding} ${url}`]);
+    }
+
+    if (action === 'repeat') {
+      const [countStr, encoding] = rest;
+      if (!url || !countStr) {
+        return err('usage: origin repeat <url> <count> [encoding]');
+      }
+      const count = Number(countStr);
+      if (!Number.isInteger(count) || count < 0) {
+        return err(`Invalid repeat count: "${countStr}"`);
+      }
+      world.origin.repeat(url, count, encoding);
+      return ok([`origin: repeat ${count} ${url}`]);
+    }
+
+    if (action === 'corrupt') {
+      const [encoding] = rest;
+      if (!url || !encoding) {
+        return err('usage: origin corrupt <url> <encoding>');
+      }
+      world.origin.corrupt(url, encoding);
+      return ok([`origin: corrupt ${encoding} ${url}`]);
+    }
+
     if (action === 'redirect') {
       const [statusStr, location] = rest;
       if (!url || !statusStr || !location) {
@@ -56,6 +86,14 @@ export const originCommand: Command = {
       return ok([`origin: fail ${url}`]);
     }
 
+    if (action === 'timeout') {
+      if (!url) {
+        return err('usage: origin timeout <url>');
+      }
+      world.origin.timeout(url);
+      return ok([`origin: timeout ${url}`]);
+    }
+
     if (action === 'last-headers') {
       if (!url) {
         return err('usage: origin last-headers <url>');
@@ -69,6 +107,13 @@ export const originCommand: Command = {
         return ok(['(no headers)']);
       }
       return ok(entries.map(([key, value]) => `header: ${key}: ${value}`));
+    }
+
+    if (action === 'attempts') {
+      if (!url) {
+        return err('usage: origin attempts <url>');
+      }
+      return ok([`attempts: ${world.origin.attempts(url)}`]);
     }
 
     return err(USAGE);

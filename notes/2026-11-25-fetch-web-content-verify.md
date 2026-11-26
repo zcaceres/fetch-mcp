@@ -1,6 +1,6 @@
 # Verify: `fetch-web-content` (2026-11-25)
 
-**Status:** 3 of 5 slices (`01-basic-html-fetch`, `02-ssrf-and-redirects`, `03-formats-and-content-guards`) are done and pass all automated checks and adversarial harness probes; 0 bugs found, 1 minor drift item, 1 edge-case decision proposed (`image/svg+xml`), and 2 coverage gaps already queued into Slices 04–05.
+**Status:** 4 of 5 slices (`01`–`04`) are done and pass all automated checks (`286/286` tests, `4/4` scenarios); adversarial exploration uncovered 1 minor bug (unescaped newline in `Invalid header` error message when the header *name* contains CR/LF), 2 minor `plan.md` drift items, 0 undecided questions, and 1 remaining gap (`FW-4` socket IP pinning, queued in Slice 05).
 
 ## Checks
 
@@ -9,27 +9,27 @@
 | `bun run lint` (`biome ci .`) | Pass (20 files, 0 errors, 0 warnings) |
 | `bun run typecheck` (`tsc --noEmit`) | Pass (0 errors) |
 | `bun run build` | Pass (`dist/index.js`, `dist/cli.js`) |
-| `bun test` | Pass (279 pass, 0 fail, 516 assertions across 10 files) |
-| `bun run harness run scenarios/fetch-web-content` | Pass (3/3 scenarios: `01-basic-html-fetch.txt`, `02-ssrf-and-redirects.txt`, `03-formats-and-content-guards.txt`) |
-| Adversarial harness exploration (piped `bun run harness`) | Pass (Slice 01–02 probes plus Slice 03 probes: `origin header` on unserved URL, `image/svg+xml`, `404` + `image/png` status-first precedence, `application/zip`, `Font/Woff2`, `null` JSON, empty body JSON, plain text in `markdown`/`text`, body-less HTML, Readability duplicate `<h1>` + relative link resolution + title-less article + window slicing) |
+| `bun test` | Pass (286 pass, 0 fail, 535 assertions across 10 files) |
+| `bun run harness run scenarios/fetch-web-content` | Pass (4/4 scenarios: `01`–`04`) |
+| Adversarial harness exploration (piped `bun run harness`) | Found 1 bug (`X-Bad\nName:val` injects a raw newline into the error string); all other probes passed (exact `10485760` byte boundaries raw/gzip/`Content-Length`, `x-gzip` + `json`, corrupted `deflate`/`br`, full `User-Agent`+`Accept-Encoding` override, LF-only and CR-only values, cross-origin redirect with duplicate `Authorization`/`authorization`) |
 
 ## Criteria
 
 | ID | Status | Evidence |
 |---|---|---|
 | `FW-1` | **Holds** | `scenarios/fetch-web-content/01-basic-html-fetch.txt` L38–50; `src/fetching/fetching.test.ts` (`prepareFetch`) |
-| `FW-2` | **Not built** | Queued in Slice 04 (`04-limits-compression-and-timeouts`) |
+| `FW-2` | **Holds** *(minor bug on header-name error formatting)* | `scenarios/fetch-web-content/04-limits-compression-and-timeouts.txt` L4–22; `src/fetching/fetching.test.ts` (`prepareFetch` defaults, deduplication, CR/LF); see Bug #1 |
 | `FW-3` | **Holds** | `scenarios/fetch-web-content/01-basic-html-fetch.txt` L52–63; `scenarios/fetch-web-content/02-ssrf-and-redirects.txt` L4–25; `src/fetching/fetching.test.ts` (`isReservedIp`) |
-| `FW-4` | **Not covered** *(partially holds)* | DNS validation & rebinding/empty/error fail-closed hold in `scenarios/fetch-web-content/02-ssrf-and-redirects.txt` L27–50 and `src/fetching/fetching.test.ts` (`validateResolvedIps`); socket-level IP pinning waits on Slice 05 |
+| `FW-4` | **Not covered** *(partially holds)* | DNS validation & rebinding/empty/error fail-closed hold in `scenarios/fetch-web-content/02-ssrf-and-redirects.txt` L27–50 and `src/fetching/fetching.test.ts` (`validateResolvedIps`); real socket IP pinning waits on Slice 05 |
 | `FW-5` | **Holds** | `scenarios/fetch-web-content/01-basic-html-fetch.txt` L4–36; `src/fetching/fetching.test.ts` (`evaluateResponse`) |
-| `FW-6` | **Holds** | `scenarios/fetch-web-content/02-ssrf-and-redirects.txt` L52–120; `src/fetching/fetching.test.ts` (`validateRedirectHop`, `stripCrossOriginHeaders`) |
-| `FW-7` | **Not built** | Queued in Slice 04 (`04-limits-compression-and-timeouts`) |
-| `FW-8` | **Not built** | Queued in Slice 04 (`04-limits-compression-and-timeouts`) |
-| `FW-9` | **Holds** | `scenarios/fetch-web-content/03-formats-and-content-guards.txt` L4–32; `src/fetching/fetching.test.ts` (`isBinaryContentType`, `evaluateResponse`) |
+| `FW-6` | **Holds** | `scenarios/fetch-web-content/02-ssrf-and-redirects.txt` L52–126; `src/fetching/fetching.test.ts` (`validateRedirectHop`, `stripCrossOriginHeaders`) |
+| `FW-7` | **Holds** | `scenarios/fetch-web-content/04-limits-compression-and-timeouts.txt` L24–78; `src/fetching/fetching.test.ts` (`decodeResponseBody`); adversarial exact-boundary probes (`10485760` bytes raw/gzip/`Content-Length`) |
+| `FW-8` | **Holds** | `scenarios/fetch-web-content/04-limits-compression-and-timeouts.txt` L80–89 (`origin timeout` + `origin attempts` = 1) |
+| `FW-9` | **Holds** | `scenarios/fetch-web-content/03-formats-and-content-guards.txt` L4–41; `src/fetching/fetching.test.ts` (`isBinaryContentType`, `evaluateResponse`) |
 | `FW-10` | **Holds** | `scenarios/fetch-web-content/01-basic-html-fetch.txt` L4–9; `src/fetching/fetching.test.ts` (`evaluateResponse`) |
-| `FW-11` | **Holds** | `scenarios/fetch-web-content/03-formats-and-content-guards.txt` L34–47; `src/fetching/fetching.test.ts` (`evaluateResponse` json) |
-| `FW-12` | **Holds** | `scenarios/fetch-web-content/03-formats-and-content-guards.txt` L49–60; `src/fetching/fetching.test.ts` (`evaluateResponse` text & markdown) |
-| `FW-13` | **Holds** | `scenarios/fetch-web-content/03-formats-and-content-guards.txt` L62–77; `src/fetching/fetching.test.ts` (`evaluateResponse` readable) |
+| `FW-11` | **Holds** | `scenarios/fetch-web-content/03-formats-and-content-guards.txt` L43–56; `src/fetching/fetching.test.ts` (`evaluateResponse` json) |
+| `FW-12` | **Holds** | `scenarios/fetch-web-content/03-formats-and-content-guards.txt` L58–69; `src/fetching/fetching.test.ts` (`evaluateResponse` text & markdown) |
+| `FW-13` | **Holds** | `scenarios/fetch-web-content/03-formats-and-content-guards.txt` L71–86; `src/fetching/fetching.test.ts` (`evaluateResponse` readable) |
 | `FW-14` | **Holds** | `scenarios/fetch-web-content/01-basic-html-fetch.txt` L11–22; `src/fetching/fetching.test.ts` (`windowedExcerpt`) |
 | `FW-15` | **Not built** | Queued in Slice 05 (`05-real-transport-and-cli-wiring`) |
 
@@ -37,24 +37,30 @@
 
 ### Bugs
 
-*(None.)*
+1. **Unescaped CR/LF in `Invalid header` error message (`src/fetching/verbs.ts:43`):**
+   - When a header *name* contains `\r` or `\n`, `prepareFetch` returns `` `Invalid header "${key}": CR/LF control characters are not allowed` `` without escaping control characters.
+   - **Evidence:** Running `fetch html https://example.com/override --header X-Bad\nName:val` in `bun run harness` printed a two-line error:
+     ```text
+     error: Invalid header "X-Bad
+     Name": CR/LF control characters are not allowed
+     ```
+   - **Fix:** Escape control characters in `key` (e.g., `JSON.stringify(key)` -> `Invalid header "X-Bad\nName": ...` with literal `\n` escape) so rejected header names cannot break single-line error/log/scenario output.
 
 ### Drift
 
-1. **Missing `isBinaryContentType` in `plan.md` Contexts table:**
-   - `docs/journeys/fetch-web-content/plan.md:31` lists `normalizeHostname, isIpLiteral, isReservedIp, stripCrossOriginHeaders, windowedExcerpt` under `Queries`, omitting `isBinaryContentType` added in Slice 03 (`src/fetching/queries.ts:182`).
+1. **`plan.md` Contexts table (`docs/journeys/fetch-web-content/plan.md:31`):**
+   - Missing `WireResponse` in `Nouns` and `decodeResponseBody` in `Verbs`.
+2. **`plan.md` External systems table (`docs/journeys/fetch-web-content/plan.md:39-41`):**
+   - `origin` world commands omit `origin compress`, `origin repeat`, `origin corrupt`, `origin attempts`; `clock` row lists `clock advance <duration>` while timeout simulation lives on `origin timeout <url>`.
 
 ### Needs a decision
 
-1. **`image/svg+xml` handling under `D17`:**
-   - Exploring `origin header https://example.com/svg Content-Type image/svg+xml` + `fetch html https://example.com/svg` printed `error: Unsupported binary Content-Type "image/svg+xml" fetching https://example.com/svg`, because `D17` blocks all `image/*`. Since SVG is UTF-8 XML text (and sometimes useful to inspect as `html`/`text`), confirm whether `image/svg+xml` should stay blocked under `image/*` or be explicitly excluded from the binary Content-Type guard.
+*(None.)*
 
 ### Gaps
 
-1. **`FW-4` socket IP pinning not exercised in harness (`cli/commands/fetch.ts:81`):**
-   - Already queued in Slice 05 (`05-real-transport-and-cli-wiring`).
-2. **Duplicate case-insensitive custom request header keys (`cli/commands/fetch.ts:62`):**
-   - Already queued in Slice 04 (`04-limits-compression-and-timeouts`).
+1. **`FW-4` socket IP pinning (`cli/commands/fetch.ts:87`):**
+   - Queued in Slice 05 (`05-real-transport-and-cli-wiring`). *(Previous Gap #2 — duplicate case-insensitive custom headers — is now closed by Slice 04.)*
 
 ## By-hand checklist (for the user)
 
@@ -63,8 +69,4 @@
 
 ## Proposed `/dd-decide` items
 
-Ready to run if you want to allow SVG text responses (otherwise leave `D17` as-is to keep blocking all `image/*`):
-
-```text
-/dd-decide Update D17: exclude image/svg+xml from the binary Content-Type guard because SVG is UTF-8 XML text; continue rejecting all other image/* types.
-```
+*(None.)*

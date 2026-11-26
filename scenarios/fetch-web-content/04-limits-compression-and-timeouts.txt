@@ -1,0 +1,92 @@
+# Slice 04: Limits, Compression & Timeouts
+# Covers FW-2, FW-7, FW-8
+
+# Default User-Agent and Accept-Encoding are applied only when caller does not supply them (FW-2, D18)
+> origin serve https://example.com/headers 200 <p>ok</p>
+origin: 200 https://example.com/headers
+
+> fetch html https://example.com/headers --header user-agent:CustomBot/1.0 --header X-Dup:first --header x-dup:second
+| <p>ok</p>
+
+> origin last-headers https://example.com/headers
+header: Accept-Encoding: gzip, deflate, br
+header: user-agent: CustomBot/1.0
+header: x-dup: second
+
+# Custom headers containing CR or LF control characters are rejected before connecting (FW-2, D14, D18)
+> origin serve https://example.com/crlf 200 <p>nope</p>
+origin: 200 https://example.com/crlf
+
+> fetch html https://example.com/crlf --header X-Bad:ok\r\nInjected:evil
+error: Invalid header "X-Bad": CR/LF control characters are not allowed
+
+> fetch html https://example.com/crlf --header X-Bad\nName:val
+error: Invalid header "X-Bad\nName": CR/LF control characters are not allowed
+
+> origin last-headers https://example.com/crlf
+(not requested)
+
+# Supported Content-Encoding (gzip, deflate, br) is decompressed cleanly (FW-7, D17)
+> origin compress https://example.com/gz gzip <p>from-gzip</p>
+origin: compress gzip https://example.com/gz
+
+> fetch html https://example.com/gz
+| <p>from-gzip</p>
+
+> origin compress https://example.com/def deflate <p>from-deflate</p>
+origin: compress deflate https://example.com/def
+
+> fetch html https://example.com/def
+| <p>from-deflate</p>
+
+> origin compress https://example.com/br br <p>from-brotli</p>
+origin: compress br https://example.com/br
+
+> fetch html https://example.com/br
+| <p>from-brotli</p>
+
+# Unknown Content-Encoding is passed through unchanged as UTF-8 (FW-7, D17)
+> origin compress https://example.com/custom custom-enc <p>raw-pass</p>
+origin: compress custom-enc https://example.com/custom
+
+> fetch html https://example.com/custom
+| <p>raw-pass</p>
+
+# Corrupted compressed payload fails explicitly with a typed decode error (FW-7, D14, D17)
+> origin corrupt https://example.com/bad-gz gzip
+origin: corrupt gzip https://example.com/bad-gz
+
+> fetch html https://example.com/bad-gz
+error: Failed to decompress gzip response from https://example.com/bad-gz
+
+# MAX_RESPONSE_BYTES enforced on declared Content-Length, raw wire bytes, and decompressed streams (FW-7, D9, D14, I5)
+> origin serve https://example.com/big-header 200 small
+origin: 200 https://example.com/big-header
+
+> origin header https://example.com/big-header Content-Length 20000000
+origin: header https://example.com/big-header Content-Length: 20000000
+
+> fetch html https://example.com/big-header
+error: Response too large: 20000000 bytes exceeds 10485760 byte limit
+
+> origin repeat https://example.com/big-raw 10485761
+origin: repeat 10485761 https://example.com/big-raw
+
+> fetch html https://example.com/big-raw
+error: Response too large: exceeded 10485760 byte limit
+
+> origin repeat https://example.com/zip-bomb 10485761 gzip
+origin: repeat 10485761 https://example.com/zip-bomb
+
+> fetch html https://example.com/zip-bomb
+error: Response too large: exceeded 10485760 byte limit
+
+# Slow origin exceeding 30s timeout fails explicitly in a single attempt without retrying (FW-8, D9, D14, D18)
+> origin timeout https://example.com/slow
+origin: timeout https://example.com/slow
+
+> fetch html https://example.com/slow
+error: Request timed out after 30000ms fetching https://example.com/slow
+
+> origin attempts https://example.com/slow
+attempts: 1

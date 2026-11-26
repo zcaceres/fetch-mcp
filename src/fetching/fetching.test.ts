@@ -1,18 +1,29 @@
 import { describe, expect, it } from 'bun:test';
+import zlib from 'node:zlib';
 import { RenderedOutput, ResolvedIp, TargetUrl } from './nouns.ts';
 import { isBinaryContentType, isReservedIp, stripCrossOriginHeaders, windowedExcerpt } from './queries.ts';
-import { evaluateResponse, prepareFetch, validateRedirectHop, validateResolvedIps } from './verbs.ts';
+import {
+  DEFAULT_USER_AGENT,
+  decodeResponseBody,
+  evaluateResponse,
+  prepareFetch,
+  validateRedirectHop,
+  validateResolvedIps,
+} from './verbs.ts';
 
 describe('fetching domain', () => {
   describe('prepareFetch', () => {
-    it('accepts a valid public http/https URL with default window bounds and headers', () => {
+    it('accepts a valid public http/https URL with default window bounds and default headers (D18)', () => {
       const result = prepareFetch({ url: 'https://example.com/page', format: 'html' });
       expect(result).toEqual({
         ok: true,
         value: {
           url: TargetUrl('https://example.com/page'),
           format: 'html',
-          headers: {},
+          headers: {
+            'User-Agent': DEFAULT_USER_AGENT,
+            'Accept-Encoding': 'gzip, deflate, br',
+          },
           window: { startIndex: 0, maxLength: 5000 },
         },
       });
@@ -26,7 +37,11 @@ describe('fetching domain', () => {
       expect(withDefault.ok).toBe(true);
       if (withDefault.ok) {
         expect(withDefault.value.window).toEqual({ startIndex: 0, maxLength: 1200 });
-        expect(withDefault.value.headers).toEqual({ 'X-Trace': '1' });
+        expect(withDefault.value.headers).toEqual({
+          'User-Agent': DEFAULT_USER_AGENT,
+          'Accept-Encoding': 'gzip, deflate, br',
+          'X-Trace': '1',
+        });
       }
 
       const unlimited = prepareFetch({
@@ -39,6 +54,56 @@ describe('fetching domain', () => {
       if (unlimited.ok) {
         expect(unlimited.value.window).toEqual({ startIndex: 10, maxLength: 0 });
       }
+    });
+
+    it('deduplicates default and duplicate caller headers case-insensitively (D18)', () => {
+      const result = prepareFetch({
+        url: 'https://example.com/',
+        format: 'html',
+        headers: {
+          'user-agent': 'CustomBot/1.0',
+          'ACCEPT-ENCODING': 'identity',
+          'X-Dup': 'first',
+          'x-dup': 'second',
+        },
+      });
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.headers).toEqual({
+          'user-agent': 'CustomBot/1.0',
+          'ACCEPT-ENCODING': 'identity',
+          'x-dup': 'second',
+        });
+      }
+    });
+
+    it('rejects custom header names or values containing CR/LF control characters (D14, D18)', () => {
+      expect(
+        prepareFetch({
+          url: 'https://example.com/',
+          format: 'html',
+          headers: { 'X-Bad': 'ok\r\nInjected: evil' },
+        }),
+      ).toEqual({
+        ok: false,
+        error: {
+          kind: 'invalid_request',
+          message: 'Invalid header "X-Bad": CR/LF control characters are not allowed',
+        },
+      });
+      expect(
+        prepareFetch({
+          url: 'https://example.com/',
+          format: 'html',
+          headers: { 'X-Bad\nName': 'value' },
+        }),
+      ).toEqual({
+        ok: false,
+        error: {
+          kind: 'invalid_request',
+          message: 'Invalid header "X-Bad\\nName": CR/LF control characters are not allowed',
+        },
+      });
     });
 
     it('rejects malformed URLs', () => {
@@ -462,6 +527,72 @@ describe('fetching domain', () => {
       expect(failRes).toEqual({
         ok: false,
         error: { kind: 'parse_error', message: 'Failed to parse readable content from https://example.com/' },
+      });
+    });
+  });
+
+  describe('decodeResponseBody', () => {
+    const url = TargetUrl('https://example.com/data');
+
+    it('decompresses gzip, x-gzip, deflate, and br payloads (D17)', () => {
+      const plain = 'hello compressed world';
+      expect(decodeResponseBody(url, { 'content-encoding': 'gzip' }, zlib.gzipSync(plain))).toEqual({
+        ok: true,
+        value: plain,
+      });
+      expect(decodeResponseBody(url, { 'Content-Encoding': 'X-GZIP' }, zlib.gzipSync(plain))).toEqual({
+        ok: true,
+        value: plain,
+      });
+      expect(decodeResponseBody(url, { 'content-encoding': 'deflate' }, zlib.deflateSync(plain))).toEqual({
+        ok: true,
+        value: plain,
+      });
+      expect(decodeResponseBody(url, { 'content-encoding': 'br' }, zlib.brotliCompressSync(plain))).toEqual({
+        ok: true,
+        value: plain,
+      });
+    });
+
+    it('passes missing, identity, and unknown Content-Encoding through unchanged (D17)', () => {
+      const bytes = new TextEncoder().encode('raw-utf8');
+      expect(decodeResponseBody(url, {}, bytes)).toEqual({ ok: true, value: 'raw-utf8' });
+      expect(decodeResponseBody(url, { 'content-encoding': 'identity' }, bytes)).toEqual({
+        ok: true,
+        value: 'raw-utf8',
+      });
+      expect(decodeResponseBody(url, { 'content-encoding': 'custom-enc' }, bytes)).toEqual({
+        ok: true,
+        value: 'raw-utf8',
+      });
+    });
+
+    it('enforces maxBytes on declared Content-Length, raw bytes, and decompressed output (I5)', () => {
+      const small = new TextEncoder().encode('ok');
+      expect(decodeResponseBody(url, { 'Content-Length': '500' }, small, 100)).toEqual({
+        ok: false,
+        error: { kind: 'response_too_large', message: 'Response too large: 500 bytes exceeds 100 byte limit' },
+      });
+
+      const bigRaw = new Uint8Array(101);
+      expect(decodeResponseBody(url, {}, bigRaw, 100)).toEqual({
+        ok: false,
+        error: { kind: 'response_too_large', message: 'Response too large: exceeded 100 byte limit' },
+      });
+
+      const bomb = zlib.gzipSync('a'.repeat(500));
+      expect(bomb.byteLength).toBeLessThan(100);
+      expect(decodeResponseBody(url, { 'content-encoding': 'gzip' }, bomb, 100)).toEqual({
+        ok: false,
+        error: { kind: 'response_too_large', message: 'Response too large: exceeded 100 byte limit' },
+      });
+    });
+
+    it('returns typed decode error on corrupted compressed stream (D14, D17)', () => {
+      const badBytes = new TextEncoder().encode('not-valid-gzip');
+      expect(decodeResponseBody(url, { 'content-encoding': 'gzip' }, badBytes)).toEqual({
+        ok: false,
+        error: { kind: 'decode_error', message: 'Failed to decompress gzip response from https://example.com/data' },
       });
     });
   });

@@ -31,6 +31,13 @@ export type RawFetchInput = {
   readonly maxLength?: number;
 };
 
+export type WireResponse = {
+  readonly status: number;
+  readonly url: TargetUrl;
+  readonly headers: Headers;
+  readonly rawBytes: Uint8Array;
+};
+
 export type RawResponse = {
   readonly status: number;
   readonly url: TargetUrl;
@@ -56,4 +63,7 @@ export type FetchError =
   | { readonly kind: 'http_error'; readonly message: string }
   | { readonly kind: 'network_error'; readonly message: string }
   | { readonly kind: 'unsupported_content_type'; readonly message: string }
-  | { readonly kind: 'parse_error'; readonly message: string };
+  | { readonly kind: 'parse_error'; readonly message: string }
+  | { readonly kind: 'response_too_large'; readonly message: string }
+  | { readonly kind: 'decode_error'; readonly message: string }
+  | { readonly kind: 'timeout'; readonly message: string };

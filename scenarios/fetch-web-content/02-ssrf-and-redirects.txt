@@ -59,10 +59,12 @@ origin: 200 https://origin-a.example.com/new
 | <p>same-origin</p>
 
 > origin last-headers https://origin-a.example.com/new
+header: Accept-Encoding: gzip, deflate, br
 header: Authorization: Bearer-tok
+header: User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36
 header: X-Trace: 1
 
-# Cross-origin redirect strips Authorization, Cookie, and Proxy-Authorization while preserving X-Trace (FW-6, D9, I4)
+# Cross-origin redirect strips Authorization, Cookie, and Proxy-Authorization while preserving X-Trace (FW-6, D9, I4, D18)
 > origin redirect https://origin-a.example.com/jump 302 https://origin-b.example.com/final
 origin: redirect 302 https://origin-a.example.com/jump -> https://origin-b.example.com/final
 
@@ -73,12 +75,16 @@ origin: 200 https://origin-b.example.com/final
 | <p>cross-origin</p>
 
 > origin last-headers https://origin-a.example.com/jump
+header: Accept-Encoding: gzip, deflate, br
 header: Authorization: Bearer-secret
 header: Cookie: sid=123
 header: Proxy-Authorization: Basic-xyz
+header: User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36
 header: X-Trace: abc
 
 > origin last-headers https://origin-b.example.com/final
+header: Accept-Encoding: gzip, deflate, br
+header: User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36
 header: X-Trace: abc
 
 # Redirect to private IP or disallowed scheme is blocked BEFORE connecting to the target (FW-6, D8, I1)

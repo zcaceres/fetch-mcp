@@ -1,6 +1,12 @@
 import type { Headers } from '../../src/fetching/nouns.ts';
 import { isIpLiteral, normalizeHostname, windowedExcerpt } from '../../src/fetching/queries.ts';
-import { evaluateResponse, prepareFetch, validateRedirectHop, validateResolvedIps } from '../../src/fetching/verbs.ts';
+import {
+  decodeResponseBody,
+  evaluateResponse,
+  prepareFetch,
+  validateRedirectHop,
+  validateResolvedIps,
+} from '../../src/fetching/verbs.ts';
 import { err, ok, type Result } from '../../src/shared/result.ts';
 import type { Command } from '../command.ts';
 
@@ -17,15 +23,18 @@ const parseNumberArg = (flag: string, raw: string | undefined): Result<number, s
   return ok(n);
 };
 
+const unescapeControlChars = (value: string): string => value.replace(/\\r/g, '\r').replace(/\\n/g, '\n');
+
 const parseHeaderArg = (raw: string | undefined): Result<readonly [string, string], string> => {
   if (raw === undefined) {
     return err('Missing value for --header');
   }
-  const idx = raw.indexOf(':');
+  const decoded = unescapeControlChars(raw);
+  const idx = decoded.indexOf(':');
   if (idx <= 0) {
     return err(`Invalid header "${raw}": expected Key:Value`);
   }
-  return ok([raw.slice(0, idx).trim(), raw.slice(idx + 1).trim()]);
+  return ok([decoded.slice(0, idx).trim(), decoded.slice(idx + 1).trim()]);
 };
 
 const findHeaderCaseInsensitive = (headers: Headers, target: string): string | undefined => {
@@ -94,11 +103,11 @@ export const fetchCommand: Command = {
         if (!validatedIps.ok) return err(validatedIps.error.message);
       }
 
-      const response = await world.origin.get(currentUrl, currentHeaders);
-      if (!response.ok) return err(response.error.message);
+      const wire = await world.origin.get(currentUrl, currentHeaders);
+      if (!wire.ok) return err(wire.error.message);
 
-      const location = findHeaderCaseInsensitive(response.value.headers, 'location');
-      if (REDIRECT_STATUS_CODES.has(response.value.status) && location !== undefined && location.length > 0) {
+      const location = findHeaderCaseInsensitive(wire.value.headers, 'location');
+      if (REDIRECT_STATUS_CODES.has(wire.value.status) && location !== undefined && location.length > 0) {
         const nextHop = validateRedirectHop(currentUrl, location, currentHeaders, hop);
         if (!nextHop.ok) return err(nextHop.error.message);
         currentUrl = nextHop.value.nextUrl;
@@ -106,9 +115,17 @@ export const fetchCommand: Command = {
         continue;
       }
 
+      const body = decodeResponseBody(currentUrl, wire.value.headers, wire.value.rawBytes);
+      if (!body.ok) return err(body.error.message);
+
       const rendered = evaluateResponse(
         { ...prepared.value, url: currentUrl, headers: currentHeaders },
-        response.value,
+        {
+          status: wire.value.status,
+          url: wire.value.url,
+          headers: wire.value.headers,
+          body: body.value,
+        },
       );
       if (!rendered.ok) return err(rendered.error.message);
 
