@@ -1,10 +1,45 @@
 export class YouTubeTranscript {
   static extractPlayerResponse(html: string): unknown {
-    const match = html.match(/ytInitialPlayerResponse\s*=\s*(\{.+?\});/s);
-    if (!match) {
+    const marker = /ytInitialPlayerResponse\s*=\s*(?=\{)/.exec(html);
+    if (!marker) {
       throw new Error("Could not find ytInitialPlayerResponse in page HTML");
     }
-    return JSON.parse(match[1]);
+    const start = marker.index + marker[0].length;
+    const end = this.findJsonObjectEnd(html, start);
+    if (end === -1) {
+      throw new Error("Could not find ytInitialPlayerResponse in page HTML");
+    }
+    return JSON.parse(html.slice(start, end));
+  }
+
+  /**
+   * Returns the index just past the JSON object that starts at `start`, or -1
+   * when it is unterminated. Braces inside string values (for example a video
+   * description containing "};") do not end the object.
+   */
+  private static findJsonObjectEnd(text: string, start: number): number {
+    let depth = 0;
+    let inString = false;
+    for (let i = start; i < text.length; i++) {
+      const ch = text[i];
+      if (inString) {
+        if (ch === "\\") {
+          i++;
+        } else if (ch === '"') {
+          inString = false;
+        }
+      } else if (ch === '"') {
+        inString = true;
+      } else if (ch === "{") {
+        depth++;
+      } else if (ch === "}") {
+        depth--;
+        if (depth === 0) {
+          return i + 1;
+        }
+      }
+    }
+    return -1;
   }
 
   static getCaptionTracks(playerResponse: any): any[] {

@@ -9,6 +9,27 @@ describe("YouTubeTranscript", () => {
       expect(result).toEqual({ captions: { test: true } });
     });
 
+    it("keeps parsing when a string value contains '};'", () => {
+      const playerResponse = {
+        videoDetails: { shortDescription: "const a = {};\nif (x) { y(); };" },
+        captions: { test: true },
+      };
+      const html = `<script>var ytInitialPlayerResponse = ${JSON.stringify(playerResponse)};var meta = {};</script>`;
+      expect(YouTubeTranscript.extractPlayerResponse(html)).toEqual(playerResponse);
+    });
+
+    it("handles escaped quotes and backslashes inside string values", () => {
+      const playerResponse = { title: 'say "}; hi" \\', captions: { test: true } };
+      const html = `var ytInitialPlayerResponse = ${JSON.stringify(playerResponse)};`;
+      expect(YouTubeTranscript.extractPlayerResponse(html)).toEqual(playerResponse);
+    });
+
+    it("throws when the player response object is unterminated", () => {
+      expect(() =>
+        YouTubeTranscript.extractPlayerResponse('var ytInitialPlayerResponse = {"a":{"b":1}'),
+      ).toThrow("Could not find ytInitialPlayerResponse");
+    });
+
     it("throws when ytInitialPlayerResponse is not found", () => {
       expect(() => YouTubeTranscript.extractPlayerResponse("<html></html>")).toThrow(
         "Could not find ytInitialPlayerResponse",
