@@ -5,6 +5,7 @@
     "includes": [
       "src/shared/**",
       "src/fetching/**",
+      "src/transcript/**",
       "src/integrations/**",
       "src/cli.ts",
       "src/cli.test.ts",

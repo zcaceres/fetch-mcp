@@ -1,0 +1,93 @@
+# Slice 01: Direct Transcript Extraction (Tracer Bullet)
+# Covers FT-1, FT-2, FT-5, FT-6, FT-7, FT-8, FT-9
+
+# Setup public DNS for allowlisted YouTube host
+> dns set www.youtube.com 142.250.190.78
+dns: www.youtube.com -> 142.250.190.78
+
+# Happy path: direct watch page + srv1 caption XML with double-encoded &amp;#39; and inline tags (FT-5, FT-7, D21)
+> origin serve https://www.youtube.com/watch?v=demo1 200 <html><script>var ytInitialPlayerResponse = {"captions":{"playerCaptionsTracklistRenderer":{"captionTracks":[{"baseUrl":"https://www.youtube.com/api/timedtext?v=demo1&lang=en-US","name":{"simpleText":"English (US)"},"languageCode":"en-US"},{"baseUrl":"https://www.youtube.com/api/timedtext?v=demo1&lang=de","name":{"simpleText":"German"},"languageCode":"de"}]}}};</script></html>
+origin: 200 https://www.youtube.com/watch?v=demo1
+
+> origin serve https://www.youtube.com/api/timedtext?v=demo1&lang=en-US&fmt=srv1 200 <transcript><text start="1.2" dur="2.0">Hello &amp;#39;world&amp;#39;</text><text start="65.5" dur="1.0"><font color="#ccc">Minute</font> mark</text></transcript>
+origin: 200 https://www.youtube.com/api/timedtext?v=demo1&lang=en-US&fmt=srv1
+
+# Regional prefix match: default lang "en" matches "en-US" (FT-6, D20)
+> fetch-transcript https://www.youtube.com/watch?v=demo1
+| [Transcript language: en-US — English (US)]
+|
+| [0:01] Hello 'world'
+| [1:05] Minute mark
+
+# Exact match for another language using srv3 (<p t="ms">) XML format (FT-6, FT-7, D20, D21)
+> origin serve https://www.youtube.com/api/timedtext?v=demo1&lang=de&fmt=srv1 200 <timedtext format="3"><body><p t="0" d="2000">Hallo &#x26; Welt</p><p t="2000" d="1000">   </p><p t="5200" d="1000">Zweite Zeile</p></body></timedtext>
+origin: 200 https://www.youtube.com/api/timedtext?v=demo1&lang=de&fmt=srv1
+
+> fetch-transcript https://www.youtube.com/watch?v=demo1 --lang de
+| [Transcript language: de — German]
+|
+| [0:00] Hallo & Welt
+| [0:05] Zweite Zeile
+
+# Windowed Excerpt slicing on Transcript: custom window and out-of-range startIndex (FT-9, D9, D14, D15)
+> fetch-transcript https://www.youtube.com/watch?v=demo1 --lang de --start-index 0 --max-length 34
+| [Transcript language: de — German]
+
+> fetch-transcript https://www.youtube.com/watch?v=demo1 --lang de --start-index 500 --max-length 20
+(empty)
+
+# Missing requested language fails explicitly listing available language codes (FT-6, D14, D20)
+> fetch-transcript https://www.youtube.com/watch?v=demo1 --lang fr
+error: No captions available in language "fr" (available: en-US, de)
+
+# Empty or unrecognized caption XML fails explicitly (FT-8, D14, D22)
+> origin serve https://www.youtube.com/watch?v=emptyxml 200 <html><script>var ytInitialPlayerResponse = {"captions":{"playerCaptionsTracklistRenderer":{"captionTracks":[{"baseUrl":"https://www.youtube.com/api/timedtext?v=emptyxml&lang=en","name":{"simpleText":"English"},"languageCode":"en"}]}}};</script></html>
+origin: 200 https://www.youtube.com/watch?v=emptyxml
+
+> origin serve https://www.youtube.com/api/timedtext?v=emptyxml&lang=en&fmt=srv1 200 <transcript></transcript>
+origin: 200 https://www.youtube.com/api/timedtext?v=emptyxml&lang=en&fmt=srv1
+
+> fetch-transcript https://www.youtube.com/watch?v=emptyxml
+error: No caption lines found in transcript XML
+
+# Missing ytInitialPlayerResponse and missing captionTracks fail explicitly (FT-5, D14)
+> origin serve https://www.youtube.com/watch?v=noplayer 200 <html><body>No player</body></html>
+origin: 200 https://www.youtube.com/watch?v=noplayer
+
+> fetch-transcript https://www.youtube.com/watch?v=noplayer
+error: Could not find ytInitialPlayerResponse in page HTML
+
+> origin serve https://www.youtube.com/watch?v=notracks 200 <html><script>var ytInitialPlayerResponse = {"captions":{"playerCaptionsTracklistRenderer":{"captionTracks":[]}}};</script></html>
+origin: 200 https://www.youtube.com/watch?v=notracks
+
+> fetch-transcript https://www.youtube.com/watch?v=notracks
+error: No caption tracks found for this video
+
+# Caption track baseUrl pointing at a private IP is blocked by SSRF before connecting (FT-5, D8, I1)
+> origin serve https://www.youtube.com/watch?v=ssrftrack 200 <html><script>var ytInitialPlayerResponse = {"captions":{"playerCaptionsTracklistRenderer":{"captionTracks":[{"baseUrl":"http://127.0.0.1/steal","name":{"simpleText":"English"},"languageCode":"en"}]}}};</script></html>
+origin: 200 https://www.youtube.com/watch?v=ssrftrack
+
+> fetch-transcript https://www.youtube.com/watch?v=ssrftrack
+error: Blocked Target URL: private address "127.0.0.1"
+
+# Validation and YouTube host allowlist guards (FT-1, FT-2, D8, D14, D18, I1, I3)
+> fetch-transcript not-a-url
+error: Invalid Target URL: "not-a-url"
+
+> fetch-transcript file:///tmp/video
+error: Blocked Target URL: disallowed scheme "file:" (only http: and https: are allowed)
+
+> fetch-transcript https://example.com/watch?v=123
+error: Blocked Target URL: host "example.com" is not an allowlisted YouTube domain
+
+> fetch-transcript https://www.youtube.com/watch?v=demo1 --lang en;rm
+error: Invalid language code "en;rm": only letters, digits, and hyphens are allowed
+
+> fetch-transcript https://www.youtube.com/watch?v=demo1 --lang --exec
+error: Invalid language code "--exec": only letters, digits, and hyphens are allowed
+
+> fetch-transcript https://www.youtube.com/watch?v=demo1 --start-index -1
+error: Invalid startIndex: must be a non-negative integer
+
+> fetch-transcript https://www.youtube.com/watch?v=demo1 --header X-Bad:ok\r\nEvil:1
+error: Invalid header "X-Bad": CR/LF control characters are not allowed

@@ -9,6 +9,7 @@ and a withdrawn decision keeps its heading as one line.
 What each journey's users can do and see is in its acceptance criteria, which cite these rules:
 
 - **Fetch Web Content:** an Agent or CLI User fetches a public web Target URL in a Format and receives a Windowed Excerpt ([acceptance criteria](docs/journeys/fetch-web-content/acceptance-criteria.md)).
+- **Fetch Transcript:** an Agent or CLI User fetches a YouTube video's captions and receives a Windowed Excerpt of the Transcript ([acceptance criteria](docs/journeys/fetch-transcript/acceptance-criteria.md)).
 
 ## Sources
 
@@ -74,9 +75,10 @@ system computes a value for us, its rule for it is recorded here, as that system
 - Non-2xx HTTP responses, invalid JSON payloads for `json` format, and pages unparseable by Readability for `readable` format fail explicitly with typed domain errors (D14, D16).
 
 ### YouTube Transcript Fetching
-- An Agent or CLI User can `fetch transcript` for an allowlisted YouTube Target URL with an optional caption language code (default `"en"`) and Window bounds (D3, D4, D7, D12, I3, U1).
-- `fetch transcript` tries local `yt-dlp` first when present on `PATH` and falls back to direct YouTube watch-page and caption-XML extraction if `yt-dlp` is unavailable or fails, without swallowing validation or SSRF errors (D7, I3).
-- `fetch transcript` returns a Windowed Excerpt of the Transcript, formatted as a language header followed by timestamped caption lines (D4, D9, D15, U1).
+- An Agent or CLI User can `fetch transcript` for an allowlisted YouTube Target URL with an optional caption language code (default `"en"`) and Window bounds (D3, D4, D7, D12, D20, I3).
+- `fetch transcript` tries local `yt-dlp` first (with `--write-sub`, `--write-auto-sub`, `--` end-of-options sentinel, and `30s` timeout) when present on `PATH` and falls back to direct YouTube watch-page and caption-XML extraction if `yt-dlp` is unavailable or fails, without swallowing validation or SSRF errors (D7, D9, D21, I3).
+- When a YouTube video has captions but none matching the requested language, `fetch transcript` fails explicitly with a typed error listing available language codes (D14, D20).
+- `fetch transcript` parses `srv1`/`srv3` XML (decoding standard, numeric, and double-encoded HTML entities) and returns a Windowed Excerpt of the Transcript, formatted as a language header followed by timestamped caption lines (D4, D9, D15, D21).
 
 ### Interfaces & Proxy Routing
 - The MCP stdio server (`mcp-fetch-server`) exposes six tools aligned to Terminology: `fetch_html`, `fetch_markdown`, `fetch_readable`, `fetch_text`, `fetch_json`, and `fetch_transcript`, accepting custom request headers and never accepting a caller-supplied `proxy` parameter (D1, D6, D10, D12, I6).
@@ -196,11 +198,22 @@ for an undecided rule and will change with it.
 
 - **Decided (2026-11-25):** Formalize **Window** (`startIndex`, `maxLength`) as a Terminology noun, and define `WebFormat` as the five non-transcript web variants of **Format** (`html`, `markdown`, `readable`, `text`, `json`) used by `fetch`.
 
+### D20. Missing caption language fails explicitly with available languages
+
+- **Decided (2026-11-26):** Caption track selection matches the requested `lang` case-insensitively by exact code first (`en` → `en`), then by regional prefix (`en` → `en-US`, `en-GB`). When a YouTube video has caption tracks but none matches, `fetch transcript` returns a typed error listing the available language codes instead of silently falling back to another language. Resolves U1.
+
+### D21. YouTube auto-generated subtitles and HTML entity decoding
+
+- **Decided (2026-11-26):** When invoking `yt-dlp`, `fetch transcript` passes both `--write-sub` and `--write-auto-sub` (with `--sub-format srv1`, `--skip-download`, `--` end-of-options sentinel, and `30s` timeout) so auto-generated captions work consistently with direct extraction. Caption XML entity decoding handles standard named entities (`&amp;`, `&lt;`, `&gt;`, `&quot;`, `&apos;`), numeric decimal/hex entities (`&#39;`, `&#160;`, `&#x27;`), and YouTube's double-encoded entities (such as `&amp;#39;`).
+
+### D22. Empty or unrecognized caption XML fails explicitly
+
+- **Decided (2026-11-26):** When fetched caption XML parses to zero non-empty caption lines (empty or unrecognized XML format), `fetch transcript` fails explicitly with a typed parse error rather than returning a header-only transcript.
+
 ## Undecided Questions
 
 | # | Question | Meanwhile |
 |---|---|---|
-| U1 | (`fetch-transcript`) When a requested `lang` caption track does not exist on a YouTube video, should `fetch transcript` fall back to the first available track or return a typed error? | Fall back to the first available track and report the actual language in the Transcript header. |
 | U3 | (`proxy-and-limits`) For SOCKS proxies, should `socks5://` and `socks5h://` both delegate hostname DNS to the proxy per D8, or distinguish local vs. proxy DNS by scheme? | Delegate hostname DNS to the proxy for all SOCKS schemes (matching HTTP/HTTPS proxies under D8). |
 | U4 | (`mcp-interface`) Should `tools/list` reject unrecognized pagination cursors with `-32602` (issue #49 SHOULD item), and when should MCP `2026-07-28` `server/discover` (issue #50) be adopted? | Follow `@modelcontextprotocol/sdk` defaults on `2025-11-25`. |
 
@@ -210,4 +223,5 @@ Pointers only, so an old reference to a U# still leads somewhere. The decision s
 
 | # | Resolved by |
 |---|---|
+| U1 | D20 |
 | U2 | D15 |
