@@ -84,7 +84,11 @@ export function isNoProxyMatch(targetUrl: URL, noProxy?: string): boolean {
       continue;
     }
 
-    const pattern = entryHost.replace(/^\.+/, "").replace(/\.+$/, "");
+    // "*.example.com" is the common wildcard spelling of ".example.com".
+    const pattern = entryHost
+      .replace(/^\*(?=\.)/, "")
+      .replace(/^\.+/, "")
+      .replace(/\.+$/, "");
     if (!pattern) continue;
 
     if (host === pattern || host.endsWith(`.${pattern}`)) {
