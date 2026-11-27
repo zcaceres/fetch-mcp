@@ -1,0 +1,41 @@
+# Slice 05: Real Transport & CLI Wiring
+# Covers FW-4 (IP pinning handoff) and shared executeFetch pipeline
+
+# Direct hostname fetch passes all validated public DNS IPs to HttpGetPort for socket pinning (FW-4, D8, I2)
+> dns set pinned.example.com 93.184.216.34 2606:2800:220:1:248:1893:25c8:1946
+dns: pinned.example.com -> 93.184.216.34, 2606:2800:220:1:248:1893:25c8:1946
+
+> origin serve https://pinned.example.com/ 200 <p>pinned-ok</p>
+origin: 200 https://pinned.example.com/
+
+> fetch html https://pinned.example.com/
+| <p>pinned-ok</p>
+
+> origin last-pinned https://pinned.example.com/
+pinned: 93.184.216.34, 2606:2800:220:1:248:1893:25c8:1946
+
+# Redirect hops resolve and pin the destination host's validated IPs independently (FW-4, FW-6, D8, I2)
+> origin redirect https://origin-a.example.com/start 302 https://origin-b.example.com/end
+origin: redirect 302 https://origin-a.example.com/start -> https://origin-b.example.com/end
+
+> origin serve https://origin-b.example.com/end 200 {"ok": true}
+origin: 200 https://origin-b.example.com/end
+
+> fetch json https://origin-a.example.com/start
+| {"ok":true}
+
+> origin last-pinned https://origin-a.example.com/start
+pinned: 93.184.216.34
+
+> origin last-pinned https://origin-b.example.com/end
+pinned: 93.184.216.35
+
+# Public IP literal pins itself directly without needing a DNS record (FW-3, FW-4, D8, I1)
+> origin serve http://93.184.216.34/direct 200 <h3>Direct</h3> <p>IP fetch</p>
+origin: 200 http://93.184.216.34/direct
+
+> fetch text http://93.184.216.34/direct
+| Direct IP fetch
+
+> origin last-pinned http://93.184.216.34/direct
+pinned: 93.184.216.34

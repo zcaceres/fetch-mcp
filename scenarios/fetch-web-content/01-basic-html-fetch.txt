@@ -1,0 +1,61 @@
+# Slice 01: Basic HTML Fetch (Tracer Bullet)
+# Covers FW-1, FW-3 (basic), FW-5, FW-10, FW-14
+
+# Happy path: serve HTML from a public origin and fetch unmodified HTML (FW-5, FW-10, D4, D16)
+> origin serve https://example.com/ 200 <h1>Hello</h1><p>0123456789</p>
+origin: 200 https://example.com/
+
+> fetch html https://example.com/
+| <h1>Hello</h1><p>0123456789</p>
+
+# Windowed Excerpt: custom startIndex and maxLength, sliced text only (FW-14, D9, D15)
+> fetch html https://example.com/ --start-index 4 --max-length 5
+| Hello
+
+# Windowed Excerpt: maxLength 0 returns full Rendered Output (FW-14, D9, D15)
+> fetch html https://example.com/ --max-length 0
+| <h1>Hello</h1><p>0123456789</p>
+
+# Windowed Excerpt: startIndex at or beyond length returns empty excerpt (FW-14, D14, D15)
+> fetch html https://example.com/ --start-index 100 --max-length 10
+(empty)
+
+# Non-2xx HTTP status fails explicitly without retrying (FW-5, D14, D18)
+> origin serve https://example.com/missing 404 Not Found
+origin: 404 https://example.com/missing
+
+> fetch html https://example.com/missing
+error: HTTP error 404 fetching https://example.com/missing
+
+# Network error fails explicitly without retrying (FW-5, D14, D18)
+> origin fail https://example.com/down connection reset
+origin: fail https://example.com/down
+
+> fetch html https://example.com/down
+error: Network error fetching https://example.com/down: connection reset
+
+# Request validation: malformed URL, unknown format, invalid window bounds (FW-1, D4, D14)
+> fetch html not-a-url
+error: Invalid Target URL: "not-a-url"
+
+> fetch pdf https://example.com/
+error: Unsupported Format: "pdf"
+
+> fetch html https://example.com/ --start-index -1
+error: Invalid startIndex: must be a non-negative integer
+
+> fetch html https://example.com/ --max-length -5
+error: Invalid maxLength: must be a non-negative integer
+
+# Basic SSRF protection: disallowed scheme, localhost, private IPv4 (FW-3, D8, I1)
+> fetch html file:///etc/passwd
+error: Blocked Target URL: disallowed scheme "file:" (only http: and https: are allowed)
+
+> fetch html http://localhost/admin
+error: Blocked Target URL: private address "localhost"
+
+> fetch html http://127.0.0.1/secret
+error: Blocked Target URL: private address "127.0.0.1"
+
+> fetch html http://10.0.0.1/internal
+error: Blocked Target URL: private address "10.0.0.1"
