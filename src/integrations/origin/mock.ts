@@ -2,11 +2,13 @@ import zlib from 'node:zlib';
 import type { FetchError, Headers, ResolvedIp, TargetUrl, WireResponse } from '../../fetching/nouns.ts';
 import type { HttpGetPort } from '../../fetching/ports.ts';
 import { REQUEST_TIMEOUT_MS } from '../../fetching/verbs.ts';
+import { redactProxyUrl } from '../../policy/queries.ts';
 import { err, ok, type Result } from '../../shared/result.ts';
 
 type OriginEntry =
   | { readonly kind: 'response'; readonly status: number; readonly headers: Headers; readonly rawBytes: Uint8Array }
   | { readonly kind: 'fail'; readonly reason: string }
+  | { readonly kind: 'proxy_fail'; readonly reason: string }
   | { readonly kind: 'timeout'; readonly timeoutMs: number };
 
 const encoder = new TextEncoder();
@@ -28,9 +30,11 @@ export type OriginMock = {
   readonly corrupt: (url: string, encoding: string) => void;
   readonly redirect: (url: string, status: number, location: string) => void;
   readonly fail: (url: string, reason: string) => void;
+  readonly proxyFail: (url: string, reason: string) => void;
   readonly timeout: (url: string, timeoutMs?: number) => void;
   readonly lastHeaders: (url: string) => Headers | undefined;
   readonly lastPinned: (url: string) => readonly ResolvedIp[] | undefined;
+  readonly lastProxy: (url: string) => string | null | undefined;
   readonly attempts: (url: string) => number;
 };
 
@@ -38,6 +42,7 @@ export const createOriginMock = (): OriginMock => {
   const routes = new Map<string, OriginEntry>();
   const recordedHeaders = new Map<string, Headers>();
   const recordedPinned = new Map<string, readonly ResolvedIp[]>();
+  const recordedProxy = new Map<string, string | null>();
   const attemptCounts = new Map<string, number>();
 
   const normalizeKey = (url: string): string => {
@@ -52,10 +57,12 @@ export const createOriginMock = (): OriginMock => {
     url: TargetUrl,
     headers: Headers,
     pinnedIps: readonly ResolvedIp[],
+    proxyUrl?: string,
   ): Promise<Result<WireResponse, FetchError>> => {
     const key = normalizeKey(url);
     recordedHeaders.set(key, { ...headers });
     recordedPinned.set(key, [...pinnedIps]);
+    recordedProxy.set(key, proxyUrl ?? null);
     attemptCounts.set(key, (attemptCounts.get(key) ?? 0) + 1);
 
     const entry = routes.get(key);
@@ -64,6 +71,10 @@ export const createOriginMock = (): OriginMock => {
     }
     if (entry.kind === 'fail') {
       return err({ kind: 'network_error', message: `Network error fetching ${url}: ${entry.reason}` });
+    }
+    if (entry.kind === 'proxy_fail') {
+      const via = proxyUrl !== undefined ? ` via proxy ${redactProxyUrl(proxyUrl)}` : '';
+      return err({ kind: 'network_error', message: `Network error fetching ${url}${via}: ${entry.reason}` });
     }
     if (entry.kind === 'timeout') {
       return err({
@@ -126,11 +137,15 @@ export const createOriginMock = (): OriginMock => {
     fail: (url, reason) => {
       routes.set(normalizeKey(url), { kind: 'fail', reason });
     },
+    proxyFail: (url, reason) => {
+      routes.set(normalizeKey(url), { kind: 'proxy_fail', reason });
+    },
     timeout: (url, timeoutMs = REQUEST_TIMEOUT_MS) => {
       routes.set(normalizeKey(url), { kind: 'timeout', timeoutMs });
     },
     lastHeaders: (url) => recordedHeaders.get(normalizeKey(url)),
     lastPinned: (url) => recordedPinned.get(normalizeKey(url)),
+    lastProxy: (url) => recordedProxy.get(normalizeKey(url)),
     attempts: (url) => attemptCounts.get(normalizeKey(url)) ?? 0,
   };
 };

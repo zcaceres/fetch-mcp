@@ -1,0 +1,37 @@
+# Slice 02: Real HTTP, HTTPS CONNECT & SOCKS Proxy Transport
+# Covers PL-9 (protocol support, proxy failure handling, and credential redaction)
+
+# All four SOCKS schemes (socks4, socks4a, socks5, socks5h) delegate hostname DNS to the proxy (PL-9, D8, D23)
+> dns fail remote.invalid ENOTFOUND
+dns: fail remote.invalid
+
+> origin serve http://remote.invalid/s4 200 <p>via-socks4</p>
+origin: 200 http://remote.invalid/s4
+
+> fetch html http://remote.invalid/s4 --proxy socks4://alice@127.0.0.1:1080
+| <p>via-socks4</p>
+
+> origin last-proxy http://remote.invalid/s4
+proxy: socks4://127.0.0.1:1080
+
+> origin serve https://remote.invalid/s4a 200 <p>via-socks4a</p>
+origin: 200 https://remote.invalid/s4a
+
+> fetch html https://remote.invalid/s4a --proxy socks4a://127.0.0.1:1080
+| <p>via-socks4a</p>
+
+> origin last-proxy https://remote.invalid/s4a
+proxy: socks4a://127.0.0.1:1080
+
+# Proxy failure surfaces typed network error with proxy credentials redacted (PL-9, D14, D23)
+> origin proxy-fail https://remote.invalid/denied CONNECT 407 Proxy Authentication Required
+origin: proxy-fail https://remote.invalid/denied
+
+> fetch html https://remote.invalid/denied --proxy https://user:topsecret@proxy.internal:8443
+error: Network error fetching https://remote.invalid/denied via proxy https://proxy.internal:8443/: CONNECT 407 Proxy Authentication Required
+
+> origin proxy-fail http://remote.invalid/socks-denied SOCKS5 authentication failed
+origin: proxy-fail http://remote.invalid/socks-denied
+
+> fetch html http://remote.invalid/socks-denied --proxy socks5://alice:s3cr3t@127.0.0.1:1080
+error: Network error fetching http://remote.invalid/socks-denied via proxy socks5://127.0.0.1:1080: SOCKS5 authentication failed

@@ -1,9 +1,11 @@
 import { executeFetch } from '../../src/fetching/execute.ts';
+import type { ResolveProxyPort } from '../../src/fetching/ports.ts';
 import { normalizeHostname } from '../../src/fetching/queries.ts';
 import { validateResolvedIps } from '../../src/fetching/verbs.ts';
+import { parseOperatorLimits, resolveProxyPolicy } from '../../src/policy/verbs.ts';
 import { err, ok, type Result } from '../../src/shared/result.ts';
 import { executeFetchTranscript } from '../../src/transcript/execute.ts';
-import type { CheckHostPort, FetchPagePort } from '../../src/transcript/ports.ts';
+import type { CheckHostPort, FetchPagePort, ResolveTranscriptProxyPort } from '../../src/transcript/ports.ts';
 import type { Command } from '../command.ts';
 
 const parseNumberArg = (flag: string, raw: string | undefined): Result<number, string> => {
@@ -33,19 +35,21 @@ const parseHeaderArg = (raw: string | undefined): Result<readonly [string, strin
 
 export const fetchTranscriptCommand: Command = {
   kind: 'domain',
-  usage: 'fetch-transcript <url> [--lang <code>] [--start-index <N>] [--max-length <N>] [--header <Key:Value>]...',
+  usage:
+    'fetch-transcript <url> [--lang <code>] [--start-index <N>] [--max-length <N>] [--header <Key:Value>]... [--proxy <url>]',
   summary: 'fetch a YouTube video transcript and return a Windowed Excerpt',
   run: async (args, world) => {
     const [url, ...rest] = args;
     if (!url) {
       return err(
-        'usage: fetch-transcript <url> [--lang <code>] [--start-index <N>] [--max-length <N>] [--header <Key:Value>]...',
+        'usage: fetch-transcript <url> [--lang <code>] [--start-index <N>] [--max-length <N>] [--header <Key:Value>]... [--proxy <url>]',
       );
     }
 
     let lang: string | undefined;
     let startIndex: number | undefined;
     let maxLength: number | undefined;
+    let proxy: string | undefined;
     const headers: Record<string, string> = {};
 
     for (let i = 0; i < rest.length; i++) {
@@ -71,15 +75,41 @@ export const fetchTranscriptCommand: Command = {
         const [k, v] = parsed.value;
         headers[k] = v;
         i++;
+      } else if (flag === '--proxy') {
+        const value = rest[i + 1];
+        if (value === undefined) return err('Missing value for --proxy');
+        proxy = value;
+        i++;
       } else {
         return err(`Unknown flag: ${flag}`);
       }
     }
 
+    const envMap = Object.fromEntries(world.env.entries());
+    const limits = parseOperatorLimits(envMap);
+    if (!limits.ok) return err(limits.error.message);
+
+    const resolveFetchProxy: ResolveProxyPort = (targetUrl) => {
+      const resolved = resolveProxyPolicy(targetUrl, envMap, proxy);
+      if (!resolved.ok) {
+        return err({ kind: 'invalid_request', message: resolved.error.message });
+      }
+      return ok(resolved.value.kind === 'proxy' ? String(resolved.value.url) : undefined);
+    };
+
+    const resolveTranscriptProxy: ResolveTranscriptProxyPort = (targetUrl) => {
+      const resolved = resolveProxyPolicy(targetUrl, envMap, proxy);
+      if (!resolved.ok) {
+        return err({ kind: 'invalid_request', message: resolved.error.message });
+      }
+      return ok(resolved.value.kind === 'proxy' ? String(resolved.value.url) : undefined);
+    };
+
     const fetchPage: FetchPagePort = async (targetUrl, reqHeaders) => {
       const res = await executeFetch(
         { url: targetUrl, format: 'html', headers: reqHeaders, maxLength: 0 },
-        { httpGet: world.origin.get, dnsLookup: world.dns.lookup },
+        { httpGet: world.origin.get, dnsLookup: world.dns.lookup, resolveProxy: resolveFetchProxy },
+        { maxResponseBytes: limits.value.maxResponseBytes },
       );
       if (!res.ok) {
         const kind = res.error.kind === 'blocked_url' ? 'blocked_url' : 'fetch_error';
@@ -109,7 +139,8 @@ export const fetchTranscriptCommand: Command = {
         ...(startIndex !== undefined ? { startIndex } : {}),
         ...(maxLength !== undefined ? { maxLength } : {}),
       },
-      { fetchPage, checkHost, ytDlp: world.ytdlp },
+      { fetchPage, checkHost, resolveProxy: resolveTranscriptProxy, ytDlp: world.ytdlp },
+      { defaultLimit: limits.value.defaultLimit },
     );
 
     if (!result.ok) return err(result.error.message);

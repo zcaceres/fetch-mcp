@@ -1,4 +1,6 @@
 import { executeFetch } from '../../src/fetching/execute.ts';
+import type { ResolveProxyPort } from '../../src/fetching/ports.ts';
+import { parseOperatorLimits, resolveProxyPolicy } from '../../src/policy/verbs.ts';
 import { err, ok, type Result } from '../../src/shared/result.ts';
 import type { Command } from '../command.ts';
 
@@ -29,16 +31,19 @@ const parseHeaderArg = (raw: string | undefined): Result<readonly [string, strin
 
 export const fetchCommand: Command = {
   kind: 'domain',
-  usage: 'fetch <format> <url> [--start-index <N>] [--max-length <N>] [--header <Key:Value>]...',
+  usage: 'fetch <format> <url> [--start-index <N>] [--max-length <N>] [--header <Key:Value>]... [--proxy <url>]',
   summary: 'fetch a Target URL in Format and return a Windowed Excerpt',
   run: async (args, world) => {
     const [format, url, ...rest] = args;
     if (!format || !url) {
-      return err('usage: fetch <format> <url> [--start-index <N>] [--max-length <N>] [--header <Key:Value>]...');
+      return err(
+        'usage: fetch <format> <url> [--start-index <N>] [--max-length <N>] [--header <Key:Value>]... [--proxy <url>]',
+      );
     }
 
     let startIndex: number | undefined;
     let maxLength: number | undefined;
+    let proxy: string | undefined;
     const headers: Record<string, string> = {};
 
     for (let i = 0; i < rest.length; i++) {
@@ -59,10 +64,27 @@ export const fetchCommand: Command = {
         const [k, v] = parsed.value;
         headers[k] = v;
         i++;
+      } else if (flag === '--proxy') {
+        const value = rest[i + 1];
+        if (value === undefined) return err('Missing value for --proxy');
+        proxy = value;
+        i++;
       } else {
         return err(`Unknown flag: ${flag}`);
       }
     }
+
+    const envMap = Object.fromEntries(world.env.entries());
+    const limits = parseOperatorLimits(envMap);
+    if (!limits.ok) return err(limits.error.message);
+
+    const resolveProxy: ResolveProxyPort = (targetUrl) => {
+      const resolved = resolveProxyPolicy(targetUrl, envMap, proxy);
+      if (!resolved.ok) {
+        return err({ kind: 'invalid_request', message: resolved.error.message });
+      }
+      return ok(resolved.value.kind === 'proxy' ? String(resolved.value.url) : undefined);
+    };
 
     const result = await executeFetch(
       {
@@ -75,6 +97,11 @@ export const fetchCommand: Command = {
       {
         httpGet: world.origin.get,
         dnsLookup: world.dns.lookup,
+        resolveProxy,
+      },
+      {
+        defaultLimit: limits.value.defaultLimit,
+        maxResponseBytes: limits.value.maxResponseBytes,
       },
     );
 

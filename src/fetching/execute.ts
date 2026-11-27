@@ -49,10 +49,20 @@ export const executeFetch = async (
   let currentHeaders = prepared.value.headers;
 
   for (let hop = 0; ; hop++) {
+    let proxyUrl: string | undefined;
+    if (ports.resolveProxy) {
+      const resolvedProxy = ports.resolveProxy(currentUrl);
+      if (!resolvedProxy.ok) return resolvedProxy;
+      proxyUrl = resolvedProxy.value;
+    }
+
     const host = normalizeHostname(new URL(currentUrl).hostname);
     let pinnedIps: readonly ResolvedIp[];
 
-    if (isIpLiteral(host)) {
+    if (proxyUrl !== undefined) {
+      // Delegated hostname DNS to proxy per D8/D23; local URL & reserved-IP literal SSRF validation already ran.
+      pinnedIps = [];
+    } else if (isIpLiteral(host)) {
       pinnedIps = [ResolvedIp(host)];
     } else {
       const lookup = await ports.dnsLookup(host);
@@ -62,7 +72,7 @@ export const executeFetch = async (
       pinnedIps = validated.value;
     }
 
-    const wire = await ports.httpGet(currentUrl, currentHeaders, pinnedIps);
+    const wire = await ports.httpGet(currentUrl, currentHeaders, pinnedIps, proxyUrl);
     if (!wire.ok) return wire;
 
     const location = findHeaderCaseInsensitive(wire.value.headers, 'location');

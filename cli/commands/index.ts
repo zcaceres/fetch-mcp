@@ -1,5 +1,6 @@
 import type { Command } from '../command.ts';
 import { dnsCommand } from './dns.ts';
+import { envCommand } from './env.ts';
 import { fetchCommand } from './fetch.ts';
 import { fetchTranscriptCommand } from './fetch-transcript.ts';
 import { originCommand } from './origin.ts';
@@ -11,4 +12,5 @@ export const commands: Readonly<Record<string, Command>> = {
   origin: originCommand,
   dns: dnsCommand,
   ytdlp: ytdlpCommand,
+  env: envCommand,
 };

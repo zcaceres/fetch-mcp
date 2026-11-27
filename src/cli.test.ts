@@ -273,3 +273,127 @@ describe('runCli transcript (FT-10)', () => {
     expect(ytDlp.lastArgs()).toBeUndefined();
   });
 });
+
+describe('runCli proxy & Operator limits (PL-10)', () => {
+  it('enforces valid DEFAULT_LIMIT and MAX_RESPONSE_BYTES and fails fast on invalid env values (D25)', async () => {
+    const origin = createOriginMock();
+    const dns = createDnsMock();
+    origin.serve('https://example.com/data', 200, '<p>0123456789</p>');
+
+    let out = '';
+    const okCode = await runCli(['html', 'https://example.com/data'], {
+      ports: { httpGet: origin.get, dnsLookup: dns.lookup },
+      env: { DEFAULT_LIMIT: '6', MAX_RESPONSE_BYTES: '100' },
+      stdout: (s) => {
+        out += s;
+      },
+      stderr: () => {},
+    });
+    expect(okCode).toBe(0);
+    expect(out).toBe('<p>012');
+
+    let errLimit = '';
+    const badLimitCode = await runCli(['html', 'https://example.com/data'], {
+      ports: { httpGet: origin.get, dnsLookup: dns.lookup },
+      env: { DEFAULT_LIMIT: 'bad' },
+      stdout: () => {},
+      stderr: (s) => {
+        errLimit += s;
+      },
+    });
+    expect(badLimitCode).toBe(1);
+    expect(errLimit).toBe('Invalid DEFAULT_LIMIT "bad": must be a non-negative integer\n');
+
+    let errMax = '';
+    const badMaxCode = await runCli(['transcript', 'https://www.youtube.com/watch?v=abc'], {
+      ports: { httpGet: origin.get, dnsLookup: dns.lookup },
+      ytDlp: createYtDlpMock(),
+      env: { MAX_RESPONSE_BYTES: '0' },
+      stdout: () => {},
+      stderr: (s) => {
+        errMax += s;
+      },
+    });
+    expect(badMaxCode).toBe(1);
+    expect(errMax).toBe('Invalid MAX_RESPONSE_BYTES "0": must be a positive integer\n');
+  });
+
+  it('applies Operator env proxies, NO_PROXY, and explicit --proxy override across web subcommands (D24, D25)', async () => {
+    const origin = createOriginMock();
+    const dns = createDnsMock();
+    dns.fail('remote.invalid', 'ENOTFOUND');
+    origin.serve('https://remote.invalid/page', 200, '<p>proxied-cli</p>');
+
+    let out = '';
+    const envCode = await runCli(['html', 'https://remote.invalid/page'], {
+      ports: { httpGet: origin.get, dnsLookup: dns.lookup },
+      env: { HTTPS_PROXY: 'socks5://127.0.0.1:1080' },
+      stdout: (s) => {
+        out += s;
+      },
+      stderr: () => {},
+    });
+    expect(envCode).toBe(0);
+    expect(out).toBe('<p>proxied-cli</p>');
+    expect(origin.lastProxy('https://remote.invalid/page')).toBe('socks5://127.0.0.1:1080');
+
+    let overrideOut = '';
+    const overrideCode = await runCli(['html', 'https://remote.invalid/page', '--proxy', 'socks5h://127.0.0.1:1081'], {
+      ports: { httpGet: origin.get, dnsLookup: dns.lookup },
+      env: { HTTPS_PROXY: 'http://ignored:8080', NO_PROXY: 'remote.invalid' },
+      stdout: (s) => {
+        overrideOut += s;
+      },
+      stderr: () => {},
+    });
+    expect(overrideCode).toBe(0);
+    expect(overrideOut).toBe('<p>proxied-cli</p>');
+    expect(origin.lastProxy('https://remote.invalid/page')).toBe('socks5h://127.0.0.1:1081');
+
+    let errProxy = '';
+    const badProxyCode = await runCli(['html', 'http://example.com/nope'], {
+      ports: { httpGet: origin.get, dnsLookup: dns.lookup },
+      env: { HTTP_PROXY: 'ftp://proxy:21' },
+      stdout: () => {},
+      stderr: (s) => {
+        errProxy += s;
+      },
+    });
+    expect(badProxyCode).toBe(1);
+    expect(errProxy).toBe(
+      'Unsupported proxy protocol "ftp:" (supported: http, https, socks4, socks4a, socks5, socks5h)\n',
+    );
+    expect(origin.lastProxy('http://example.com/nope')).toBeUndefined();
+  });
+
+  it('delegates DNS and forwards --proxy to yt-dlp and direct fallback for mcp-fetch transcript (D26)', async () => {
+    const origin = createOriginMock();
+    const dns = createDnsMock();
+    dns.fail('www.youtube.com', 'ENOTFOUND');
+    const ytDlp = createYtDlpMock();
+    ytDlp.setAvailable(true);
+    ytDlp.serve(
+      'https://www.youtube.com/watch?v=proxcli',
+      'en',
+      '<transcript><text start="0" dur="1">Proxied transcript</text></transcript>',
+    );
+
+    let out = '';
+    const code = await runCli(
+      ['transcript', 'https://www.youtube.com/watch?v=proxcli', '--proxy', 'socks5://127.0.0.1:1080'],
+      {
+        ports: { httpGet: origin.get, dnsLookup: dns.lookup },
+        ytDlp,
+        env: { NO_PROXY: 'www.youtube.com' },
+        stdout: (s) => {
+          out += s;
+        },
+        stderr: () => {},
+      },
+    );
+    expect(code).toBe(0);
+    expect(out).toBe('[Transcript language: en — en]\n\n[0:00] Proxied transcript');
+    expect(ytDlp.lastArgs()).toContain('--proxy');
+    expect(ytDlp.lastArgs()).toContain('socks5://127.0.0.1:1080');
+  });
+});
