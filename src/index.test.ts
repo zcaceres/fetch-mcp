@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'bun:test';
 import { spawn } from 'node:child_process';
 import path from 'node:path';
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { ErrorCode, McpError } from '@modelcontextprotocol/sdk/types.js';
+import pkg from '../package.json' with { type: 'json' };
 import { createDnsMock } from './integrations/dns/mock.ts';
 import { createOriginMock } from './integrations/origin/mock.ts';
 import { createYtDlpMock } from './integrations/ytdlp/mock.ts';
@@ -169,6 +173,69 @@ describe('MCP stdio server conformance (MI-1, MI-2, MI-3, MI-4, MI-6)', () => {
     expect(ssrfResp?.error).toBeUndefined();
     expect(ssrfResp?.result?.isError).toBe(true);
     expect(ssrfResp?.result?.content?.[0]?.text).toBe('Blocked Target URL: private address "127.0.0.1"');
+  });
+
+  it('interoperates cleanly with the stock @modelcontextprotocol/sdk Client over StdioClientTransport (MI-2, MI-3, MI-4, MI-6)', async () => {
+    const serverPath = path.resolve(import.meta.dir, 'index.ts');
+    const transport = new StdioClientTransport({
+      command: process.execPath,
+      args: ['run', serverPath],
+      stderr: 'pipe',
+    });
+    const client = new Client({ name: 'sdk-interop-test', version: '1.0.0' });
+
+    await client.connect(transport);
+    try {
+      expect(client.getServerVersion()).toEqual({ name: 'zcaceres/fetch', version: pkg.version });
+      const caps = client.getServerCapabilities();
+      expect(caps?.tools).toBeDefined();
+      expect(caps?.resources).toBeUndefined();
+      expect(caps?.prompts).toBeUndefined();
+
+      const listed = await client.listTools();
+      expect(listed.tools.map((t) => t.name)).toEqual([
+        'fetch_html',
+        'fetch_markdown',
+        'fetch_readable',
+        'fetch_text',
+        'fetch_json',
+        'fetch_transcript',
+      ]);
+      for (const tool of listed.tools) {
+        expect(tool.inputSchema.properties).not.toHaveProperty('proxy');
+      }
+
+      let cursorError: unknown;
+      try {
+        await client.listTools({ cursor: 'invalid-cursor' });
+      } catch (error) {
+        cursorError = error;
+      }
+      expect(cursorError).toBeInstanceOf(McpError);
+      if (cursorError instanceof McpError) {
+        expect(cursorError.code).toBe(ErrorCode.InvalidParams);
+      }
+
+      let unknownToolError: unknown;
+      try {
+        await client.callTool({ name: 'fetch_txt', arguments: { url: 'https://example.com' } });
+      } catch (error) {
+        unknownToolError = error;
+      }
+      expect(unknownToolError).toBeInstanceOf(McpError);
+      if (unknownToolError instanceof McpError) {
+        expect(unknownToolError.code).toBe(ErrorCode.InvalidParams);
+      }
+
+      const ssrfRes = await client.callTool({
+        name: 'fetch_html',
+        arguments: { url: 'http://127.0.0.1/secret' },
+      });
+      expect(ssrfRes.isError).toBe(true);
+      expect(ssrfRes.content).toEqual([{ type: 'text', text: 'Blocked Target URL: private address "127.0.0.1"' }]);
+    } finally {
+      await client.close();
+    }
   });
 });
 

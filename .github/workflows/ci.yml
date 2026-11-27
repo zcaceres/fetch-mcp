@@ -1,0 +1,113 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Lint, Typecheck, Test & Scenarios (Bun)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Lint
+        run: bun run lint
+
+      - name: Typecheck
+        run: bun run typecheck
+
+      - name: Run unit, integration, and MCP conformance tests
+        run: bun test
+
+      - name: Replay DD harness scenarios
+        run: bun run harness run scenarios
+
+      - name: Build distribution bundles
+        run: bun run build
+
+  node-smoke:
+    name: Node.js ${{ matrix.node-version }} Bundle Smoke Check
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: ['20', '22']
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: Install dependencies and build
+        run: |
+          bun install --frozen-lockfile
+          bun run build
+
+      - name: Verify built CLI and MCP stdio server on Node.js
+        run: |
+          node -e '
+            const { execFileSync } = require("node:child_process");
+            const assert = require("node:assert/strict");
+            const pkg = require("./package.json");
+
+            // 1. CLI --version matches package.json
+            const ver = execFileSync(process.execPath, ["dist/cli.js", "--version"], { encoding: "utf-8" }).trim();
+            assert.equal(ver, pkg.version);
+
+            // 2. MCP server fails fast on invalid DEFAULT_LIMIT (MI-1, D29)
+            let failed = false;
+            try {
+              execFileSync(process.execPath, ["dist/index.js"], {
+                env: { ...process.env, DEFAULT_LIMIT: "bad" },
+                stdio: "pipe",
+              });
+            } catch (err) {
+              failed = true;
+              assert.equal(err.status, 1);
+              assert.match(String(err.stderr), /Invalid DEFAULT_LIMIT "bad"/);
+            }
+            assert.equal(failed, true);
+
+            // 3. MCP server 2025-11-25 handshake, capabilities, tools/list, and -32602 cursor (MI-2, MI-3, MI-4)
+            const input = [
+              JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-11-25", capabilities: {}, clientInfo: { name: "ci-smoke", version: "1.0.0" } } }),
+              JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" }),
+              JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/list", params: {} }),
+              JSON.stringify({ jsonrpc: "2.0", id: 3, method: "tools/list", params: { cursor: "bad" } }),
+            ].join("\n") + "\n";
+
+            const out = execFileSync(process.execPath, ["dist/index.js"], { input, encoding: "utf-8" });
+            const responses = out.trim().split("\n").map((line) => JSON.parse(line));
+            const init = responses.find((r) => r.id === 1);
+            assert.equal(init.result.protocolVersion, "2025-11-25");
+            assert.equal(init.result.serverInfo.version, pkg.version);
+            assert.ok(init.result.capabilities.tools);
+            assert.equal(init.result.capabilities.resources, undefined);
+            assert.equal(init.result.capabilities.prompts, undefined);
+
+            const listed = responses.find((r) => r.id === 2);
+            assert.deepEqual(
+              listed.result.tools.map((t) => t.name),
+              ["fetch_html", "fetch_markdown", "fetch_readable", "fetch_text", "fetch_json", "fetch_transcript"],
+            );
+            for (const tool of listed.result.tools) {
+              assert.equal("proxy" in tool.inputSchema.properties, false);
+            }
+
+            const badCursor = responses.find((r) => r.id === 3);
+            assert.equal(badCursor.error.code, -32602);
+            console.log("Node.js", process.version, "bundle smoke checks passed");
+          '
