@@ -208,4 +208,51 @@ exit 0`,
       },
     });
   });
+
+  it('strips ambient proxy env vars from yt-dlp subprocess when Proxy Policy resolves direct (PL-4, PL-8, D24, D26)', async () => {
+    const envFile = path.join(fixtureDir, 'captured-env.txt');
+    const stub = makeScript(
+      'ytdlp-env.sh',
+      `printf 'HTTPS_PROXY=%s\\nHTTP_PROXY=%s\\nALL_PROXY=%s\\nNO_PROXY=%s\\n' "$HTTPS_PROXY" "$HTTP_PROXY" "$ALL_PROXY" "$NO_PROXY" > "${envFile}"
+OUT=""
+while [ "$#" -gt 0 ]; do
+  if [ "$1" = "-o" ]; then OUT="$2"; shift 2; continue; fi
+  shift
+done
+printf '<transcript><text start="0">direct</text></transcript>' > "\${OUT}.en.srv1"
+exit 0`,
+    );
+
+    const saved = {
+      HTTPS_PROXY: process.env.HTTPS_PROXY,
+      HTTP_PROXY: process.env.HTTP_PROXY,
+      ALL_PROXY: process.env.ALL_PROXY,
+      NO_PROXY: process.env.NO_PROXY,
+    };
+
+    try {
+      process.env.HTTPS_PROXY = 'http://proxy.internal:8080';
+      process.env.HTTP_PROXY = 'http://proxy.internal:8080';
+      process.env.ALL_PROXY = 'socks5://proxy.internal:1080';
+      process.env.NO_PROXY = 'www.youtube.com:443';
+
+      const client = createRealYtDlp({ binary: stub });
+      const res = await client.downloadSubtitles(
+        TargetUrl('https://www.youtube.com/watch?v=direct1'),
+        LanguageCode('en'),
+        undefined,
+      );
+
+      expect(res.ok).toBe(true);
+      expect(readFileSync(envFile, 'utf-8')).toBe('HTTPS_PROXY=\nHTTP_PROXY=\nALL_PROXY=\nNO_PROXY=\n');
+    } finally {
+      for (const [key, val] of Object.entries(saved)) {
+        if (val === undefined) {
+          delete process.env[key];
+        } else {
+          process.env[key] = val;
+        }
+      }
+    }
+  });
 });

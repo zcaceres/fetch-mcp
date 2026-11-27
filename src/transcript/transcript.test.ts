@@ -9,7 +9,7 @@ import {
   parseCaptionXml,
   windowedExcerpt,
 } from './queries.ts';
-import { buildTranscript, extractCaptionTracks, prepareTranscriptRequest, selectCaptionTrack } from './verbs.ts';
+import { buildTranscript, extractCaptionTracks, prepareFetchTranscript, selectCaptionTrack } from './verbs.ts';
 
 describe('transcript domain (Slice 01)', () => {
   describe('isAllowedYouTubeHost', () => {
@@ -33,9 +33,9 @@ describe('transcript domain (Slice 01)', () => {
     });
   });
 
-  describe('prepareTranscriptRequest', () => {
+  describe('prepareFetchTranscript', () => {
     it('accepts a valid YouTube URL with defaults (D4, D9, I3)', () => {
-      const result = prepareTranscriptRequest({ url: 'https://www.youtube.com/watch?v=abc123' });
+      const result = prepareFetchTranscript({ url: 'https://www.youtube.com/watch?v=abc123' });
       expect(result).toEqual({
         ok: true,
         value: {
@@ -48,18 +48,18 @@ describe('transcript domain (Slice 01)', () => {
     });
 
     it('rejects malformed URLs, disallowed schemes, and non-YouTube hosts (I1, I3)', () => {
-      expect(prepareTranscriptRequest({ url: 'not-a-url' })).toEqual({
+      expect(prepareFetchTranscript({ url: 'not-a-url' })).toEqual({
         ok: false,
         error: { kind: 'invalid_request', message: 'Invalid Target URL: "not-a-url"' },
       });
-      expect(prepareTranscriptRequest({ url: 'file:///tmp/video' })).toEqual({
+      expect(prepareFetchTranscript({ url: 'file:///tmp/video' })).toEqual({
         ok: false,
         error: {
           kind: 'blocked_url',
           message: 'Blocked Target URL: disallowed scheme "file:" (only http: and https: are allowed)',
         },
       });
-      expect(prepareTranscriptRequest({ url: 'https://example.com/watch?v=123' })).toEqual({
+      expect(prepareFetchTranscript({ url: 'https://example.com/watch?v=123' })).toEqual({
         ok: false,
         error: {
           kind: 'blocked_url',
@@ -69,50 +69,50 @@ describe('transcript domain (Slice 01)', () => {
     });
 
     it('rejects unsafe lang codes and invalid Window bounds (I3, D14)', () => {
-      expect(prepareTranscriptRequest({ url: 'https://youtu.be/abc', lang: 'en;rm' })).toEqual({
+      expect(prepareFetchTranscript({ url: 'https://youtu.be/abc', lang: 'en;rm' })).toEqual({
         ok: false,
         error: {
           kind: 'invalid_request',
           message: 'Invalid language code "en;rm": only letters, digits, and hyphens are allowed',
         },
       });
-      expect(prepareTranscriptRequest({ url: 'https://youtu.be/abc', lang: '--exec' })).toEqual({
+      expect(prepareFetchTranscript({ url: 'https://youtu.be/abc', lang: '--exec' })).toEqual({
         ok: false,
         error: {
           kind: 'invalid_request',
           message: 'Invalid language code "--exec": only letters, digits, and hyphens are allowed',
         },
       });
-      expect(prepareTranscriptRequest({ url: 'https://youtu.be/abc', lang: '-o' })).toEqual({
+      expect(prepareFetchTranscript({ url: 'https://youtu.be/abc', lang: '-o' })).toEqual({
         ok: false,
         error: {
           kind: 'invalid_request',
           message: 'Invalid language code "-o": only letters, digits, and hyphens are allowed',
         },
       });
-      expect(prepareTranscriptRequest({ url: 'https://youtu.be/abc', lang: '' })).toEqual({
+      expect(prepareFetchTranscript({ url: 'https://youtu.be/abc', lang: '' })).toEqual({
         ok: false,
         error: {
           kind: 'invalid_request',
           message: 'Invalid language code "": only letters, digits, and hyphens are allowed',
         },
       });
-      expect(prepareTranscriptRequest({ url: 'https://youtu.be/abc', startIndex: -1 })).toEqual({
+      expect(prepareFetchTranscript({ url: 'https://youtu.be/abc', startIndex: -1 })).toEqual({
         ok: false,
         error: { kind: 'invalid_request', message: 'Invalid startIndex: must be a non-negative integer' },
       });
-      expect(prepareTranscriptRequest({ url: 'https://youtu.be/abc', maxLength: -5 })).toEqual({
+      expect(prepareFetchTranscript({ url: 'https://youtu.be/abc', maxLength: -5 })).toEqual({
         ok: false,
         error: { kind: 'invalid_request', message: 'Invalid maxLength: must be a non-negative integer' },
       });
     });
 
     it('accepts regional language codes with digits and rejects CR/LF headers (D18)', () => {
-      const valid = prepareTranscriptRequest({ url: 'https://youtu.be/abc', lang: 'es-419' });
+      const valid = prepareFetchTranscript({ url: 'https://youtu.be/abc', lang: 'es-419' });
       expect(valid.ok).toBe(true);
 
       expect(
-        prepareTranscriptRequest({
+        prepareFetchTranscript({
           url: 'https://youtu.be/abc',
           headers: { 'X-Bad': 'ok\r\nEvil: 1' },
         }),
@@ -124,7 +124,7 @@ describe('transcript domain (Slice 01)', () => {
         },
       });
       expect(
-        prepareTranscriptRequest({
+        prepareFetchTranscript({
           url: 'https://youtu.be/abc',
           headers: { 'X-Bad\nName': 'ok' },
         }),
@@ -141,7 +141,7 @@ describe('transcript domain (Slice 01)', () => {
         { 'X-Test': 'bad\u0000val' },
       ];
       for (const headers of cases) {
-        const res = prepareTranscriptRequest({ url: 'https://youtu.be/abc', headers });
+        const res = prepareFetchTranscript({ url: 'https://youtu.be/abc', headers });
         expect(res.ok).toBe(false);
         if (!res.ok) {
           expect(res.error.kind).toBe('invalid_request');

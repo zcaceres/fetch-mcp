@@ -11,6 +11,25 @@ export const DEFAULT_YTDLP_TIMEOUT_MS = 30_000;
 export const DEFAULT_YTDLP_MAX_BYTES = 10 * 1024 * 1024;
 const PROBE_TIMEOUT_MS = 5_000;
 
+const PROXY_ENV_KEYS = [
+  'HTTP_PROXY',
+  'HTTPS_PROXY',
+  'ALL_PROXY',
+  'NO_PROXY',
+  'http_proxy',
+  'https_proxy',
+  'all_proxy',
+  'no_proxy',
+] as const;
+
+const buildSanitizedChildEnv = (): NodeJS.ProcessEnv => {
+  const env: NodeJS.ProcessEnv = { ...process.env };
+  for (const key of PROXY_ENV_KEYS) {
+    delete env[key];
+  }
+  return env;
+};
+
 export type RealYtDlpOptions = {
   readonly binary?: string;
   readonly timeoutMs?: number;
@@ -26,18 +45,23 @@ const runExecFile = (
   timeoutMs: number,
 ): Promise<Result<void, { readonly timedOut: boolean; readonly message: string }>> =>
   new Promise((resolve) => {
-    execFile(binary, [...args], { timeout: timeoutMs, maxBuffer: 1024 * 1024 }, (error, _stdout, stderr) => {
-      if (!error) {
-        resolve(ok(undefined));
-        return;
-      }
-      if (isTimedOutError(error)) {
-        resolve(err({ timedOut: true, message: `yt-dlp timed out after ${timeoutMs}ms` }));
-        return;
-      }
-      const detail = stderr.trim() || error.message;
-      resolve(err({ timedOut: false, message: `yt-dlp failed: ${detail}` }));
-    });
+    execFile(
+      binary,
+      [...args],
+      { timeout: timeoutMs, maxBuffer: 1024 * 1024, env: buildSanitizedChildEnv() },
+      (error, _stdout, stderr) => {
+        if (!error) {
+          resolve(ok(undefined));
+          return;
+        }
+        if (isTimedOutError(error)) {
+          resolve(err({ timedOut: true, message: `yt-dlp timed out after ${timeoutMs}ms` }));
+          return;
+        }
+        const detail = stderr.trim() || error.message;
+        resolve(err({ timedOut: false, message: `yt-dlp failed: ${detail}` }));
+      },
+    );
   });
 
 const extractFileLang = (filename: string): string | undefined => /\.([^.]+)\.srv1$/.exec(filename)?.[1];

@@ -39,7 +39,7 @@ SOCKS4a, and SOCKS5 proxy integration tests), and `bun run harness run scenarios
 
 The Terminology this slice uses.
 
-- **Target URL**, **Proxy Policy**, **Raw Response**, **fetch**.
+- **Target URL**, **Proxy Policy**, **Wire Response**, **Raw Response**, **fetch**.
 
 ## What it reads and writes
 

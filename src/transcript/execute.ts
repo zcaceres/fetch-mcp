@@ -6,7 +6,7 @@ import {
   buildTranscript,
   DEFAULT_TRANSCRIPT_LIMIT,
   extractCaptionTracks,
-  prepareTranscriptRequest,
+  prepareFetchTranscript,
   selectCaptionTrack,
 } from './verbs.ts';
 
@@ -24,7 +24,7 @@ export const executeFetchTranscript = async (
   ports: TranscriptPorts,
   options: ExecuteTranscriptOptions = {},
 ): Promise<Result<WindowedExcerpt, TranscriptError>> => {
-  const prepared = prepareTranscriptRequest(input, options.defaultLimit ?? DEFAULT_TRANSCRIPT_LIMIT);
+  const prepared = prepareFetchTranscript(input, options.defaultLimit ?? DEFAULT_TRANSCRIPT_LIMIT);
   if (!prepared.ok) return prepared;
 
   let proxyUrl: string | undefined;

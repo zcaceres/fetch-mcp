@@ -31,7 +31,7 @@ scenarios) pass cleanly.
   - `src/fetching/ports.ts`: add `ResolveProxyPort`, optional `resolveProxy` on `FetchPorts`, and optional `proxyUrl?: string` on `HttpGetPort`.
   - `src/fetching/execute.ts`: resolve Proxy Policy per hop (`D24`); when proxied, skip local `dnsLookup` (`D8`, `D23`) and pass `pinnedIps = []` + `proxyUrl` to `httpGet`; when direct, preserve `I2` DNS validation & pinning.
   - `src/transcript/ports.ts`: add `ResolveTranscriptProxyPort`, optional `resolveProxy` on `TranscriptPorts`, and optional `proxyUrl?: string` on `YtDlpPort.downloadSubtitles`.
-  - `src/transcript/execute.ts`: resolve Proxy Policy after `prepareTranscriptRequest`; skip `checkHost` when proxied (`D8`, `D26`); pass `proxyUrl` into `ytDlp.downloadSubtitles`.
+  - `src/transcript/execute.ts`: resolve Proxy Policy after `prepareFetchTranscript`; skip `checkHost` when proxied (`D8`, `D26`); pass `proxyUrl` into `ytDlp.downloadSubtitles`.
 - Mocks & harness:
   - `src/integrations/origin/mock.ts`: record `lastProxy(url)` (`string | null | undefined` — `null` = direct, `string` = proxy URL, `undefined` = not requested).
   - `src/integrations/ytdlp/mock.ts`: forward `proxyUrl` to `buildYtDlpArgs(url, lang, '<tmp>/sub', proxyUrl)`.

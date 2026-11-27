@@ -401,4 +401,38 @@ describe('real proxy transport (Slice 02, PL-9)', () => {
     const auth = buildProxyAuthHeader(new URL('http://user:100%pass@127.0.0.1:8080'));
     expect(auth).toBe(`Basic ${Buffer.from('user:100%pass').toString('base64')}`);
   });
+
+  it('enforces a single shared timeoutMs deadline across proxy tunnel setup and TLS/HTTP stages (PL-9, D9, D23)', async () => {
+    const slowConnectThenStallTls = await listenTcp((socket) => {
+      let buf = Buffer.alloc(0);
+      const onData = (chunk: Buffer) => {
+        buf = Buffer.concat([buf, chunk]);
+        if (buf.indexOf('\r\n\r\n') === -1) return;
+        socket.off('data', onData);
+        setTimeout(() => {
+          if (!socket.destroyed) {
+            socket.write('HTTP/1.1 200 Connection Established\r\n\r\n');
+          }
+        }, 80);
+      };
+      socket.on('data', onData);
+    });
+    servers.push(slowConnectThenStallTls.server);
+
+    const httpGet = createRealHttpGet({ timeoutMs: 120 });
+    const started = performance.now();
+    const timedOut = await httpGet(
+      TargetUrl('https://slow.invalid/hang'),
+      {},
+      [],
+      `http://127.0.0.1:${slowConnectThenStallTls.port}`,
+    );
+    const elapsedMs = performance.now() - started;
+
+    expect(timedOut).toEqual({
+      ok: false,
+      error: { kind: 'timeout', message: 'Request timed out after 120ms fetching https://slow.invalid/hang' },
+    });
+    expect(elapsedMs).toBeLessThan(180);
+  });
 });

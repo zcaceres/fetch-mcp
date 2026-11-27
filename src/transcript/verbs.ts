@@ -68,7 +68,7 @@ const validateHeaders = (rawHeaders: Headers | undefined): Result<Headers, Trans
  * Validates a YouTube transcript Fetch Request against URL allowlist, lang code, Window bounds,
  * and CR/LF header rules before any subprocess or network I/O (D4, D8, D9, D14, D18, D19, I1, I3).
  */
-export const prepareTranscriptRequest = (
+export const prepareFetchTranscript = (
   input: RawTranscriptInput,
   defaultLimit: number = DEFAULT_TRANSCRIPT_LIMIT,
 ): Result<FetchRequest, TranscriptError> => {

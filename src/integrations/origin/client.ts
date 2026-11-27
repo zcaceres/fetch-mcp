@@ -135,20 +135,24 @@ const mapTunnelError = (url: TargetUrl, redactedProxy: string, timeoutMs: number
 const openProxyTunnelIfNeeded = async (
   parsedProxy: URL,
   targetUrl: URL,
-  timeoutMs: number,
+  deadline: number,
 ): Promise<Result<net.Socket | undefined, TunnelError>> => {
   const isHttpProxy = parsedProxy.protocol === 'http:' || parsedProxy.protocol === 'https:';
   if (isHttpProxy && targetUrl.protocol === 'http:') {
     return ok(undefined);
   }
 
+  const tunnelTimeoutMs = deadline - Date.now();
+  if (tunnelTimeoutMs <= 0) {
+    return err({ kind: 'timeout', message: 'Proxy tunnel timed out' });
+  }
   let baseSocket: Result<net.Socket, TunnelError>;
   if (isHttpProxy) {
-    baseSocket = await openHttpConnectTunnel(parsedProxy, targetUrl, timeoutMs);
+    baseSocket = await openHttpConnectTunnel(parsedProxy, targetUrl, tunnelTimeoutMs);
   } else if (parsedProxy.protocol === 'socks4:' || parsedProxy.protocol === 'socks4a:') {
-    baseSocket = await openSocks4Tunnel(parsedProxy, targetUrl, timeoutMs);
+    baseSocket = await openSocks4Tunnel(parsedProxy, targetUrl, tunnelTimeoutMs);
   } else if (parsedProxy.protocol === 'socks5:' || parsedProxy.protocol === 'socks5h:') {
-    baseSocket = await openSocks5Tunnel(parsedProxy, targetUrl, timeoutMs);
+    baseSocket = await openSocks5Tunnel(parsedProxy, targetUrl, tunnelTimeoutMs);
   } else {
     return err({ kind: 'proxy_error', message: `Unsupported proxy protocol "${parsedProxy.protocol}"` });
   }
@@ -156,7 +160,12 @@ const openProxyTunnelIfNeeded = async (
   if (!baseSocket.ok) return baseSocket;
 
   if (targetUrl.protocol === 'https:') {
-    return wrapTlsOverTunnel(baseSocket.value, targetUrl, timeoutMs);
+    const tlsTimeoutMs = deadline - Date.now();
+    if (tlsTimeoutMs <= 0) {
+      baseSocket.value.destroy();
+      return err({ kind: 'timeout', message: 'TLS handshake over proxy timed out' });
+    }
+    return wrapTlsOverTunnel(baseSocket.value, targetUrl, tlsTimeoutMs);
   }
   return baseSocket;
 };
@@ -179,14 +188,21 @@ export const createRealHttpGet = (options: RealHttpGetOptions = {}): HttpGetPort
     const targetUrl = new URL(url);
     const parsedProxy = proxyUrl !== undefined ? new URL(proxyUrl) : undefined;
     const redactedProxy = proxyUrl !== undefined ? redactProxyUrl(proxyUrl) : undefined;
+    const deadline = Date.now() + timeoutMs;
 
     let tunnelSocket: net.Socket | undefined;
     if (parsedProxy && redactedProxy) {
-      const opened = await openProxyTunnelIfNeeded(parsedProxy, targetUrl, timeoutMs);
+      const opened = await openProxyTunnelIfNeeded(parsedProxy, targetUrl, deadline);
       if (!opened.ok) {
         return err(mapTunnelError(url, redactedProxy, timeoutMs, opened.error));
       }
       tunnelSocket = opened.value;
+    }
+
+    const remainingTimeoutMs = deadline - Date.now();
+    if (remainingTimeoutMs <= 0) {
+      tunnelSocket?.destroy();
+      return err({ kind: 'timeout', message: `Request timed out after ${timeoutMs}ms fetching ${url}` });
     }
 
     return new Promise((resolve) => {
@@ -285,7 +301,7 @@ export const createRealHttpGet = (options: RealHttpGetOptions = {}): HttpGetPort
               method: 'GET',
               headers: reqHeaders,
               agent: false,
-              timeout: timeoutMs,
+              timeout: remainingTimeoutMs,
             },
             onResponse,
           );
@@ -303,7 +319,7 @@ export const createRealHttpGet = (options: RealHttpGetOptions = {}): HttpGetPort
               method: 'GET',
               headers: { ...headers },
               agent,
-              timeout: timeoutMs,
+              timeout: remainingTimeoutMs,
             },
             onResponse,
           );
@@ -320,7 +336,7 @@ export const createRealHttpGet = (options: RealHttpGetOptions = {}): HttpGetPort
               headers: { ...headers },
               agent: false,
               lookup,
-              timeout: timeoutMs,
+              timeout: remainingTimeoutMs,
             },
             onResponse,
           );

@@ -49,7 +49,7 @@ The Terminology this slice uses.
 
 | Function | Rule | Error |
 |---|---|---|
-| `executeFetchTranscript(input, ports, options?)` | Runs `prepareTranscriptRequest` first (`I3`), then `ports.checkHost(hostname)` if provided (`I2`, `I3`). Never invokes `ytDlp` or falls back if either fails. When `ports.ytDlp` is provided and `isAvailable()` is true, tries `downloadSubtitles(url, lang)` -> `buildTranscript(...)`; if `downloadSubtitles` or `buildTranscript` fails, falls back to direct watch-page extraction (D7, D21, D22). | Validation/SSRF errors from `prepareTranscriptRequest` / `checkHost`, or direct-extraction error if `yt-dlp` fails/falls back |
+| `executeFetchTranscript(input, ports, options?)` | Runs `prepareFetchTranscript` first (`I3`), then `ports.checkHost(hostname)` if provided (`I2`, `I3`). Never invokes `ytDlp` or falls back if either fails. When `ports.ytDlp` is provided and `isAvailable()` is true, tries `downloadSubtitles(url, lang)` -> `buildTranscript(...)`; if `downloadSubtitles` or `buildTranscript` fails, falls back to direct watch-page extraction (D7, D21, D22). | Validation/SSRF errors from `prepareFetchTranscript` / `checkHost`, or direct-extraction error if `yt-dlp` fails/falls back |
 
 ## Queries (`src/transcript/queries.ts`)
 
