@@ -124,7 +124,9 @@ export const parseCliArgs = (argv: readonly string[]): Result<CliAction, string>
         const parsed = parseHeaderFlag(value);
         if (!parsed.ok) return parsed;
         const [k, v] = parsed.value;
-        headers[k] = v;
+        if (!(k in headers) || !/[\r\n]/.test(headers[k] ?? '')) {
+          headers[k] = v;
+        }
         i++;
         break;
       }
@@ -150,6 +152,9 @@ export const parseCliArgs = (argv: readonly string[]): Result<CliAction, string>
         i++;
         break;
       case '--lang':
+        if (subcommand !== 'transcript') {
+          return err('--lang is only valid with the "transcript" command');
+        }
         if (value === undefined || value.startsWith('--')) {
           return err('--lang requires a value');
         }

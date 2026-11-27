@@ -171,7 +171,7 @@ const PlayerResponseSchema = z.object({
     .object({
       playerCaptionsTracklistRenderer: z
         .object({
-          captionTracks: z.array(CaptionTrackSchema).optional(),
+          captionTracks: z.array(z.unknown()).optional(),
         })
         .optional(),
     })
@@ -179,38 +179,56 @@ const PlayerResponseSchema = z.object({
 });
 
 /**
- * Extracts CaptionTrack records from YouTube watch page HTML (`ytInitialPlayerResponse`) (D14).
+ * Extracts CaptionTrack records from YouTube watch page HTML (`ytInitialPlayerResponse`) (D14, D21).
+ * Scans subsequent marker matches if an earlier match is not valid JSON and skips malformed individual track entries.
  */
 export const extractCaptionTracks = (html: string): Result<readonly CaptionTrack[], TranscriptError> => {
-  const marker = /ytInitialPlayerResponse\s*=\s*\{/.exec(html);
-  if (!marker) {
+  const markerRegex = /ytInitialPlayerResponse\s*=\s*\{/g;
+  let parsedPlayerResponse: z.infer<typeof PlayerResponseSchema> | undefined;
+
+  for (let match = markerRegex.exec(html); match !== null; match = markerRegex.exec(html)) {
+    const braceStart = match.index + match[0].length - 1;
+    const jsonText = extractJsonObjectStartingAt(html, braceStart);
+    if (jsonText === null) continue;
+
+    let rawJson: unknown;
+    try {
+      rawJson = JSON.parse(jsonText);
+    } catch {
+      continue;
+    }
+
+    const parsed = PlayerResponseSchema.safeParse(rawJson);
+    if (parsed.success) {
+      parsedPlayerResponse = parsed.data;
+      break;
+    }
+  }
+
+  if (parsedPlayerResponse === undefined) {
     return err({ kind: 'not_found', message: 'Could not find ytInitialPlayerResponse in page HTML' });
   }
 
-  const braceStart = marker.index + marker[0].length - 1;
-  const jsonText = extractJsonObjectStartingAt(html, braceStart);
-  if (jsonText === null) {
-    return err({ kind: 'not_found', message: 'Could not find ytInitialPlayerResponse in page HTML' });
-  }
-
-  let rawJson: unknown;
-  try {
-    rawJson = JSON.parse(jsonText);
-  } catch {
-    return err({ kind: 'not_found', message: 'Could not find ytInitialPlayerResponse in page HTML' });
-  }
-
-  const parsed = PlayerResponseSchema.safeParse(rawJson);
-  const rawTracks = parsed.success ? parsed.data.captions?.playerCaptionsTracklistRenderer?.captionTracks : undefined;
+  const rawTracks = parsedPlayerResponse.captions?.playerCaptionsTracklistRenderer?.captionTracks;
   if (!rawTracks || rawTracks.length === 0) {
     return err({ kind: 'not_found', message: 'No caption tracks found for this video' });
   }
 
-  const tracks: CaptionTrack[] = rawTracks.map((track) => ({
-    languageCode: track.languageCode,
-    baseUrl: track.baseUrl,
-    name: track.name?.simpleText ?? track.name?.runs?.map((r) => r.text).join('') ?? track.languageCode,
-  }));
+  const tracks: CaptionTrack[] = [];
+  for (const item of rawTracks) {
+    const parsedTrack = CaptionTrackSchema.safeParse(item);
+    if (!parsedTrack.success) continue;
+    const track = parsedTrack.data;
+    tracks.push({
+      languageCode: track.languageCode,
+      baseUrl: track.baseUrl,
+      name: track.name?.simpleText ?? track.name?.runs?.map((r) => r.text).join('') ?? track.languageCode,
+    });
+  }
+
+  if (tracks.length === 0) {
+    return err({ kind: 'not_found', message: 'No caption tracks found for this video' });
+  }
 
   return ok(tracks);
 };

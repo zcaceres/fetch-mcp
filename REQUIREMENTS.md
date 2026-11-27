@@ -75,22 +75,22 @@ system computes a value for us, its rule for it is recorded here, as that system
 ## Functional Requirements
 
 ### Web Content Fetching
-- An Agent or CLI User can `fetch` a public `http:` or `https:` Target URL and receive its Rendered Output as `html`, `markdown`, `readable`, `text`, or `json`, with single-attempt delivery, case-insensitive `User-Agent`/`Accept-Encoding` defaulting, and header CR/LF rejection (D1, D3, D4, D12, D16, D18).
+- An Agent or CLI User can `fetch` a public `http:` or `https:` Target URL and receive its Rendered Output as `html`, `markdown`, `readable`, `text`, or `json`, with single-attempt delivery, case-insensitive `User-Agent`/`Accept-Encoding` defaulting, case-insensitive last-value-wins deduplication of duplicate caller headers, and rejection of CR/LF, non-HTTP-token header names, and invalid header-value characters (D1, D3, D4, D12, D16, D18).
 - `fetch` follows up to 10 HTTP redirects, validating every redirect hop against SSRF rules, stripping `Authorization`, `Cookie`, and `Proxy-Authorization` headers across origin boundaries, and treating redirect statuses without a `Location` header as non-2xx HTTP errors (D8, D9, D14, D17, I1, I4).
-- `fetch` rejects clearly binary `Content-Type` responses with a typed error, decodes text-based responses as UTF-8, decompresses `gzip`/`deflate`/`br` responses, and passes unknown `Content-Encoding` values through unchanged (D17, I5).
+- `fetch` rejects clearly binary `Content-Type` responses with a typed error, skips decompression for non-2xx or 0-byte responses, decodes text-based responses as UTF-8, decompresses single-token `gzip`/`x-gzip`/`deflate`/`br` responses (failing explicitly on corrupted payloads), and passes unknown or multi-value `Content-Encoding` values through unchanged (D14, D17, I5).
 - `fetch` returns a Windowed Excerpt (sliced text only) selected by `startIndex` (default `0`) and `maxLength` (default `DEFAULT_LIMIT` = `5000`; `0` = unlimited), returning `""` when `startIndex` is at or beyond the output length (D4, D9, D14, D15).
 - Non-2xx HTTP responses, invalid JSON payloads for `json` format, and pages unparseable by Readability for `readable` format fail explicitly with typed domain errors (D14, D16).
 
 ### YouTube Transcript Fetching
 - An Agent or CLI User can `fetch transcript` for an allowlisted YouTube Target URL with an optional caption language code (default `"en"`) and Window bounds (D3, D4, D7, D12, D20, I3).
-- `fetch transcript` tries local `yt-dlp` first (with `--write-sub`, `--write-auto-sub`, `--` end-of-options sentinel, and `30s` timeout) when present on `PATH` and falls back to direct YouTube watch-page and caption-XML extraction if `yt-dlp` is unavailable or fails, without swallowing validation or SSRF errors (D7, D9, D21, I3).
+- `fetch transcript` tries local `yt-dlp` first (with `--write-sub`, `--write-auto-sub`, `--` end-of-options sentinel, and `30s` timeout) when present on `PATH` and falls back to direct YouTube watch-page and caption-XML extraction if `yt-dlp` is unavailable or fails, without swallowing validation or SSRF errors and stripping sensitive headers across origin boundaries when fetching caption track URLs (D7, D9, D21, I3, I4).
 - When a YouTube video has captions but none matching the requested language, `fetch transcript` fails explicitly with a typed error listing available language codes (D14, D20).
-- `fetch transcript` parses `srv1`/`srv3` XML (decoding standard, numeric, and double-encoded HTML entities) and returns a Windowed Excerpt of the Transcript, formatted as a language header followed by timestamped caption lines (D4, D9, D15, D21).
+- `fetch transcript` extracts `ytInitialPlayerResponse` resiliently (scanning past non-JSON matches and skipping malformed individual track entries), parses `srv1`/`srv3` XML (decoding standard, decimal, case-insensitive hex, and double-encoded HTML entities), and returns a Windowed Excerpt of the Transcript, formatted as a language header followed by timestamped caption lines (D4, D9, D15, D21).
 
 ### Interfaces & Proxy Routing
 - The MCP stdio server (`mcp-fetch-server`) exposes six tools aligned to Terminology: `fetch_html`, `fetch_markdown`, `fetch_readable`, `fetch_text`, `fetch_json`, and `fetch_transcript`, accepting custom request headers and never accepting a caller-supplied `proxy` parameter (D1, D6, D10, D12, I6).
-- The local CLI (`mcp-fetch`) exposes six matching subcommands (`html`, `markdown`, `readable`, `text`, `json`, `transcript`) and supports `--header`, `--proxy`, `--max-length`, `--start-index`, and `--lang` (D1, D6, D10, D12).
-- Operator proxy configuration (`HTTPS_PROXY`, `HTTP_PROXY`, `ALL_PROXY`, honoring `NO_PROXY`) and CLI `--proxy` overrides support HTTP, HTTPS, and SOCKS (`socks4`, `socks4a`, `socks5`, `socks5h`) proxies, re-evaluating Proxy Policy per redirect hop and failing explicitly on invalid proxy URLs or invalid `DEFAULT_LIMIT` / `MAX_RESPONSE_BYTES` env settings (D2, D5, D6, D23, D24, D25, D26).
+- The local CLI (`mcp-fetch`) exposes six matching subcommands (`html`, `markdown`, `readable`, `text`, `json`, `transcript`) and supports `--header`, `--proxy`, `--max-length`, `--start-index`, and `--lang` (`--lang` is valid only on `transcript` and rejected on web subcommands) (D1, D6, D10, D12).
+- Operator proxy configuration (`HTTPS_PROXY`, `HTTP_PROXY`, `ALL_PROXY`, honoring `NO_PROXY`) and CLI `--proxy` overrides support HTTP, HTTPS, and SOCKS (`socks4`, `socks4a`, `socks5`, `socks5h`) proxies, re-evaluating Proxy Policy per redirect hop, redacting proxy credentials from all error/diagnostic output, and failing explicitly on invalid or blank proxy URLs or invalid `DEFAULT_LIMIT` / `MAX_RESPONSE_BYTES` env settings (D2, D5, D6, D23, D24, D25, D26, D31, I7).
 - Typed domain errors map to `isError: true` text results in MCP responses and `stderr` output with exit code `1` in the CLI (D14).
 
 ## Non-Functional Requirements
@@ -115,9 +115,10 @@ for an undecided rule and will change with it.
 | I1 | Every Target URL (initial request and every redirect hop) uses `http:` or `https:` and never targets `localhost`, `*.localhost`, or any IANA-reserved IPv4/IPv6 literal (including IPv4-mapped IPv6 and multicast); malformed IP inputs fail closed. | D8 | Decided |
 | I2 | On direct (non-proxied) connections, every DNS record resolved for a hostname must be a public IP and validated addresses are pinned directly to the socket; DNS errors or empty answers fail closed. | D8 | Decided |
 | I3 | `fetch transcript` accepts only allowlisted YouTube hosts (`youtube.com`, `www.youtube.com`, `m.youtube.com`, `music.youtube.com`, `youtu.be`), and input/SSRF validation failures (including invalid language codes) are never swallowed into fallback. | D7, D8 | Decided |
-| I4 | Sensitive headers (`Authorization`, `Cookie`, `Proxy-Authorization`) are never forwarded across an origin boundary during HTTP redirects. | D9 | Decided |
+| I4 | Sensitive headers (`Authorization`, `Cookie`, `Proxy-Authorization`) are never forwarded across an origin boundary during HTTP redirects or from a YouTube watch page to a cross-origin caption track URL in direct transcript extraction. | D7, D9 | Decided |
 | I5 | No Raw Response may exceed `MAX_RESPONSE_BYTES` in either raw wire bytes or decompressed bytes. | D9 | Decided |
 | I6 | An Agent calling an MCP tool can never supply or override proxy routing. | D2, D6 | Decided |
+| I7 | Proxy URL credentials (username and password, in both valid and malformed proxy strings) are always redacted before appearing in error messages, CLI `stderr`, MCP tool results, or harness output. | D31 | Decided |
 
 ## Not Yet in Scope
 
@@ -155,7 +156,7 @@ for an undecided rule and will change with it.
 
 ### D7. YouTube transcript retrieval strategy
 
-- **Decided (2026-11-25):** `fetch transcript` invokes local `yt-dlp` first when available on `PATH`, falling back to direct YouTube page + caption XML extraction if `yt-dlp` is unavailable or fails. Input validation / SSRF errors must never be swallowed into fallback.
+- **Decided (2026-11-27):** `fetch transcript` invokes local `yt-dlp` first when available on `PATH`, falling back to direct YouTube page + caption XML extraction if `yt-dlp` is unavailable or fails. Input validation / SSRF errors must never be swallowed into fallback. In direct extraction, caption track URLs go through full SSRF/DNS validation without restricting `captionTrack.baseUrl` to the watch-page host allowlist, and sensitive headers (`Authorization`, `Cookie`, `Proxy-Authorization`) are stripped whenever `captionTrack.baseUrl` has a different origin from the watch page URL (I4).
 
 ### D8. SSRF protection and proxy DNS delegation
 
@@ -175,7 +176,7 @@ for an undecided rule and will change with it.
 
 ### D12. Breaking MCP tool and CLI subcommand names
 
-- **Decided (2026-11-25):** Align MCP tool names and CLI subcommands directly to Terminology (per D4, D10): six MCP tools (`fetch_html`, `fetch_markdown`, `fetch_readable`, `fetch_text`, `fetch_json`, `fetch_transcript`) and six matching CLI subcommands (`html`, `markdown`, `readable`, `text`, `json`, `transcript`).
+- **Decided (2026-11-27):** Align MCP tool names and CLI subcommands directly to Terminology (per D4, D10): six MCP tools (`fetch_html`, `fetch_markdown`, `fetch_readable`, `fetch_text`, `fetch_json`, `fetch_transcript`) and six matching CLI subcommands (`html`, `markdown`, `readable`, `text`, `json`, `transcript`). In the CLI, `--lang` is accepted only on `transcript` and rejected with an explicit validation error on web subcommands.
 
 ### D13. Runtime floor and MCP conformance target
 
@@ -195,11 +196,11 @@ for an undecided rule and will change with it.
 
 ### D17. Binary Content-Type guard and HTTP response decoding
 
-- **Decided (2026-11-25):** `fetch` rejects clearly binary `Content-Type` responses (`image/*` excluding `image/svg+xml`, `audio/*`, `video/*`, `application/octet-stream`, `application/pdf`, `application/zip`, `font/*`) with a typed error. Text-based, `image/svg+xml`, or missing `Content-Type` responses are decoded as UTF-8. Redirect statuses (`301`, `302`, `303`, `307`, `308`) with no `Location` header are treated as non-2xx HTTP errors. Supported `Content-Encoding` values (`gzip`, `x-gzip`, `deflate`, `br`) are decompressed under `MAX_RESPONSE_BYTES` (I5); unknown encodings are passed through unchanged.
+- **Decided (2026-11-27):** `fetch` rejects clearly binary `Content-Type` responses (`image/*` excluding `image/svg+xml`, `audio/*`, `video/*`, `application/octet-stream`, `application/pdf`, `application/zip`, `font/*`) with a typed error. Text-based, `image/svg+xml`, or missing `Content-Type` responses are decoded as UTF-8. Redirect statuses (`301`, `302`, `303`, `307`, `308`) with no `Location` header (or a whitespace-only `Location`) are treated as non-2xx HTTP errors. Non-2xx responses and 0-byte bodies are not decompressed (HTTP status evaluation precedes decompression while raw byte caps still apply under I5). Single-token supported `Content-Encoding` values (`gzip`, `x-gzip`, `deflate`, `br`) are decompressed under `MAX_RESPONSE_BYTES` (I5), failing explicitly with a typed decode error on corrupted payloads (D14); unknown encodings and comma-separated multi-value `Content-Encoding` headers (such as `gzip, br`) are passed through unchanged.
 
 ### D18. Single-attempt delivery and request header hygiene
 
-- **Decided (2026-11-25):** `fetch` is strictly single-attempt (never auto-retries 5xx, connection, or timeout errors). Default `User-Agent` and `Accept-Encoding` (`gzip, deflate, br`) headers are applied only when the caller has not supplied them (checked case-insensitively). Custom header names or values containing CR (`\r`) or LF (`\n`) control characters are rejected with a typed validation error.
+- **Decided (2026-11-27):** `fetch` is strictly single-attempt (never auto-retries 5xx, connection, or timeout errors). Default `User-Agent` and `Accept-Encoding` (`gzip, deflate, br`) headers are applied only when the caller has not supplied them (checked case-insensitively). Duplicate caller headers differing only in case are deduplicated with last value wins. Custom headers reject CR (`\r`) or LF (`\n`) control characters in names or values, non-RFC-9110 HTTP token header names, and invalid header-value characters (control bytes `< 0x20` other than HTAB `0x09`, `0x7f`, or non-Latin-1 code points `> 0xff`) with a typed validation error.
 
 ### D19. Window noun and WebFormat subset
 
@@ -209,9 +210,9 @@ for an undecided rule and will change with it.
 
 - **Decided (2026-11-26):** Caption track selection matches the requested `lang` case-insensitively by exact code first (`en` → `en`), then by regional prefix (`en` → `en-US`, `en-GB`). When a YouTube video has caption tracks but none matches, `fetch transcript` returns a typed error listing the available language codes instead of silently falling back to another language. Resolves U1.
 
-### D21. YouTube auto-generated subtitles and HTML entity decoding
+### D21. YouTube auto-generated subtitles, resilient extraction, and HTML entity decoding
 
-- **Decided (2026-11-26):** When invoking `yt-dlp`, `fetch transcript` passes both `--write-sub` and `--write-auto-sub` (with `--sub-format srv1`, `--skip-download`, `--` end-of-options sentinel, and `30s` timeout) so auto-generated captions work consistently with direct extraction. Caption XML entity decoding handles standard named entities (`&amp;`, `&lt;`, `&gt;`, `&quot;`, `&apos;`), numeric decimal/hex entities (`&#39;`, `&#160;`, `&#x27;`), and YouTube's double-encoded entities (such as `&amp;#39;`).
+- **Decided (2026-11-27):** When invoking `yt-dlp`, `fetch transcript` passes both `--write-sub` and `--write-auto-sub` (with `--sub-format srv1`, `--skip-download`, `--` end-of-options sentinel, and `30s` timeout) so auto-generated captions work consistently with direct extraction. In direct extraction, `extractCaptionTracks` scans subsequent `ytInitialPlayerResponse = {` matches if an earlier match is not valid JSON and skips individual malformed `captionTracks` entries rather than failing the whole track list. Caption XML entity decoding handles standard named entities (`&amp;`, `&lt;`, `&gt;`, `&quot;`, `&apos;`), numeric decimal and case-insensitive hex entities (`&#39;`, `&#160;`, `&#x27;`, `&#X27;`), and YouTube's double-encoded entities (such as `&amp;#39;`).
 
 ### D22. Empty or unrecognized caption XML fails explicitly
 
@@ -223,11 +224,11 @@ for an undecided rule and will change with it.
 
 ### D24. Proxy Policy precedence, `NO_PROXY`, bare `host:port`, and per-hop evaluation
 
-- **Decided (2026-11-26):** Effective **Proxy Policy** is resolved per Target URL and re-evaluated on every HTTP redirect hop: explicit CLI `--proxy` always takes precedence and bypasses `NO_PROXY`; otherwise Operator env vars apply while honoring `NO_PROXY`/`no_proxy` (`*`, exact host, `.domain`/subdomain suffix, optional `:port`, and `[ipv6]:port`). For `https:` targets, precedence is `HTTPS_PROXY` → `https_proxy` → `HTTP_PROXY` → `http_proxy` → `ALL_PROXY` → `all_proxy`; for `http:` targets, `HTTP_PROXY` → `http_proxy` → `ALL_PROXY` → `all_proxy`. Bare `host:port` values without a scheme are normalized to `http://<host:port>`.
+- **Decided (2026-11-27):** Effective **Proxy Policy** is resolved per Target URL and re-evaluated on every HTTP redirect hop: explicit CLI `--proxy` always takes precedence and bypasses `NO_PROXY`; otherwise Operator env vars apply while honoring `NO_PROXY`/`no_proxy` (`*`, exact host, `.domain`/subdomain suffix, optional `:port`, and `[ipv6]:port` with canonical IPv6 matching; non-empty `NO_PROXY` takes precedence over `no_proxy`, and empty/blank `NO_PROXY` falls back to `no_proxy`). For `https:` targets, precedence is `HTTPS_PROXY` → `https_proxy` → `HTTP_PROXY` → `http_proxy` → `ALL_PROXY` → `all_proxy`; for `http:` targets, `HTTP_PROXY` → `http_proxy` → `ALL_PROXY` → `all_proxy`. Bare scheme-less proxy values must include an explicit `:<port>` (`host:port` or `[ipv6]:port`) to normalize to `http://<host:port>`; bare hostnames without `:port` fail as malformed per D25.
 
 ### D25. Fail explicitly on invalid Operator limits and invalid proxy URLs
 
-- **Decided (2026-11-26):** Non-empty `DEFAULT_LIMIT` (must be a non-negative integer; `0` = unlimited) and `MAX_RESPONSE_BYTES` (must be a positive integer) env values that are invalid fail explicitly with a typed configuration error rather than silently falling back to defaults. Malformed or unsupported proxy URLs (whether from env vars or CLI `--proxy`) fail explicitly with a typed error and never silently fall back to a direct connection.
+- **Decided (2026-11-27):** Non-empty `DEFAULT_LIMIT` (must be a non-negative integer; `0` = unlimited) and `MAX_RESPONSE_BYTES` (must be a positive integer) env values that are invalid fail explicitly with a typed configuration error rather than silently falling back to defaults. Malformed, unsupported, or bare scheme-less without `:<port>` proxy URLs (whether from env vars or CLI `--proxy`) — as well as an explicitly supplied empty or whitespace-only CLI `--proxy` value — fail explicitly with a typed error and never silently fall back to Operator env or a direct connection.
 
 ### D26. Proxy routing for `fetch transcript`
 
@@ -235,11 +236,11 @@ for an undecided rule and will change with it.
 
 ### D27. MCP `2025-11-25` capabilities, `-32602` invalid cursor, and `2026-07-28` deferral
 
-- **Decided (2026-11-26):** `mcp-fetch-server` advertises only implemented capabilities (`tools: {}`, never `resources` or `prompts`) and rejects any unrecognized `cursor` parameter on `tools/list` with JSON-RPC `-32602` (`InvalidParams`). Adoption of MCP `2026-07-28` `server/discover` remains deferred until `@modelcontextprotocol/sdk` supports it (D13). Resolves U4.
+- **Decided (2026-11-27):** `mcp-fetch-server` advertises only implemented capabilities (`tools: {}`, never `resources` or `prompts`) and rejects any unrecognized `cursor` string on `tools/list` with JSON-RPC `-32602` (`InvalidParams`). Malformed non-spec JSON-RPC `params` types (such as `cursor: null` or numeric `cursor`) keep `@modelcontextprotocol/sdk`'s default `-32603` schema rejection before handlers run. Adoption of MCP `2026-07-28` `server/discover` remains deferred until `@modelcontextprotocol/sdk` supports it (D13). Resolves U4.
 
 ### D28. MCP `tools/call` error surface and silent `proxy` stripping
 
-- **Decided (2026-11-26):** Unknown tool names on `tools/call` return JSON-RPC `-32602` (`InvalidParams`). Tool argument validation errors and domain/transport/proxy errors return `CallToolResult` with `isError: true` and the typed error message so the Agent can inspect and self-correct (D14). Caller-supplied `proxy` properties are omitted from all MCP tool schemas and silently stripped/ignored if smuggled in arguments (I6).
+- **Decided (2026-11-27):** Unknown tool names on `tools/call` return JSON-RPC `-32602` (`InvalidParams`). Tool argument validation errors (on valid JSON-RPC object `arguments` or omitted `arguments`) and domain/transport/proxy errors return `CallToolResult` with `isError: true` and the typed error message so the Agent can inspect and self-correct (D14). Malformed non-object JSON-RPC `arguments` types (such as `null`, strings, or arrays) keep `@modelcontextprotocol/sdk`'s default `-32603` schema rejection. Caller-supplied `proxy` properties are omitted from all MCP tool schemas and silently stripped/ignored if smuggled in arguments (I6).
 
 ### D29. Fail-fast Operator limits at MCP server startup
 
@@ -248,6 +249,10 @@ for an undecided rule and will change with it.
 ### D30. Extended domain vocabulary and derived-noun boundary
 
 - **Decided (2026-11-26):** Formalize **Operator Limits**, **Wire Response**, and **Caption Track** as Terminology nouns and **parse operator limits** and **resolve proxy policy** as Terminology verbs for the `src/policy/` context (D4, D7, D9, D17, D20, D23–D25, D29). Reserve the *(derived)* marker strictly for **Windowed Excerpt** (computed by an infallible query in `queries.ts`); **Rendered Output** and **Transcript** remain unpersisted verb outputs because D14, D16, D17, and D22 require their construction to fail with typed `Result` errors.
+
+### D31. Mandatory proxy credential redaction
+
+- **Decided (2026-11-27):** Proxy URL credentials (username and password, in both valid URLs and malformed proxy strings — including passwords containing `@`, `/`, `?`, `#`, or `%`) are always redacted before appearing in error messages, CLI `stderr`, MCP tool results, or harness output (I7; relates to D5, D14, D23, D25).
 
 ## Undecided Questions
 

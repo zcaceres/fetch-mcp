@@ -101,7 +101,15 @@ export const createOriginMock = (): OriginMock => {
       if (existing?.kind !== 'response') {
         return err(`No served response registered for ${url}`);
       }
-      routes.set(key, { ...existing, headers: { ...existing.headers, [name]: value } });
+      const lower = name.toLowerCase();
+      const nextHeaders: Record<string, string> = {};
+      for (const [k, v] of Object.entries(existing.headers)) {
+        if (k.toLowerCase() !== lower) {
+          nextHeaders[k] = v;
+        }
+      }
+      nextHeaders[name] = value;
+      routes.set(key, { ...existing, headers: nextHeaders });
       return ok(undefined);
     },
     compress: (url, encoding, body) => {

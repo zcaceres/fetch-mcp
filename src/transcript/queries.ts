@@ -1,4 +1,13 @@
-import { type LanguageCode, type TargetUrl, type Transcript, type Window, WindowedExcerpt } from './nouns.ts';
+import {
+  type Headers,
+  type LanguageCode,
+  type TargetUrl,
+  type Transcript,
+  type Window,
+  WindowedExcerpt,
+} from './nouns.ts';
+
+const SENSITIVE_CROSS_ORIGIN_HEADERS: ReadonlySet<string> = new Set(['authorization', 'cookie', 'proxy-authorization']);
 
 export const ALLOWED_YOUTUBE_HOSTS: ReadonlySet<string> = new Set([
   'youtube.com',
@@ -29,7 +38,7 @@ export const decodeHtmlEntities = (text: string): string =>
       const code = Number.parseInt(dec, 10);
       return code >= 0 && code <= 0x10ffff ? String.fromCodePoint(code) : match;
     })
-    .replace(/&#x([0-9a-fA-F]+);/g, (match, hex: string) => {
+    .replace(/&#[xX]([0-9a-fA-F]+);/g, (match, hex: string) => {
       const code = Number.parseInt(hex, 16);
       return code >= 0 && code <= 0x10ffff ? String.fromCodePoint(code) : match;
     })
@@ -103,6 +112,27 @@ export const buildYtDlpArgs = (
   '--',
   url,
 ];
+
+/**
+ * Strips Authorization, Cookie, and Proxy-Authorization when moving across origins (D7, I4).
+ */
+export const stripCrossOriginHeaders = (fromUrl: string, toUrl: string, headers: Headers): Headers => {
+  try {
+    if (new URL(fromUrl).origin === new URL(toUrl).origin) {
+      return headers;
+    }
+  } catch {
+    // Fail closed and strip sensitive headers when either URL cannot be parsed
+  }
+
+  const filtered: Record<string, string> = {};
+  for (const [key, value] of Object.entries(headers)) {
+    if (!SENSITIVE_CROSS_ORIGIN_HEADERS.has(key.toLowerCase())) {
+      filtered[key] = value;
+    }
+  }
+  return filtered;
+};
 
 /**
  * Slices a Transcript into a Windowed Excerpt (D9, D14, D15, D19).

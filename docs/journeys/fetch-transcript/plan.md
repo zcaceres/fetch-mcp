@@ -59,7 +59,9 @@ a scenario that runs it.
 
 ### Next
 
-*(None — all slices for `fetch-transcript` are complete and verified.)*
+1. **04 — Scenario Coverage & Doc Polish** *(from `notes/2026-11-27-fetch-transcript-verify.md`; D7, D21, I4 settled and Bug #1 fixed)*:
+   - Add direct-extraction `MAX_RESPONSE_BYTES` test/scenario coverage plus scenario coverage for `yt-dlp` empty-XML fallback, negative `maxLength`, and `maxLength: 0` (Gaps #1–#2; FT-1, FT-4, FT-5, FT-9, I5).
+   - Clean up `plan.md`, `specs/02`–`03`, and `runbook.md` drift (quote YouTube URL for `zsh`, add `--proxy` to harness table, remove historical wording).
 
 ## Deferred
 

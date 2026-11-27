@@ -160,6 +160,15 @@ describe('transcript domain (Slice 01)', () => {
       });
     });
 
+    it('scans subsequent ytInitialPlayerResponse matches and skips malformed individual tracks (D21)', () => {
+      const html =
+        '<html><script>// ytInitialPlayerResponse = {not json};</script><script>var ytInitialPlayerResponse = {"captions":{"playerCaptionsTracklistRenderer":{"captionTracks":[{"languageCode":"","baseUrl":""},{"baseUrl":"https://www.youtube.com/api/timedtext?v=2&lang=en","name":{"simpleText":"English"},"languageCode":"en"}]}}};</script></html>';
+      expect(extractCaptionTracks(html)).toEqual({
+        ok: true,
+        value: [{ languageCode: 'en', name: 'English', baseUrl: 'https://www.youtube.com/api/timedtext?v=2&lang=en' }],
+      });
+    });
+
     it('fails explicitly when ytInitialPlayerResponse or captionTracks are missing (D14)', () => {
       expect(extractCaptionTracks('<html><body>No player</body></html>')).toEqual({
         ok: false,
@@ -203,7 +212,7 @@ describe('transcript domain (Slice 01)', () => {
       expect(decodeHtmlEntities('Tom &amp; Jerry &lt;3 &quot;hi&quot; &apos;a&apos;')).toBe(
         'Tom & Jerry <3 "hi" \'a\'',
       );
-      expect(decodeHtmlEntities('that&amp;#39;s &#160;cool &#x26; &#x27;ok&#x27;')).toBe("that's \u00a0cool & 'ok'");
+      expect(decodeHtmlEntities('that&amp;#39;s &#160;cool &#x26; &#X27;ok&#x27;')).toBe("that's \u00a0cool & 'ok'");
     });
 
     it('parses srv1 and srv3 XML, strips inline tags, and skips empty lines (D21)', () => {
@@ -397,6 +406,31 @@ describe('transcript domain (Slice 01)', () => {
 
       expect(ytDlpCalls).toBe(0);
       expect(fetchPageCalls).toBe(0);
+    });
+
+    it('strips cross-origin sensitive headers and inspects fmt query param properly on captionTrack.baseUrl (D7, I4, FT-5)', async () => {
+      const watchHtml =
+        '<html><script>var ytInitialPlayerResponse = {"captions":{"playerCaptionsTracklistRenderer":{"captionTracks":[{"baseUrl":"https://captions.example.com/track?v=1&myfmt=1","name":{"simpleText":"English"},"languageCode":"en"}]}}};</script></html>';
+      const seen: Array<{ url: string; headers: Record<string, string> }> = [];
+      const result = await executeFetchTranscript(
+        {
+          url: 'https://www.youtube.com/watch?v=1',
+          headers: { Authorization: 'Bearer secret', Cookie: 'sid=1', 'Proxy-Authorization': 'Basic x', 'X-Keep': '1' },
+        },
+        {
+          fetchPage: async (url, headers) => {
+            seen.push({ url, headers: { ...headers } });
+            if (url.includes('captions.example.com')) {
+              return ok('<transcript><text start="0">ok</text></transcript>');
+            }
+            return ok(watchHtml);
+          },
+        },
+      );
+
+      expect(result.ok).toBe(true);
+      expect(seen[1]?.url).toBe('https://captions.example.com/track?v=1&myfmt=1&fmt=srv1');
+      expect(seen[1]?.headers).toEqual({ 'X-Keep': '1' });
     });
   });
 });

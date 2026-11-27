@@ -23,10 +23,11 @@ export type ExecuteFetchOptions = {
 
 const findHeaderCaseInsensitive = (headers: Headers, target: string): string | undefined => {
   const lower = target.toLowerCase();
+  let found: string | undefined;
   for (const [key, value] of Object.entries(headers)) {
-    if (key.toLowerCase() === lower) return value;
+    if (key.toLowerCase() === lower) found = value;
   }
-  return undefined;
+  return found;
 };
 
 /**
@@ -75,13 +76,23 @@ export const executeFetch = async (
     const wire = await ports.httpGet(currentUrl, currentHeaders, pinnedIps, proxyUrl);
     if (!wire.ok) return wire;
 
-    const location = findHeaderCaseInsensitive(wire.value.headers, 'location');
+    const location = findHeaderCaseInsensitive(wire.value.headers, 'location')?.trim();
     if (REDIRECT_STATUS_CODES.has(wire.value.status) && location !== undefined && location.length > 0) {
       const nextHop = validateRedirectHop(currentUrl, location, currentHeaders, hop, maxRedirects);
       if (!nextHop.ok) return nextHop;
       currentUrl = nextHop.value.nextUrl;
       currentHeaders = nextHop.value.headers;
       continue;
+    }
+
+    if (wire.value.status < 200 || wire.value.status >= 300) {
+      return {
+        ok: false,
+        error: {
+          kind: 'http_error',
+          message: `HTTP error ${wire.value.status} fetching ${currentUrl}`,
+        },
+      };
     }
 
     const body = decodeResponseBody(currentUrl, wire.value.headers, wire.value.rawBytes, maxResponseBytes);

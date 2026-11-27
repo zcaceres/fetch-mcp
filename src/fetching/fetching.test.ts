@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import zlib from 'node:zlib';
+import { ok } from '../shared/result.ts';
+import { executeFetch } from './execute.ts';
 import { RenderedOutput, ResolvedIp, TargetUrl } from './nouns.ts';
 import { isBinaryContentType, isReservedIp, stripCrossOriginHeaders, windowedExcerpt } from './queries.ts';
 import {
@@ -609,6 +611,80 @@ describe('fetching domain', () => {
         ok: false,
         error: { kind: 'decode_error', message: 'Failed to decompress gzip response from https://example.com/data' },
       });
+    });
+
+    it('skips decompression for 0-byte bodies and passes multi-value Content-Encoding through unchanged (D17)', () => {
+      expect(decodeResponseBody(url, { 'content-encoding': 'gzip' }, new Uint8Array(0))).toEqual({
+        ok: true,
+        value: '',
+      });
+      const bytes = new TextEncoder().encode('raw-multi');
+      expect(decodeResponseBody(url, { 'content-encoding': 'gzip, br' }, bytes)).toEqual({
+        ok: true,
+        value: 'raw-multi',
+      });
+    });
+  });
+
+  describe('executeFetch edge hardening (D17, FW-5, FW-6, FW-9)', () => {
+    it('returns HTTP error before decompressing non-2xx gzip responses and treats blank Location as absent (D17)', async () => {
+      const dnsLookup = async () => ok([ResolvedIp('93.184.216.34')]);
+
+      const res500 = await executeFetch(
+        { url: 'https://example.com/500-gz', format: 'html' },
+        {
+          dnsLookup,
+          httpGet: async (reqUrl) =>
+            ok({
+              status: 500,
+              url: reqUrl,
+              headers: { 'Content-Encoding': 'gzip' },
+              rawBytes: new Uint8Array(0),
+            }),
+        },
+      );
+      expect(res500).toEqual({
+        ok: false,
+        error: { kind: 'http_error', message: 'HTTP error 500 fetching https://example.com/500-gz' },
+      });
+
+      const resWsLoc = await executeFetch(
+        { url: 'https://example.com/ws-loc', format: 'html' },
+        {
+          dnsLookup,
+          httpGet: async (reqUrl) =>
+            ok({
+              status: 302,
+              url: reqUrl,
+              headers: { location: '   ' },
+              rawBytes: new Uint8Array(0),
+            }),
+        },
+      );
+      expect(resWsLoc).toEqual({
+        ok: false,
+        error: { kind: 'http_error', message: 'HTTP error 302 fetching https://example.com/ws-loc' },
+      });
+    });
+
+    it('uses last-value-wins for case-duplicate response headers (FW-9)', async () => {
+      const res = await executeFetch(
+        { url: 'https://example.com/dup-ct', format: 'html' },
+        {
+          dnsLookup: async () => ok([ResolvedIp('93.184.216.34')]),
+          httpGet: async (reqUrl) =>
+            ok({
+              status: 200,
+              url: reqUrl,
+              headers: { 'Content-Type': 'text/html', 'content-type': 'image/png' },
+              rawBytes: new TextEncoder().encode('<p>hi</p>'),
+            }),
+        },
+      );
+      expect(res.ok).toBe(false);
+      if (!res.ok) {
+        expect(res.error.kind).toBe('unsupported_content_type');
+      }
     });
   });
 

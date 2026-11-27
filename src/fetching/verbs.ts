@@ -215,10 +215,11 @@ export const validateRedirectHop = (
 
 const findHeaderCaseInsensitive = (headers: Headers, name: string): string | undefined => {
   const lower = name.toLowerCase();
+  let found: string | undefined;
   for (const [key, value] of Object.entries(headers)) {
-    if (key.toLowerCase() === lower) return value;
+    if (key.toLowerCase() === lower) found = value;
   }
-  return undefined;
+  return found;
 };
 
 const stripScriptAndStyle = (document: Document): void => {
@@ -261,6 +262,10 @@ export const decodeResponseBody = (
       kind: 'response_too_large',
       message: `Response too large: exceeded ${maxBytes} byte limit`,
     });
+  }
+
+  if (rawBytes.byteLength === 0) {
+    return ok('');
   }
 
   const encoding = (findHeaderCaseInsensitive(headers, 'content-encoding') ?? '').trim().toLowerCase();

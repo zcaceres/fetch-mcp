@@ -98,7 +98,7 @@ proxy: direct
 > origin last-proxy https://sub.example.com/direct
 proxy: socks5://127.0.0.1:1080
 
-# Unsupported or malformed proxy URLs fail explicitly without falling back to direct (PL-5, D14, D23, D25)
+# Unsupported, bare-without-port, or malformed proxy URLs fail explicitly without falling back or leaking credentials (PL-5, D14, D23, D24, D25, D31, I7)
 > env clear
 env: cleared
 
@@ -113,6 +113,18 @@ error: Unsupported proxy protocol "ftp:" (supported: http, https, socks4, socks4
 
 > origin last-proxy http://example.com/no-fallback
 (not requested)
+
+> env set HTTP_PROXY garbage
+env: HTTP_PROXY=garbage
+
+> fetch html http://example.com/no-fallback
+error: Invalid proxy URL: "garbage"
+
+> env set HTTP_PROXY http://user:p/ss@bad host:8080
+env: HTTP_PROXY=http://user:p/ss@bad host:8080
+
+> fetch html http://example.com/no-fallback
+error: Invalid proxy URL: "http://<redacted>@bad host:8080"
 
 > env clear
 env: cleared

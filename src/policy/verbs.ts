@@ -69,7 +69,14 @@ export const resolveProxyPolicy = (
   env: EnvMap,
   explicitProxy?: string,
 ): Result<ProxyPolicy, PolicyError> => {
-  let rawProxy = firstNonEmpty(explicitProxy);
+  let rawProxy: string | undefined;
+  if (explicitProxy !== undefined) {
+    const trimmedExplicit = explicitProxy.trim();
+    if (trimmedExplicit.length === 0) {
+      return err({ kind: 'invalid_proxy', message: `Invalid proxy URL: "${explicitProxy}"` });
+    }
+    rawProxy = trimmedExplicit;
+  }
 
   if (!rawProxy) {
     let parsedTarget: URL;
@@ -102,7 +109,17 @@ export const resolveProxyPolicy = (
     return ok({ kind: 'direct' });
   }
 
-  const normalized = SCHEME_PREFIX_REGEX.test(rawProxy) ? rawProxy : `http://${rawProxy}`;
+  const hasScheme = SCHEME_PREFIX_REGEX.test(rawProxy);
+  if (!hasScheme) {
+    const authority = rawProxy.split(/[/?#]/, 1)[0] ?? '';
+    const lastAt = authority.lastIndexOf('@');
+    const hostPort = lastAt === -1 ? authority : authority.slice(lastAt + 1);
+    if (!/:\d+$/.test(hostPort)) {
+      return err({ kind: 'invalid_proxy', message: `Invalid proxy URL: "${redactProxyUrl(rawProxy)}"` });
+    }
+  }
+
+  const normalized = hasScheme ? rawProxy : `http://${rawProxy}`;
   let parsedProxy: URL;
   try {
     parsedProxy = new URL(normalized);

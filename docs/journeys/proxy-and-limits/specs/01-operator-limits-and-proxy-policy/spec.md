@@ -68,7 +68,7 @@ The Terminology this slice uses.
 | Function | Rule | Error |
 |---|---|---|
 | `parseOperatorLimits(env: EnvMap): Result<OperatorLimits, PolicyError>` | Reads `DEFAULT_LIMIT` (unset/blank → `5000`; must match `/^\d+$/`, `0` allowed for unlimited) and `MAX_RESPONSE_BYTES` (unset/blank → `10485760`; must match `/^\d+$/` and `> 0`) (D9, D25, I5). | `Invalid DEFAULT_LIMIT "<raw>": must be a non-negative integer`<br>`Invalid MAX_RESPONSE_BYTES "<raw>": must be a positive integer` |
-| `resolveProxyPolicy(targetUrl: string, env: EnvMap, explicitProxy?: string): Result<ProxyPolicy, PolicyError>` | Uses trimmed `explicitProxy` first (bypassing `NO_PROXY`); otherwise checks `NO_PROXY`/`no_proxy` via `isNoProxyMatch`, then env precedence (`https:` → `HTTPS_PROXY`/`https_proxy`/`HTTP_PROXY`/`http_proxy`/`ALL_PROXY`/`all_proxy`; `http:` → `HTTP_PROXY`/`http_proxy`/`ALL_PROXY`/`all_proxy`). Normalizes bare `host:port` to `http://<raw>`; requires scheme in `ProxyProtocol` and non-empty hostname (D5, D23, D24, D25). | `Invalid proxy URL: "<redacted>"`<br>`Unsupported proxy protocol "<protocol>" (supported: http, https, socks4, socks4a, socks5, socks5h)` |
+| `resolveProxyPolicy(targetUrl: string, env: EnvMap, explicitProxy?: string): Result<ProxyPolicy, PolicyError>` | Uses `explicitProxy` first when defined (rejecting empty/blank values per D25 and bypassing `NO_PROXY`); otherwise checks `NO_PROXY`/`no_proxy` via `isNoProxyMatch` (non-empty `NO_PROXY` shadows `no_proxy`), then env precedence (`https:` → `HTTPS_PROXY`/`https_proxy`/`HTTP_PROXY`/`http_proxy`/`ALL_PROXY`/`all_proxy`; `http:` → `HTTP_PROXY`/`http_proxy`/`ALL_PROXY`/`all_proxy`). Normalizes bare `host:port` (or `[ipv6]:port`) with explicit `:<port>` to `http://<raw>`; requires scheme in `ProxyProtocol` and non-empty hostname (D5, D23, D24, D25, D31, I7). | `Invalid proxy URL: "<redacted>"`<br>`Unsupported proxy protocol "<protocol>" (supported: http, https, socks4, socks4a, socks5, socks5h)` |
 
 ## Queries (`src/policy/queries.ts`)
 
@@ -76,8 +76,8 @@ The derived checks this slice computes. Never stored, never refused.
 
 | Function | Definition |
 |---|---|
-| `isNoProxyMatch(targetUrl: URL, noProxy: string | undefined): boolean` | Splits `noProxy` on `,`; matches `*`, exact hostname, `.domain`/subdomain suffix, optional `:port`, and `[ipv6]:port` against normalized target hostname and effective port (`443` for `https:`, `80` for `http:`) (D24). |
-| `redactProxyUrl(proxyUrl: string): string` | Strips username/password credentials from a proxy URL (keeping scheme, host, port, and path) so secrets never leak into logs or error messages; redacts `user:pass@` prefixes in unparseable strings too. |
+| `isNoProxyMatch(targetUrl: URL, noProxy: string | undefined): boolean` | Splits `noProxy` on `,`; matches `*`, exact hostname, `.domain`/subdomain suffix, optional `:port`, and `[ipv6]:port` (canonicalizing IPv6 literals and rejecting malformed port/bracket syntax) against normalized target hostname and effective port (`443` for `https:`, `80` for `http:`) (D24). |
+| `redactProxyUrl(proxyUrl: string): string` | Strips username/password credentials from valid and malformed proxy URLs (including passwords containing `@`, `/`, `?`, `#`, or `%`) so secrets never leak into logs or error messages (D31, I7). |
 
 ## Harness
 

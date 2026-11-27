@@ -81,10 +81,15 @@ describe('policy domain (Slice 01)', () => {
       expect(isNoProxyMatch(new URL('https://example.com'), 'example.com:443')).toBe(true);
       expect(isNoProxyMatch(new URL('http://[2001:db8::1]:8080/'), '[2001:db8::1]:8080')).toBe(true);
       expect(isNoProxyMatch(new URL('http://[2001:db8::1]:9090/'), '[2001:db8::1]:8080')).toBe(false);
+      expect(isNoProxyMatch(new URL('http://[2001:0db8::1]:8080/'), '[2001:0db8::1]:8080')).toBe(true);
+      expect(isNoProxyMatch(new URL('http://[2001:db8::1]:8080/'), '[2001:0db8::1]:8080')).toBe(true);
+      expect(isNoProxyMatch(new URL('http://[2001:db8::1]/'), '2001:0db8::1')).toBe(true);
+      expect(isNoProxyMatch(new URL('https://example.com:9999/'), 'example.com:')).toBe(false);
+      expect(isNoProxyMatch(new URL('https://example.com/'), '[example.com]garbage')).toBe(false);
     });
   });
 
-  describe('redactProxyUrl', () => {
+  describe('redactProxyUrl (D31, I7)', () => {
     it('strips credentials from valid and malformed proxy URLs', () => {
       expect(redactProxyUrl('https://user:secret@proxy.internal:8443/')).toBe('https://proxy.internal:8443/');
       expect(redactProxyUrl('socks5://alice:p%40ss@127.0.0.1:1080')).toBe('socks5://127.0.0.1:1080');
@@ -93,6 +98,9 @@ describe('policy domain (Slice 01)', () => {
       expect(redactProxyUrl('user:topsecret@bad host:8080')).toBe('<redacted>@bad host:8080');
       expect(redactProxyUrl('user:topsecret@proxy.internal:8080')).toBe('<redacted>@proxy.internal:8080');
       expect(redactProxyUrl('http://user:p@ss@bad host:8080')).toBe('http://<redacted>@bad host:8080');
+      expect(redactProxyUrl('http://user:p/ss@bad host:8080')).toBe('http://<redacted>@bad host:8080');
+      expect(redactProxyUrl('http://user:p?ss@bad host:8080')).toBe('http://<redacted>@bad host:8080');
+      expect(redactProxyUrl('http://user:p#ss@bad host:8080')).toBe('http://<redacted>@bad host:8080');
       expect(redactProxyUrl('http://proxy.internal:8080/path?email=a@b.com')).toBe(
         'http://proxy.internal:8080/path?email=a@b.com',
       );
@@ -186,6 +194,27 @@ describe('policy domain (Slice 01)', () => {
         error: {
           kind: 'invalid_proxy',
           message: 'Invalid proxy URL: "<redacted>@bad host:8080"',
+        },
+      });
+      expect(resolveProxyPolicy('http://example.com', { HTTP_PROXY: 'garbage' })).toEqual({
+        ok: false,
+        error: {
+          kind: 'invalid_proxy',
+          message: 'Invalid proxy URL: "garbage"',
+        },
+      });
+      expect(resolveProxyPolicy('http://example.com', { HTTP_PROXY: 'http://envproxy:8080' }, '')).toEqual({
+        ok: false,
+        error: {
+          kind: 'invalid_proxy',
+          message: 'Invalid proxy URL: ""',
+        },
+      });
+      expect(resolveProxyPolicy('http://example.com', {}, '   ')).toEqual({
+        ok: false,
+        error: {
+          kind: 'invalid_proxy',
+          message: 'Invalid proxy URL: "   "',
         },
       });
     });

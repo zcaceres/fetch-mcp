@@ -81,6 +81,25 @@ describe('parseCliArgs (D12)', () => {
     expect(parseCliArgs(['html', 'https://example.com', '--proxy']).ok).toBe(false);
     expect(parseCliArgs(['html', 'https://example.com', '--proxy', '--max-length', '10']).ok).toBe(false);
     expect(parseCliArgs(['html', 'https://example.com', '--lang']).ok).toBe(false);
+    expect(parseCliArgs(['html', 'https://example.com', '--lang', 'fr'])).toEqual({
+      ok: false,
+      error: '--lang is only valid with the "transcript" command',
+    });
+  });
+
+  it('preserves CR/LF violation when duplicate exact-case --header flags are supplied (D18)', () => {
+    const parsed = parseCliArgs([
+      'html',
+      'https://example.com',
+      '--header',
+      'X-A: bad\r\nEvil: 1',
+      '--header',
+      'X-A: good',
+    ]);
+    expect(parsed.ok).toBe(true);
+    if (parsed.ok && parsed.value.kind === 'fetch') {
+      expect(parsed.value.headers['X-A']).toContain('\r\n');
+    }
   });
 });
 

@@ -223,7 +223,7 @@ export const createRealHttpGet = (options: RealHttpGetOptions = {}): HttpGetPort
         const resHeaders = normalizeIncomingHeaders(res.headers);
         const location = resHeaders.location;
 
-        if (REDIRECT_STATUS_CODES.has(status) && location !== undefined && location.length > 0) {
+        if (REDIRECT_STATUS_CODES.has(status) && location !== undefined && location.trim().length > 0) {
           res.destroy();
           finish(ok({ status, url, headers: resHeaders, rawBytes: new Uint8Array(0) }));
           return;

@@ -61,7 +61,9 @@ turned up. Each has a [spec](specs/) and a scenario in `scenarios/fetch-web-cont
 
 ### Next
 
-*(All planned slices for `fetch-web-content` are done.)*
+1. **06 — Scenario Coverage & Doc Polish** *(from `notes/2026-11-27-fetch-web-content-verify.md`; D12, D17, D18 settled and bugs #1–#4 fixed)*:
+   - Add scenario/test coverage for `attempts: 1` on HTTP 200/500 and default `5000`-char Windowed Excerpt truncation (Gaps #1–#2; FW-5, FW-14).
+   - Clean up remaining doc/spec drift in `plan.md` and `specs/04`–`05`.
 
 ## Deferred
 

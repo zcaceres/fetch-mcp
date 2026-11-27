@@ -42,8 +42,8 @@ Scenario: Default User-Agent and Accept-Encoding are applied only when caller do
   And the origin receives the default Accept-Encoding header (D18)
 
 @FW-2 @D14 @D18
-Scenario: Custom headers containing CR or LF control characters are rejected
-  Given an Agent or CLI User submits a Fetch Request with a custom header value containing a newline
+Scenario: Custom headers with CR/LF, invalid HTTP token names, or invalid value characters are rejected
+  Given an Agent or CLI User submits a Fetch Request with a header containing CR/LF, a non-token name, or invalid value characters
   When they fetch
   Then the Fetch Request is refused with a typed validation error before connecting (D14, D18)
 ```
@@ -107,9 +107,9 @@ Scenario: Redirect to a private host or disallowed scheme is blocked before conn
 
 @FW-6 @D9 @D14 @D17
 Scenario: Redirect loop exceeding limit or redirect without Location fails explicitly
-  Given "https://example.com/loop" redirects past the redirect limit (D9) or returns 302 with no Location header (D17)
+  Given "https://example.com/loop" redirects past the redirect limit (D9) or returns 302 with no or blank Location header (D17)
   When the actor runs fetch for "https://example.com/loop" in Format "html"
-  Then the actor receives a typed redirect or HTTP error (D9, D14, D17)
+  Then the actor receives a typed redirect or HTTP error without attempting body decompression (D9, D14, D17)
 
 @FW-7 @D9 @D17 @I5
 Scenario: Supported compressed responses are decompressed and raw and decoded byte caps are enforced
@@ -124,8 +124,8 @@ Scenario: Oversized Content-Length, raw stream, or decompressed stream is reject
   Then reading stops immediately and the actor receives a typed size-limit error (D9, D14, I5)
 
 @FW-7 @D17
-Scenario: Unknown Content-Encoding is passed through unchanged
-  Given the Remote Origin Server returns Content-Encoding "custom-enc" with UTF-8 text within MAX_RESPONSE_BYTES
+Scenario: Unknown or multi-value Content-Encoding is passed through unchanged
+  Given the Remote Origin Server returns Content-Encoding "custom-enc" or "gzip, br" with UTF-8 text within MAX_RESPONSE_BYTES
   When the actor runs fetch in Format "html"
   Then the actor receives the body text unchanged (D17)
 
@@ -206,5 +206,5 @@ Scenario: CLI User fetches web content via mcp-fetch subcommands and flags
   Given a public Remote Origin Server serves a page at "https://example.com/"
   When the CLI User runs `mcp-fetch <format> https://example.com/ --header "Accept: text/html" --start-index 0 --max-length 100`
   Then the Windowed Excerpt is written to stdout and the process exits with code 0 (D1, D6, D12)
-  And when fetch fails with a typed error, the error message is written to stderr and the process exits with code 1 (D14)
+  And when fetch fails with a typed error or receives a transcript-only flag like `--lang`, the error message is written to stderr and the process exits with code 1 (D12, D14)
 ```

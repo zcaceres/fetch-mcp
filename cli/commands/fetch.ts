@@ -62,7 +62,9 @@ export const fetchCommand: Command = {
         const parsed = parseHeaderArg(rest[i + 1]);
         if (!parsed.ok) return parsed;
         const [k, v] = parsed.value;
-        headers[k] = v;
+        if (!(k in headers) || !/[\r\n]/.test(headers[k] ?? '')) {
+          headers[k] = v;
+        }
         i++;
       } else if (flag === '--proxy') {
         const value = rest[i + 1];

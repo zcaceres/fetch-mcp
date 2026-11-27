@@ -1,7 +1,7 @@
 import { ok, type Result } from '../shared/result.ts';
 import type { RawTranscriptInput, TranscriptError, WindowedExcerpt } from './nouns.ts';
 import type { TranscriptPorts } from './ports.ts';
-import { windowedExcerpt } from './queries.ts';
+import { stripCrossOriginHeaders, windowedExcerpt } from './queries.ts';
 import {
   buildTranscript,
   DEFAULT_TRANSCRIPT_LIMIT,
@@ -59,11 +59,19 @@ export const executeFetchTranscript = async (
   const selected = selectCaptionTrack(tracks.value, prepared.value.lang);
   if (!selected.ok) return selected;
 
-  const captionUrl = selected.value.baseUrl.includes('fmt=')
-    ? selected.value.baseUrl
-    : `${selected.value.baseUrl}${selected.value.baseUrl.includes('?') ? '&' : '?'}fmt=srv1`;
+  let captionUrl = selected.value.baseUrl;
+  try {
+    const parsedCaptionUrl = new URL(captionUrl);
+    if (!parsedCaptionUrl.searchParams.has('fmt')) {
+      parsedCaptionUrl.searchParams.set('fmt', 'srv1');
+    }
+    captionUrl = parsedCaptionUrl.href;
+  } catch {
+    // Pass malformed caption track URL straight to fetchPage for typed validation failure
+  }
 
-  const xml = await ports.fetchPage(captionUrl, prepared.value.headers);
+  const captionHeaders = stripCrossOriginHeaders(prepared.value.url, captionUrl, prepared.value.headers);
+  const xml = await ports.fetchPage(captionUrl, captionHeaders);
   if (!xml.ok) return xml;
 
   const transcript = buildTranscript(xml.value, selected.value.languageCode, selected.value.name);

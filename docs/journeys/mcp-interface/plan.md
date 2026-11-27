@@ -54,7 +54,9 @@ scenario that runs it.
 
 ### Next
 
-*(None — all planned slices are complete.)*
+1. **03 — MCP Coverage & Doc Polish** *(from `notes/2026-11-27-mcp-interface-verify.md`; D27, D28 settled)*:
+   - Add scenario and `src/index.test.ts` coverage for valid `headers` & `start_index` forwarding (`MI-5`), failing origin/transcript `isError: true` results (`MI-6`), and explicit `protocolVersion === '2025-11-25'` assertion (`MI-2`) (Gaps #1–#3).
+   - Clean up `plan.md`, `specs/01`–`02`, and `runbook.md` drift (remove historical v1.2.0 wording, add real external MCP host checklist to `runbook.md`, align **Operator Limits** / **Proxy Policy** casing).
 
 ## Deferred
 

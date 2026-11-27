@@ -59,7 +59,8 @@ a scenario that runs it.
 
 ### Next
 
-*(None — all slices for `proxy-and-limits` are complete and verified.)*
+1. **04 — Proxy Coverage & Doc Polish** *(from `notes/2026-11-27-proxy-and-limits-verify.md`; D24, D25, D31, I7 settled and Bugs #1–#3 fixed)*:
+   - Close Gaps #1–#4: add scenario/test coverage for direct→proxied & proxied→direct-SSRF redirects, `http:`→`https:` proxy switches, IPv6 `NO_PROXY`, end-to-end `https://` target & `https://` proxy TLS transport tests in `proxy.test.ts`, and `plan.md`/`specs/01`–`03`/`runbook.md` drift fixes.
 
 ## Deferred
 
