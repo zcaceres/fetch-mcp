@@ -6,10 +6,12 @@ export type World = {
   readonly origin: OriginMock;
   readonly dns: DnsMock;
   readonly ytdlp: YtDlpMock;
+  readonly env: Map<string, string>;
 };
 
 export const createWorld = (): World => ({
   origin: createOriginMock(),
   dns: createDnsMock(),
   ytdlp: createYtDlpMock(),
+  env: new Map<string, string>(),
 });

@@ -31,6 +31,7 @@ export type OriginMock = {
   readonly timeout: (url: string, timeoutMs?: number) => void;
   readonly lastHeaders: (url: string) => Headers | undefined;
   readonly lastPinned: (url: string) => readonly ResolvedIp[] | undefined;
+  readonly lastProxy: (url: string) => string | null | undefined;
   readonly attempts: (url: string) => number;
 };
 
@@ -38,6 +39,7 @@ export const createOriginMock = (): OriginMock => {
   const routes = new Map<string, OriginEntry>();
   const recordedHeaders = new Map<string, Headers>();
   const recordedPinned = new Map<string, readonly ResolvedIp[]>();
+  const recordedProxy = new Map<string, string | null>();
   const attemptCounts = new Map<string, number>();
 
   const normalizeKey = (url: string): string => {
@@ -52,10 +54,12 @@ export const createOriginMock = (): OriginMock => {
     url: TargetUrl,
     headers: Headers,
     pinnedIps: readonly ResolvedIp[],
+    proxyUrl?: string,
   ): Promise<Result<WireResponse, FetchError>> => {
     const key = normalizeKey(url);
     recordedHeaders.set(key, { ...headers });
     recordedPinned.set(key, [...pinnedIps]);
+    recordedProxy.set(key, proxyUrl ?? null);
     attemptCounts.set(key, (attemptCounts.get(key) ?? 0) + 1);
 
     const entry = routes.get(key);
@@ -131,6 +135,7 @@ export const createOriginMock = (): OriginMock => {
     },
     lastHeaders: (url) => recordedHeaders.get(normalizeKey(url)),
     lastPinned: (url) => recordedPinned.get(normalizeKey(url)),
+    lastProxy: (url) => recordedProxy.get(normalizeKey(url)),
     attempts: (url) => attemptCounts.get(normalizeKey(url)) ?? 0,
   };
 };

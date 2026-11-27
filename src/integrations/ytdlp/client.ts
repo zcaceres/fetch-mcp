@@ -81,7 +81,11 @@ export const createRealYtDlp = (options: RealYtDlpOptions = {}): YtDlpPort => {
     return cachedAvailable;
   };
 
-  const downloadSubtitles = async (url: YouTubeUrl, lang: LanguageCode): Promise<Result<YtDlpResult, string>> => {
+  const downloadSubtitles = async (
+    url: YouTubeUrl,
+    lang: LanguageCode,
+    proxyUrl?: string,
+  ): Promise<Result<YtDlpResult, string>> => {
     let tmpDir: string;
     try {
       tmpDir = await mkdtemp(path.join(tmpdir(), 'mcp-fetch-ytdlp-'));
@@ -92,7 +96,7 @@ export const createRealYtDlp = (options: RealYtDlpOptions = {}): YtDlpPort => {
 
     try {
       const outputTemplate = path.join(tmpDir, 'sub');
-      const args = buildYtDlpArgs(url, lang, outputTemplate, options.proxy);
+      const args = buildYtDlpArgs(url, lang, outputTemplate, proxyUrl ?? options.proxy);
       const run = await runExecFile(binary, args, timeoutMs);
       if (!run.ok) {
         return err(run.error.message);

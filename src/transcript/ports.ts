@@ -5,6 +5,8 @@ export type FetchPagePort = (url: string, headers: Headers) => Promise<Result<st
 
 export type CheckHostPort = (hostname: string) => Promise<Result<void, TranscriptError>>;
 
+export type ResolveTranscriptProxyPort = (targetUrl: YouTubeUrl) => Result<string | undefined, TranscriptError>;
+
 export type YtDlpResult = {
   readonly xml: string;
   readonly lang: string;
@@ -13,11 +15,16 @@ export type YtDlpResult = {
 
 export type YtDlpPort = {
   readonly isAvailable: () => Promise<boolean>;
-  readonly downloadSubtitles: (url: YouTubeUrl, lang: LanguageCode) => Promise<Result<YtDlpResult, string>>;
+  readonly downloadSubtitles: (
+    url: YouTubeUrl,
+    lang: LanguageCode,
+    proxyUrl?: string,
+  ) => Promise<Result<YtDlpResult, string>>;
 };
 
 export type TranscriptPorts = {
   readonly fetchPage: FetchPagePort;
   readonly checkHost?: CheckHostPort;
+  readonly resolveProxy?: ResolveTranscriptProxyPort;
   readonly ytDlp?: YtDlpPort;
 };

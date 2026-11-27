@@ -1,0 +1,202 @@
+# Slice 01: Operator Limits & Proxy Policy Resolution (Tracer Bullet)
+# Covers PL-1, PL-2, PL-3, PL-4, PL-5, PL-6, PL-7, PL-8
+
+# Operator DEFAULT_LIMIT and MAX_RESPONSE_BYTES govern default Window and Raw Response cap (PL-1, D9, D15, I5)
+> env set DEFAULT_LIMIT 12
+env: DEFAULT_LIMIT=12
+
+> origin serve https://example.com/long 200 <p>0123456789ABCDEF</p>
+origin: 200 https://example.com/long
+
+> fetch html https://example.com/long
+| <p>012345678
+
+> env set DEFAULT_LIMIT 0
+env: DEFAULT_LIMIT=0
+
+> fetch html https://example.com/long
+| <p>0123456789ABCDEF</p>
+
+> env set MAX_RESPONSE_BYTES 10
+env: MAX_RESPONSE_BYTES=10
+
+> fetch html https://example.com/long
+error: Response too large: exceeded 10 byte limit
+
+# Invalid non-empty DEFAULT_LIMIT or MAX_RESPONSE_BYTES fail explicitly before I/O (PL-2, D14, D25)
+> env clear
+env: cleared
+
+> env set DEFAULT_LIMIT -5
+env: DEFAULT_LIMIT=-5
+
+> fetch html https://example.com/long
+error: Invalid DEFAULT_LIMIT "-5": must be a non-negative integer
+
+> env set DEFAULT_LIMIT abc
+env: DEFAULT_LIMIT=abc
+
+> fetch html https://example.com/long
+error: Invalid DEFAULT_LIMIT "abc": must be a non-negative integer
+
+> env unset DEFAULT_LIMIT
+env: unset DEFAULT_LIMIT
+
+> env set MAX_RESPONSE_BYTES 0
+env: MAX_RESPONSE_BYTES=0
+
+> fetch html https://example.com/long
+error: Invalid MAX_RESPONSE_BYTES "0": must be a positive integer
+
+> env clear
+env: cleared
+
+# Env proxy precedence (HTTPS_PROXY > HTTP_PROXY > ALL_PROXY), bare host:port, and credential redaction (PL-3, D5, D24)
+> env set HTTP_PROXY 127.0.0.1:8080
+env: HTTP_PROXY=127.0.0.1:8080
+
+> env set HTTPS_PROXY https://user:secret@proxy.internal:8443
+env: HTTPS_PROXY=https://user:secret@proxy.internal:8443
+
+> origin serve http://example.com/http-page 200 <p>via-http-proxy</p>
+origin: 200 http://example.com/http-page
+
+> origin serve https://example.com/https-page 200 <p>via-https-proxy</p>
+origin: 200 https://example.com/https-page
+
+> fetch html http://example.com/http-page
+| <p>via-http-proxy</p>
+
+> origin last-proxy http://example.com/http-page
+proxy: http://127.0.0.1:8080/
+
+> fetch html https://example.com/https-page
+| <p>via-https-proxy</p>
+
+> origin last-proxy https://example.com/https-page
+proxy: https://proxy.internal:8443/
+
+# NO_PROXY bypasses Operator env proxies, while explicit CLI --proxy overrides NO_PROXY and supports SOCKS5 (PL-4, D6, D23, D24)
+> env set NO_PROXY .example.com
+env: NO_PROXY=.example.com
+
+> origin serve https://sub.example.com/direct 200 <p>direct-via-noproxy</p>
+origin: 200 https://sub.example.com/direct
+
+> dns set sub.example.com 93.184.216.34
+dns: sub.example.com -> 93.184.216.34
+
+> fetch html https://sub.example.com/direct
+| <p>direct-via-noproxy</p>
+
+> origin last-proxy https://sub.example.com/direct
+proxy: direct
+
+> fetch html https://sub.example.com/direct --proxy socks5://127.0.0.1:1080
+| <p>direct-via-noproxy</p>
+
+> origin last-proxy https://sub.example.com/direct
+proxy: socks5://127.0.0.1:1080
+
+# Unsupported or malformed proxy URLs fail explicitly without falling back to direct (PL-5, D14, D23, D25)
+> env clear
+env: cleared
+
+> env set HTTP_PROXY ftp://proxy.internal:21
+env: HTTP_PROXY=ftp://proxy.internal:21
+
+> origin serve http://example.com/no-fallback 200 <p>should-not-hit</p>
+origin: 200 http://example.com/no-fallback
+
+> fetch html http://example.com/no-fallback
+error: Unsupported proxy protocol "ftp:" (supported: http, https, socks4, socks4a, socks5, socks5h)
+
+> origin last-proxy http://example.com/no-fallback
+(not requested)
+
+> env clear
+env: cleared
+
+# Per-hop redirect re-evaluates Proxy Policy, and proxied fetch delegates public DNS while blocking private IPs locally (PL-6, PL-7, D8, D23, D24, I1)
+> env set ALL_PROXY socks5h://127.0.0.1:1080
+env: ALL_PROXY=socks5h://127.0.0.1:1080
+
+> env set NO_PROXY direct.example.com
+env: NO_PROXY=direct.example.com
+
+> dns fail remote-only.example.com ENOTFOUND
+dns: fail remote-only.example.com
+
+> dns set direct.example.com 93.184.216.35
+dns: direct.example.com -> 93.184.216.35
+
+> origin redirect https://remote-only.example.com/start 302 https://direct.example.com/end
+origin: redirect 302 https://remote-only.example.com/start -> https://direct.example.com/end
+
+> origin serve https://direct.example.com/end 200 <p>hopped-to-direct</p>
+origin: 200 https://direct.example.com/end
+
+> fetch html https://remote-only.example.com/start
+| <p>hopped-to-direct</p>
+
+> origin last-proxy https://remote-only.example.com/start
+proxy: socks5h://127.0.0.1:1080
+
+> origin last-proxy https://direct.example.com/end
+proxy: direct
+
+> fetch html http://127.0.0.1/secret
+error: Blocked Target URL: private address "127.0.0.1"
+
+> fetch html http://localhost/admin
+error: Blocked Target URL: private address "localhost"
+
+# Proxied fetch transcript validates YouTube host locally, skips local DNS checkHost, and passes --proxy to yt-dlp and direct fallback (PL-8, D8, D21, D26, I3)
+> reset
+the world is back to its fixtures
+
+> env set HTTPS_PROXY socks5://127.0.0.1:1080
+env: HTTPS_PROXY=socks5://127.0.0.1:1080
+
+> dns fail www.youtube.com ENOTFOUND
+dns: fail www.youtube.com
+
+> ytdlp available true
+ytdlp: available true
+
+> fetch-transcript https://example.com/not-youtube
+error: Blocked Target URL: host "example.com" is not an allowlisted YouTube domain
+
+> ytdlp last-args
+(not invoked)
+
+> ytdlp serve https://www.youtube.com/watch?v=prox1 en <transcript><text start="1.0" dur="2.0">Via proxied yt-dlp</text></transcript>
+ytdlp: serve en https://www.youtube.com/watch?v=prox1
+
+> fetch-transcript https://www.youtube.com/watch?v=prox1
+| [Transcript language: en — en]
+|
+| [0:01] Via proxied yt-dlp
+
+> ytdlp last-args
+args: --write-sub --write-auto-sub --sub-lang en --sub-format srv1 --skip-download -o <tmp>/sub --proxy socks5://127.0.0.1:1080 -- https://www.youtube.com/watch?v=prox1
+
+> ytdlp fail https://www.youtube.com/watch?v=prox2 exit 1
+ytdlp: fail https://www.youtube.com/watch?v=prox2
+
+> origin serve https://www.youtube.com/watch?v=prox2 200 <html><script>var ytInitialPlayerResponse = {"captions":{"playerCaptionsTracklistRenderer":{"captionTracks":[{"baseUrl":"https://www.youtube.com/api/timedtext?v=prox2&lang=en","name":{"simpleText":"English"},"languageCode":"en"}]}}};</script></html>
+origin: 200 https://www.youtube.com/watch?v=prox2
+
+> origin serve https://www.youtube.com/api/timedtext?v=prox2&lang=en&fmt=srv1 200 <transcript><text start="0" dur="2">Via proxied direct fallback</text></transcript>
+origin: 200 https://www.youtube.com/api/timedtext?v=prox2&lang=en&fmt=srv1
+
+> fetch-transcript https://www.youtube.com/watch?v=prox2
+| [Transcript language: en — English]
+|
+| [0:00] Via proxied direct fallback
+
+> origin last-proxy https://www.youtube.com/watch?v=prox2
+proxy: socks5://127.0.0.1:1080
+
+> origin last-proxy https://www.youtube.com/api/timedtext?v=prox2&lang=en&fmt=srv1
+proxy: socks5://127.0.0.1:1080

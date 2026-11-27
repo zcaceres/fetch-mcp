@@ -27,14 +27,21 @@ export const executeFetchTranscript = async (
   const prepared = prepareTranscriptRequest(input, options.defaultLimit ?? DEFAULT_TRANSCRIPT_LIMIT);
   if (!prepared.ok) return prepared;
 
-  if (ports.checkHost) {
+  let proxyUrl: string | undefined;
+  if (ports.resolveProxy) {
+    const resolvedProxy = ports.resolveProxy(prepared.value.url);
+    if (!resolvedProxy.ok) return resolvedProxy;
+    proxyUrl = resolvedProxy.value;
+  }
+
+  if (proxyUrl === undefined && ports.checkHost) {
     const hostname = new URL(prepared.value.url).hostname;
     const hostCheck = await ports.checkHost(hostname);
     if (!hostCheck.ok) return hostCheck;
   }
 
   if (ports.ytDlp && (await ports.ytDlp.isAvailable())) {
-    const sub = await ports.ytDlp.downloadSubtitles(prepared.value.url, prepared.value.lang);
+    const sub = await ports.ytDlp.downloadSubtitles(prepared.value.url, prepared.value.lang, proxyUrl);
     if (sub.ok) {
       const built = buildTranscript(sub.value.xml, sub.value.lang, sub.value.langName);
       if (built.ok) {

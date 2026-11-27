@@ -1,8 +1,9 @@
+import { redactProxyUrl } from '../../src/policy/queries.ts';
 import { err, ok } from '../../src/shared/result.ts';
 import type { Command } from '../command.ts';
 
 const USAGE =
-  'usage: origin serve|header|compress|repeat|corrupt|redirect|fail|timeout|last-headers|last-pinned|attempts <url> ...';
+  'usage: origin serve|header|compress|repeat|corrupt|redirect|fail|timeout|last-headers|last-pinned|last-proxy|attempts <url> ...';
 
 export const originCommand: Command = {
   kind: 'world',
@@ -118,6 +119,20 @@ export const originCommand: Command = {
         return ok(['(not requested)']);
       }
       return ok([`pinned: ${pinned.join(', ')}`]);
+    }
+
+    if (action === 'last-proxy') {
+      if (!url) {
+        return err('usage: origin last-proxy <url>');
+      }
+      const proxy = world.origin.lastProxy(url);
+      if (proxy === undefined) {
+        return ok(['(not requested)']);
+      }
+      if (proxy === null) {
+        return ok(['proxy: direct']);
+      }
+      return ok([`proxy: ${redactProxyUrl(proxy)}`]);
     }
 
     if (action === 'attempts') {

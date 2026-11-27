@@ -31,8 +31,12 @@ export const createYtDlpMock = (): YtDlpMock => {
     }
   };
 
-  const downloadSubtitles = async (url: YouTubeUrl, lang: LanguageCode): Promise<Result<YtDlpResult, string>> => {
-    recordedArgs = buildYtDlpArgs(url, lang, '<tmp>/sub');
+  const downloadSubtitles = async (
+    url: YouTubeUrl,
+    lang: LanguageCode,
+    proxyUrl?: string,
+  ): Promise<Result<YtDlpResult, string>> => {
+    recordedArgs = buildYtDlpArgs(url, lang, '<tmp>/sub', proxyUrl);
     const entry = routes.get(normalizeKey(url));
     if (!entry || entry.kind === 'empty') {
       return err('yt-dlp did not produce subtitle files');

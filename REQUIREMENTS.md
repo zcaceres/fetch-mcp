@@ -10,6 +10,7 @@ What each journey's users can do and see is in its acceptance criteria, which ci
 
 - **Fetch Web Content:** an Agent or CLI User fetches a public web Target URL in a Format and receives a Windowed Excerpt ([acceptance criteria](docs/journeys/fetch-web-content/acceptance-criteria.md)).
 - **Fetch Transcript:** an Agent or CLI User fetches a YouTube video's captions and receives a Windowed Excerpt of the Transcript ([acceptance criteria](docs/journeys/fetch-transcript/acceptance-criteria.md)).
+- **Proxy & Limits:** an Operator configures environment proxy routing and response limits (or a CLI User passes `--proxy`), enforced consistently across `fetch` and `fetch transcript` ([acceptance criteria](docs/journeys/proxy-and-limits/acceptance-criteria.md)).
 
 ## Sources
 
@@ -83,12 +84,12 @@ system computes a value for us, its rule for it is recorded here, as that system
 ### Interfaces & Proxy Routing
 - The MCP stdio server (`mcp-fetch-server`) exposes six tools aligned to Terminology: `fetch_html`, `fetch_markdown`, `fetch_readable`, `fetch_text`, `fetch_json`, and `fetch_transcript`, accepting custom request headers and never accepting a caller-supplied `proxy` parameter (D1, D6, D10, D12, I6).
 - The local CLI (`mcp-fetch`) exposes six matching subcommands (`html`, `markdown`, `readable`, `text`, `json`, `transcript`) and supports `--header`, `--proxy`, `--max-length`, `--start-index`, and `--lang` (D1, D6, D10, D12).
-- Operator proxy configuration (`HTTPS_PROXY`, `HTTP_PROXY`, `ALL_PROXY`, honoring `NO_PROXY`) and CLI `--proxy` overrides support HTTP, HTTPS, and SOCKS (`socks4`/`socks5`) proxies (D2, D5, D6, U3).
+- Operator proxy configuration (`HTTPS_PROXY`, `HTTP_PROXY`, `ALL_PROXY`, honoring `NO_PROXY`) and CLI `--proxy` overrides support HTTP, HTTPS, and SOCKS (`socks4`, `socks4a`, `socks5`, `socks5h`) proxies, re-evaluating Proxy Policy per redirect hop and failing explicitly on invalid proxy URLs or invalid `DEFAULT_LIMIT` / `MAX_RESPONSE_BYTES` env settings (D2, D5, D6, D23, D24, D25, D26).
 - Typed domain errors map to `isError: true` text results in MCP responses and `stderr` output with exit code `1` in the CLI (D14).
 
 ## Non-Functional Requirements
 
-- **Security (SSRF & Isolation):** Every Target URL and redirect hop is restricted to `http:`/`https:` and blocked from `localhost`, `*.localhost`, and all IANA-reserved IPv4/IPv6 ranges (including IPv4-mapped IPv6 and multicast), failing closed on malformed IPs or DNS failures; direct connections pin validated DNS records to sockets while proxied connections delegate hostname DNS resolution to the proxy (D8, I1, I2, I3, I4, I6, U3).
+- **Security (SSRF & Isolation):** Every Target URL and redirect hop is restricted to `http:`/`https:` and blocked from `localhost`, `*.localhost`, and all IANA-reserved IPv4/IPv6 ranges (including IPv4-mapped IPv6 and multicast), failing closed on malformed IPs or DNS failures; direct connections pin validated DNS records to sockets while proxied connections delegate hostname DNS resolution to the proxy across both `fetch` and `fetch transcript` (D8, D23, D26, I1, I2, I3, I4, I6).
 - **Resource Safety:** Raw Response bodies are capped at `MAX_RESPONSE_BYTES` (default `10 MB`) across both raw wire bytes and decompressed streams, and network requests and `yt-dlp` subprocesses time out after `30s` (D9, I5).
 - **Runtime & Distribution:** Supports Node.js `>= 20` LTS and Bun, uses Bun (`bun test`, `bun build`, committed `bun.lock`) with `tsc --noEmit`, Biome linting, and a Bun-runnable DD harness + `scenarios/` runner, and upgrades dependencies to latest stable versions for the breaking major release (D10, D11, D13).
 - **Protocol Conformance:** Conforms to the latest MCP specification supported by `@modelcontextprotocol/sdk` (`2025-11-25`), advertising only implemented capabilities (D13, U4).
@@ -210,11 +211,26 @@ for an undecided rule and will change with it.
 
 - **Decided (2026-11-26):** When fetched caption XML parses to zero non-empty caption lines (empty or unrecognized XML format), `fetch transcript` fails explicitly with a typed parse error rather than returning a header-only transcript.
 
+### D23. SOCKS proxy schemes and proxy DNS delegation
+
+- **Decided (2026-11-26):** Supported SOCKS proxy schemes are `socks4:`, `socks4a:`, `socks5:`, and `socks5h:` (alongside `http:` and `https:` per D5). All supported SOCKS schemes delegate hostname DNS resolution to the proxy per D8 (`socks4:` uses the SOCKS4a domain extension for hostnames; `socks5:` and `socks5h:` both send domain-name address type `0x03`). Resolves U3.
+
+### D24. Proxy Policy precedence, `NO_PROXY`, bare `host:port`, and per-hop evaluation
+
+- **Decided (2026-11-26):** Effective **Proxy Policy** is resolved per Target URL and re-evaluated on every HTTP redirect hop: explicit CLI `--proxy` always takes precedence and bypasses `NO_PROXY`; otherwise Operator env vars apply while honoring `NO_PROXY`/`no_proxy` (`*`, exact host, `.domain`/subdomain suffix, optional `:port`, and `[ipv6]:port`). For `https:` targets, precedence is `HTTPS_PROXY` → `https_proxy` → `HTTP_PROXY` → `http_proxy` → `ALL_PROXY` → `all_proxy`; for `http:` targets, `HTTP_PROXY` → `http_proxy` → `ALL_PROXY` → `all_proxy`. Bare `host:port` values without a scheme are normalized to `http://<host:port>`.
+
+### D25. Fail explicitly on invalid Operator limits and invalid proxy URLs
+
+- **Decided (2026-11-26):** Non-empty `DEFAULT_LIMIT` (must be a non-negative integer; `0` = unlimited) and `MAX_RESPONSE_BYTES` (must be a positive integer) env values that are invalid fail explicitly with a typed configuration error rather than silently falling back to defaults. Malformed or unsupported proxy URLs (whether from env vars or CLI `--proxy`) fail explicitly with a typed error and never silently fall back to a direct connection.
+
+### D26. Proxy routing for `fetch transcript`
+
+- **Decided (2026-11-26):** When an effective **Proxy Policy** routes a YouTube Target URL through a proxy, `fetch transcript` still validates URL syntax, scheme, and YouTube host allowlist locally (I1, I3), skips local DNS `checkHost` per D8, passes the effective proxy URL to `yt-dlp` via `--proxy` (D21) and to direct fallback `fetchPage`, and re-evaluates `Proxy Policy` (`NO_PROXY`) across watch-page redirects and caption track URLs.
+
 ## Undecided Questions
 
 | # | Question | Meanwhile |
 |---|---|---|
-| U3 | (`proxy-and-limits`) For SOCKS proxies, should `socks5://` and `socks5h://` both delegate hostname DNS to the proxy per D8, or distinguish local vs. proxy DNS by scheme? | Delegate hostname DNS to the proxy for all SOCKS schemes (matching HTTP/HTTPS proxies under D8). |
 | U4 | (`mcp-interface`) Should `tools/list` reject unrecognized pagination cursors with `-32602` (issue #49 SHOULD item), and when should MCP `2026-07-28` `server/discover` (issue #50) be adopted? | Follow `@modelcontextprotocol/sdk` defaults on `2025-11-25`. |
 
 ### Resolved questions
@@ -225,3 +241,4 @@ Pointers only, so an old reference to a U# still leads somewhere. The decision s
 |---|---|
 | U1 | D20 |
 | U2 | D15 |
+| U3 | D23 |

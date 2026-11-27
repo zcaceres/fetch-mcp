@@ -4,6 +4,7 @@
   "files": {
     "includes": [
       "src/shared/**",
+      "src/policy/**",
       "src/fetching/**",
       "src/transcript/**",
       "src/integrations/**",
