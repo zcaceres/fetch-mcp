@@ -11,6 +11,7 @@ What each journey's users can do and see is in its acceptance criteria, which ci
 - **Fetch Web Content:** an Agent or CLI User fetches a public web Target URL in a Format and receives a Windowed Excerpt ([acceptance criteria](docs/journeys/fetch-web-content/acceptance-criteria.md)).
 - **Fetch Transcript:** an Agent or CLI User fetches a YouTube video's captions and receives a Windowed Excerpt of the Transcript ([acceptance criteria](docs/journeys/fetch-transcript/acceptance-criteria.md)).
 - **Proxy & Limits:** an Operator configures environment proxy routing and response limits (or a CLI User passes `--proxy`), enforced consistently across `fetch` and `fetch transcript` ([acceptance criteria](docs/journeys/proxy-and-limits/acceptance-criteria.md)).
+- **MCP Interface:** an Agent connects over MCP stdio (`2025-11-25`), discovers the six Terminology-aligned tools, and invokes them over the shared domain core with Operator-only proxy routing ([acceptance criteria](docs/journeys/mcp-interface/acceptance-criteria.md)).
 
 ## Sources
 
@@ -92,7 +93,7 @@ system computes a value for us, its rule for it is recorded here, as that system
 - **Security (SSRF & Isolation):** Every Target URL and redirect hop is restricted to `http:`/`https:` and blocked from `localhost`, `*.localhost`, and all IANA-reserved IPv4/IPv6 ranges (including IPv4-mapped IPv6 and multicast), failing closed on malformed IPs or DNS failures; direct connections pin validated DNS records to sockets while proxied connections delegate hostname DNS resolution to the proxy across both `fetch` and `fetch transcript` (D8, D23, D26, I1, I2, I3, I4, I6).
 - **Resource Safety:** Raw Response bodies are capped at `MAX_RESPONSE_BYTES` (default `10 MB`) across both raw wire bytes and decompressed streams, and network requests and `yt-dlp` subprocesses time out after `30s` (D9, I5).
 - **Runtime & Distribution:** Supports Node.js `>= 20` LTS and Bun, uses Bun (`bun test`, `bun build`, committed `bun.lock`) with `tsc --noEmit`, Biome linting, and a Bun-runnable DD harness + `scenarios/` runner, and upgrades dependencies to latest stable versions for the breaking major release (D10, D11, D13).
-- **Protocol Conformance:** Conforms to the latest MCP specification supported by `@modelcontextprotocol/sdk` (`2025-11-25`), advertising only implemented capabilities (D13, U4).
+- **Protocol Conformance:** Conforms to the latest MCP specification supported by `@modelcontextprotocol/sdk` (`2025-11-25`), advertising only implemented capabilities and rejecting unrecognized `tools/list` pagination cursors with `-32602` (D13, D27).
 - **Privacy & Statelessness:** No fetched content, credentials, or request history is persisted across calls (D3).
 
 ## Invariants
@@ -227,11 +228,21 @@ for an undecided rule and will change with it.
 
 - **Decided (2026-11-26):** When an effective **Proxy Policy** routes a YouTube Target URL through a proxy, `fetch transcript` still validates URL syntax, scheme, and YouTube host allowlist locally (I1, I3), skips local DNS `checkHost` per D8, passes the effective proxy URL to `yt-dlp` via `--proxy` (D21) and to direct fallback `fetchPage`, and re-evaluates `Proxy Policy` (`NO_PROXY`) across watch-page redirects and caption track URLs.
 
+### D27. MCP `2025-11-25` capabilities, `-32602` invalid cursor, and `2026-07-28` deferral
+
+- **Decided (2026-11-26):** `mcp-fetch-server` advertises only implemented capabilities (`tools: {}`, never `resources` or `prompts`) and rejects any unrecognized `cursor` parameter on `tools/list` with JSON-RPC `-32602` (`InvalidParams`). Adoption of MCP `2026-07-28` `server/discover` remains deferred until `@modelcontextprotocol/sdk` supports it (D13). Resolves U4.
+
+### D28. MCP `tools/call` error surface and silent `proxy` stripping
+
+- **Decided (2026-11-26):** Unknown tool names on `tools/call` return JSON-RPC `-32602` (`InvalidParams`). Tool argument validation errors and domain/transport/proxy errors return `CallToolResult` with `isError: true` and the typed error message so the Agent can inspect and self-correct (D14). Caller-supplied `proxy` properties are omitted from all MCP tool schemas and silently stripped/ignored if smuggled in arguments (I6).
+
+### D29. Fail-fast Operator limits at MCP server startup
+
+- **Decided (2026-11-26):** `mcp-fetch-server` parses Operator `DEFAULT_LIMIT` and `MAX_RESPONSE_BYTES` at startup via `parseOperatorLimits` (D25), writing the typed error to `stderr` and exiting `1` before advertising `tools/list` if either env var is invalid.
+
 ## Undecided Questions
 
-| # | Question | Meanwhile |
-|---|---|---|
-| U4 | (`mcp-interface`) Should `tools/list` reject unrecognized pagination cursors with `-32602` (issue #49 SHOULD item), and when should MCP `2026-07-28` `server/discover` (issue #50) be adopted? | Follow `@modelcontextprotocol/sdk` defaults on `2025-11-25`. |
+*(None — all open questions have been resolved.)*
 
 ### Resolved questions
 
@@ -242,3 +253,4 @@ Pointers only, so an old reference to a U# still leads somewhere. The decision s
 | U1 | D20 |
 | U2 | D15 |
 | U3 | D23 |
+| U4 | D27 |

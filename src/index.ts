@@ -1,228 +1,37 @@
 #!/usr/bin/env node
 
-import { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import {
-  CallToolRequestSchema,
-  ListToolsRequestSchema,
-} from "@modelcontextprotocol/sdk/types.js";
-import { RequestPayloadSchema, YouTubeTranscriptPayloadSchema } from "./types.js";
-import { Fetcher } from "./Fetcher.js";
-import process from "process";
-import { downloadLimit } from "./types.js";
-import pkg from "../package.json" with { type: "json" };
+import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import pkg from '../package.json' with { type: 'json' };
+import { createRealDnsLookup } from './integrations/dns/client.ts';
+import { createRealHttpGet } from './integrations/origin/client.ts';
+import { createRealYtDlp } from './integrations/ytdlp/client.ts';
+import { createMcpServer } from './mcp/server.ts';
+import { parseOperatorLimits } from './policy/verbs.ts';
 
-const server = new Server(
-  {
-    name: "zcaceres/fetch",
+async function main(): Promise<void> {
+  const limits = parseOperatorLimits(process.env);
+  if (!limits.ok) {
+    process.stderr.write(`${limits.error.message}\n`);
+    process.exit(1);
+  }
+
+  const server = createMcpServer({
     version: pkg.version,
-  },
-  {
-    capabilities: {
-      tools: {},
+    env: process.env,
+    limits: limits.value,
+    fetchPorts: {
+      httpGet: createRealHttpGet({ maxBytes: limits.value.maxResponseBytes }),
+      dnsLookup: createRealDnsLookup(),
     },
-  },
-);
+    ytDlp: createRealYtDlp({ maxBytes: limits.value.maxResponseBytes }),
+  });
 
-server.setRequestHandler(ListToolsRequestSchema, async () => {
-  return {
-    tools: [
-      {
-        name: "fetch_html",
-        description: "Fetch a website and return its unmodified contents as HTML",
-        inputSchema: {
-          type: "object",
-          properties: {
-            url: {
-              type: "string",
-              description: "URL of the website to fetch",
-            },
-            headers: {
-              type: "object",
-              description: "Optional headers to include in the request",
-            },
-            max_length: {
-              type: "number",
-              description: `Maximum number of characters to return (default: ${downloadLimit})`,
-            },
-            start_index: {
-              type: "number",
-              description: "Start content from this character index (default: 0)",
-            },
-          },
-          required: ["url"],
-        },
-      },
-      {
-        name: "fetch_markdown",
-        description: "Fetch a website and return its contents converted to Markdown",
-        inputSchema: {
-          type: "object",
-          properties: {
-            url: {
-              type: "string",
-              description: "URL of the website to fetch",
-            },
-            headers: {
-              type: "object",
-              description: "Optional headers to include in the request",
-            },
-            max_length: {
-              type: "number",
-              description: `Maximum number of characters to return (default: ${downloadLimit})`,
-            },
-            start_index: {
-              type: "number",
-              description: "Start content from this character index (default: 0)",
-            },
-          },
-          required: ["url"],
-        },
-      },
-      {
-        name: "fetch_txt",
-        description:
-          "Fetch a website, convert the content to plain text (no HTML)",
-        inputSchema: {
-          type: "object",
-          properties: {
-            url: {
-              type: "string",
-              description: "URL of the website to fetch",
-            },
-            headers: {
-              type: "object",
-              description: "Optional headers to include in the request",
-            },
-            max_length: {
-              type: "number",
-              description: `Maximum number of characters to return (default: ${downloadLimit})`,
-            },
-            start_index: {
-              type: "number",
-              description: "Start content from this character index (default: 0)",
-            },
-          },
-          required: ["url"],
-        },
-      },
-      {
-        name: "fetch_json",
-        description: "Fetch a JSON file from a URL",
-        inputSchema: {
-          type: "object",
-          properties: {
-            url: {
-              type: "string",
-              description: "URL of the JSON to fetch",
-            },
-            headers: {
-              type: "object",
-              description: "Optional headers to include in the request",
-            },
-            max_length: {
-              type: "number",
-              description: `Maximum number of characters to return (default: ${downloadLimit})`,
-            },
-            start_index: {
-              type: "number",
-              description: "Start content from this character index (default: 0)",
-            },
-          },
-          required: ["url"],
-        },
-      },
-      {
-        name: "fetch_readable",
-        description:
-          "Fetch a website and return its main content parsed by Mozilla Readability, converted to Markdown. Strips away navigation, ads, and boilerplate. Ideal for articles and blog posts.",
-        inputSchema: {
-          type: "object",
-          properties: {
-            url: {
-              type: "string",
-              description: "URL of the website to fetch",
-            },
-            headers: {
-              type: "object",
-              description: "Optional headers to include in the request",
-            },
-            max_length: {
-              type: "number",
-              description: `Maximum number of characters to return (default: ${downloadLimit})`,
-            },
-            start_index: {
-              type: "number",
-              description: "Start content from this character index (default: 0)",
-            },
-          },
-          required: ["url"],
-        },
-      },
-      {
-        name: "fetch_youtube_transcript",
-        description:
-          "Fetch a YouTube video page and extract its captions/transcript",
-        inputSchema: {
-          type: "object",
-          properties: {
-            url: {
-              type: "string",
-              description: "URL of the YouTube video",
-            },
-            headers: {
-              type: "object",
-              description: "Optional headers to include in the request",
-            },
-            max_length: {
-              type: "number",
-              description: `Maximum number of characters to return (default: ${downloadLimit})`,
-            },
-            start_index: {
-              type: "number",
-              description: "Start content from this character index (default: 0)",
-            },
-            lang: {
-              type: "string",
-              description: "Language code for captions (default: 'en')",
-            },
-          },
-          required: ["url"],
-        },
-      },
-    ],
-  };
-});
-
-const FETCH_TOOLS = new Set(["fetch_html", "fetch_json", "fetch_txt", "fetch_markdown", "fetch_readable"]);
-
-server.setRequestHandler(CallToolRequestSchema, async (request) => {
-  const { name, arguments: args } = request.params;
-
-  if (name === "fetch_youtube_transcript") {
-    const validatedArgs = YouTubeTranscriptPayloadSchema.parse(args);
-    return Fetcher.youtubeTranscript(validatedArgs);
-  }
-
-  if (!FETCH_TOOLS.has(name)) {
-    throw new Error(`Tool not found: ${name}`);
-  }
-
-  const validatedArgs = RequestPayloadSchema.parse(args);
-
-  if (name === "fetch_html") return Fetcher.html(validatedArgs);
-  if (name === "fetch_json") return Fetcher.json(validatedArgs);
-  if (name === "fetch_txt") return Fetcher.txt(validatedArgs);
-  if (name === "fetch_markdown") return Fetcher.markdown(validatedArgs);
-  return Fetcher.readable(validatedArgs);
-});
-
-async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
 }
 
-main().catch((error) => {
-  console.error("Fatal error in main():", error);
+main().catch((error: unknown) => {
+  const message = error instanceof Error ? error.message : String(error);
+  process.stderr.write(`Fatal error in main(): ${message}\n`);
   process.exit(1);
 });
