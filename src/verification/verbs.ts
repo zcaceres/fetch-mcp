@@ -13,7 +13,7 @@ const CassetteExchangeSchema = z.object({
 
 const CassetteSchema = z.object({
   version: z.literal(1),
-  targetId: z.string().min(1),
+  sampleId: z.string().min(1),
   recordedAt: z.string().min(1),
   exchanges: z.array(CassetteExchangeSchema).min(1),
 });
@@ -43,12 +43,12 @@ export const updateCassette = (
   if (!verificationPassed) {
     return err(
       existing
-        ? `Refusing to overwrite existing cassette "${existing.targetId}" because live verification failed`
-        : `Refusing to write cassette "${candidate.targetId}" because live verification failed`,
+        ? `Refusing to overwrite existing cassette "${existing.sampleId}" because live verification failed`
+        : `Refusing to write cassette "${candidate.sampleId}" because live verification failed`,
     );
   }
   if (candidate.exchanges.length === 0) {
-    return err(`Refusing to write empty cassette "${candidate.targetId}"`);
+    return err(`Refusing to write empty cassette "${candidate.sampleId}"`);
   }
   return ok(redactCassette(candidate));
 };

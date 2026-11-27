@@ -78,7 +78,7 @@ describe('verification domain — Slice 01 (LV-1, D33, I6)', () => {
 describe('verification domain — Slice 02 (LV-2, LV-6, D31, D34, D35, I7)', () => {
   const sampleCassette: Cassette = {
     version: 1,
-    targetId: 'example-article',
+    sampleId: 'example-article',
     recordedAt: '2026-11-27T00:00:00Z',
     exchanges: [
       {
@@ -100,10 +100,10 @@ describe('verification domain — Slice 02 (LV-2, LV-6, D31, D34, D35, I7)', () 
 
   it('parses valid cassettes and rejects malformed cassette payloads', () => {
     expect(parseCassette(sampleCassette).ok).toBe(true);
-    expect(parseCassette({ version: 2, targetId: '', exchanges: [] }).ok).toBe(false);
+    expect(parseCassette({ version: 2, sampleId: '', exchanges: [] }).ok).toBe(false);
   });
 
-  it('redacts sensitive headers and URL credentials while preserving relative Location paths containing @ (D31, I7)', () => {
+  it('redacts sensitive headers and URL credentials (including malformed /, ?, # passwords) while preserving relative Location paths containing @ (D31, I7)', () => {
     const clean = redactCassette(sampleCassette);
     expect(clean.exchanges[0]?.url).toBe('https://example.com/article');
     expect(clean.exchanges[0]?.headers).toEqual({
@@ -111,27 +111,38 @@ describe('verification domain — Slice 02 (LV-2, LV-6, D31, D34, D35, I7)', () 
       location: 'https://example.com/next',
     });
 
-    const withRelativeLoc = redactCassette({
+    const withEdgeLocations = redactCassette({
       ...sampleCassette,
       exchanges: [
         {
-          url: 'https://example.com/pkg',
+          url: 'https://user:p/w@example.com/path',
           method: 'GET',
           status: 302,
           headers: { Location: '/relative/path?email=alice@example.com' },
           bodyBase64: '',
         },
         {
-          url: 'https://example.com/proto-rel',
+          url: 'https://user:p?w@example.com:badport/path',
           method: 'GET',
           status: 302,
           headers: { Location: '//bob:secret@cdn.example.com/path' },
           bodyBase64: '',
         },
+        {
+          url: 'https://user:p#w@example.com:badport/path',
+          method: 'GET',
+          status: 302,
+          headers: { Location: '//user:p/w@example.com:badport/path' },
+          bodyBase64: '',
+        },
       ],
     });
-    expect(withRelativeLoc.exchanges[0]?.headers.location).toBe('/relative/path?email=alice@example.com');
-    expect(withRelativeLoc.exchanges[1]?.headers.location).toBe('//cdn.example.com/path');
+    expect(withEdgeLocations.exchanges[0]?.url).toBe('https://<redacted>@example.com/path');
+    expect(withEdgeLocations.exchanges[0]?.headers.location).toBe('/relative/path?email=alice@example.com');
+    expect(withEdgeLocations.exchanges[1]?.url).toBe('https://<redacted>@example.com:badport/path');
+    expect(withEdgeLocations.exchanges[1]?.headers.location).toBe('//cdn.example.com/path');
+    expect(withEdgeLocations.exchanges[2]?.url).toBe('https://<redacted>@example.com:badport/path');
+    expect(withEdgeLocations.exchanges[2]?.headers.location).toBe('//<redacted>@example.com:badport/path');
   });
 
   it('refuses to overwrite an existing valid cassette on live failure and redacts on success (D34, D35, I7)', () => {
@@ -187,9 +198,9 @@ describe('verification domain — Slice 02 (LV-2, LV-6, D31, D34, D35, I7)', () 
     const report = summarizeReport(
       'live',
       [
-        { targetId: 'a', category: 'html-article', formFactor: 'cli', status: 'pass', durationMs: 12 },
+        { sampleId: 'a', category: 'html-article', formFactor: 'cli', status: 'pass', durationMs: 12 },
         {
-          targetId: 'b',
+          sampleId: 'b',
           category: 'youtube-transcript',
           formFactor: 'mcp-stdio',
           status: 'skipped_env',
@@ -197,7 +208,7 @@ describe('verification domain — Slice 02 (LV-2, LV-6, D31, D34, D35, I7)', () 
           details: 'yt-dlp unavailable',
         },
         {
-          targetId: 'c',
+          sampleId: 'c',
           category: 'refusal',
           formFactor: 'mcp-http',
           status: 'fail',

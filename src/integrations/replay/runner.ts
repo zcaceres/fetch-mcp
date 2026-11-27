@@ -1,8 +1,18 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import http from 'node:http';
-import https from 'node:https';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { type Headers, ResolvedIp, TargetUrl } from '../../fetching/nouns.ts';
+import type { DnsLookupPort, HttpGetPort } from '../../fetching/ports.ts';
+import { isIpLiteral, normalizeHostname, stripCrossOriginHeaders } from '../../fetching/queries.ts';
+import {
+  decodeResponseBody,
+  MAX_REDIRECTS,
+  prepareFetch,
+  validateRedirectHop,
+  validateResolvedIps,
+} from '../../fetching/verbs.ts';
+import { LanguageCode } from '../../transcript/nouns.ts';
+import { extractCaptionTracks, selectCaptionTrack } from '../../transcript/verbs.ts';
 import type {
   Cassette,
   CassetteExchange,
@@ -21,6 +31,8 @@ import {
 } from '../../verification/queries.ts';
 import { LIVE_SAMPLES } from '../../verification/samples.ts';
 import { parseCassette, updateCassette } from '../../verification/verbs.ts';
+import { createRealDnsLookup } from '../dns/client.ts';
+import { createRealHttpGet } from '../origin/client.ts';
 import {
   createHttpMcpDriver,
   createStdioMcpDriver,
@@ -52,89 +64,132 @@ export const loadCassettesFromDisk = (
   return loaded;
 };
 
-const recordLiveExchangeChain = async (
+export type RecordExchangePorts = {
+  readonly httpGet: HttpGetPort;
+  readonly dnsLookup: DnsLookupPort;
+};
+
+/**
+ * Records a live HTTP(S) exchange chain using the shared SSRF-hardened URL, DNS pinning,
+ * cross-origin header stripping, redirect-hop cap, and byte-cap guards (I1, I2, I4, I5, D8, D9, D34).
+ */
+export const recordLiveExchangeChain = async (
   startUrl: string,
   customHeaders?: Readonly<Record<string, string>>,
+  ports: RecordExchangePorts = {
+    httpGet: createRealHttpGet({ maxBytes: MAX_RECORD_BYTES, timeoutMs: 30_000 }),
+    dnsLookup: createRealDnsLookup(),
+  },
 ): Promise<readonly CassetteExchange[]> => {
-  const exchanges: CassetteExchange[] = [];
-  let currentUrl = startUrl;
-
-  const baseHeaders: Record<string, string> = {
-    'User-Agent':
-      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-    'Accept-Encoding': 'gzip, deflate, br',
-  };
-  if (customHeaders) {
-    for (const [k, v] of Object.entries(customHeaders)) {
-      baseHeaders[k] = v;
-    }
+  const prepared = prepareFetch({ url: startUrl, format: 'html', headers: customHeaders });
+  if (!prepared.ok) {
+    throw new Error(prepared.error.message);
   }
 
-  for (let hop = 0; hop < 10; hop++) {
-    const parsed = new URL(currentUrl);
-    const transport = parsed.protocol === 'https:' ? https : http;
-    const hopResult = await new Promise<CassetteExchange>((resolve, reject) => {
-      const req = transport.request(
-        parsed,
-        {
-          method: 'GET',
-          headers: baseHeaders,
-          timeout: 30_000,
-        },
-        (res) => {
-          const chunks: Buffer[] = [];
-          let totalBytes = 0;
-          let aborted = false;
+  const exchanges: CassetteExchange[] = [];
+  let currentUrl: TargetUrl = prepared.value.url;
+  let currentHeaders: Headers = prepared.value.headers;
 
-          res.on('data', (chunk: Buffer) => {
-            if (aborted) return;
-            totalBytes += chunk.byteLength;
-            if (totalBytes > MAX_RECORD_BYTES) {
-              aborted = true;
-              const capErr = new Error(
-                `Recorded response for ${currentUrl} exceeded ${MAX_RECORD_BYTES} byte cap (I5)`,
-              );
-              req.destroy(capErr);
-              reject(capErr);
-              return;
-            }
-            chunks.push(chunk);
-          });
-          res.on('end', () => {
-            if (aborted) return;
-            const flatHeaders: Record<string, string> = {};
-            for (const [k, v] of Object.entries(res.headers)) {
-              if (v === undefined) continue;
-              flatHeaders[k.toLowerCase()] = Array.isArray(v) ? v.join(', ') : v;
-            }
-            resolve({
-              url: currentUrl,
-              method: 'GET',
-              status: res.statusCode ?? 0,
-              headers: flatHeaders,
-              bodyBase64: Buffer.concat(chunks).toString('base64'),
-            });
-          });
-          res.on('error', reject);
-        },
-      );
-      req.on('error', reject);
-      req.on('timeout', () => {
-        req.destroy(new Error(`Timed out recording ${currentUrl}`));
-      });
-      req.end();
+  for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
+    const parsed = new URL(currentUrl);
+    const hostname = normalizeHostname(parsed.hostname);
+    let pinnedIps: readonly ResolvedIp[];
+    if (isIpLiteral(hostname)) {
+      pinnedIps = [ResolvedIp(hostname)];
+    } else {
+      const dnsRes = await ports.dnsLookup(hostname);
+      if (!dnsRes.ok) {
+        throw new Error(dnsRes.error.message);
+      }
+      const validIps = validateResolvedIps(hostname, dnsRes.value);
+      if (!validIps.ok) {
+        throw new Error(validIps.error.message);
+      }
+      pinnedIps = validIps.value;
+    }
+
+    const wireRes = await ports.httpGet(currentUrl, currentHeaders, pinnedIps);
+    if (!wireRes.ok) {
+      throw new Error(wireRes.error.message);
+    }
+
+    const wire = wireRes.value;
+    const flatHeaders: Record<string, string> = {};
+    for (const [k, v] of Object.entries(wire.headers)) {
+      flatHeaders[k.toLowerCase()] = v;
+    }
+    exchanges.push({
+      url: currentUrl,
+      method: 'GET',
+      status: wire.status,
+      headers: flatHeaders,
+      bodyBase64: Buffer.from(wire.rawBytes).toString('base64'),
     });
 
-    exchanges.push(hopResult);
-    const loc = hopResult.headers.location?.trim();
-    if ([301, 302, 303, 307, 308].includes(hopResult.status) && loc) {
-      currentUrl = new URL(loc, currentUrl).href;
+    const loc = flatHeaders.location?.trim();
+    if ([301, 302, 303, 307, 308].includes(wire.status) && loc) {
+      const nextStep = validateRedirectHop(currentUrl, loc, currentHeaders, hop, MAX_REDIRECTS);
+      if (!nextStep.ok) {
+        throw new Error(nextStep.error.message);
+      }
+      currentUrl = nextStep.value.nextUrl;
+      currentHeaders = nextStep.value.headers;
       continue;
     }
     break;
   }
 
   return exchanges;
+};
+
+/**
+ * Records all wire-level exchanges required to replay a Live Sample offline, including both the
+ * watch-page exchange chain and the matched caption-track XML (`&fmt=srv1`) chain for `fetch_transcript`
+ * samples (D7, D20, D34, D35, I4).
+ */
+export const recordLiveSampleExchanges = async (
+  sample: LiveSample,
+  ports?: RecordExchangePorts,
+): Promise<readonly CassetteExchange[]> => {
+  const watchExchanges = await recordLiveExchangeChain(sample.url, sample.headers, ports);
+  if (sample.tool !== 'fetch_transcript') {
+    return watchExchanges;
+  }
+
+  const lastWatch = watchExchanges[watchExchanges.length - 1];
+  if (!lastWatch) {
+    throw new Error(`No watch page exchange recorded for "${sample.id}"`);
+  }
+
+  const decodedHtml = decodeResponseBody(
+    TargetUrl(lastWatch.url),
+    lastWatch.headers,
+    Buffer.from(lastWatch.bodyBase64, 'base64'),
+    MAX_RECORD_BYTES,
+  );
+  if (!decodedHtml.ok) {
+    throw new Error(decodedHtml.error.message);
+  }
+
+  const tracks = extractCaptionTracks(decodedHtml.value);
+  if (!tracks.ok) {
+    throw new Error(tracks.error.message);
+  }
+
+  const selected = selectCaptionTrack(tracks.value, LanguageCode(sample.lang ?? 'en'));
+  if (!selected.ok) {
+    throw new Error(selected.error.message);
+  }
+
+  const captionUrl = selected.value.baseUrl.includes('fmt=')
+    ? selected.value.baseUrl
+    : `${selected.value.baseUrl}&fmt=srv1`;
+  const captionHeaders =
+    new URL(captionUrl).origin !== new URL(lastWatch.url).origin && sample.headers
+      ? stripCrossOriginHeaders(sample.headers)
+      : sample.headers;
+  const captionExchanges = await recordLiveExchangeChain(captionUrl, captionHeaders, ports);
+  return [...watchExchanges, ...captionExchanges];
 };
 
 export type RunMatrixOptions = {
@@ -192,7 +247,7 @@ export const runVerificationMatrix = async (options: RunMatrixOptions): Promise<
 
     if (stdioDriver.schemaIssues.length > 0) {
       cells.push({
-        targetId: 'mcp-schema-conformance',
+        sampleId: 'mcp-schema-conformance',
         category: 'html-article',
         formFactor: 'mcp-stdio',
         status: 'fail',
@@ -202,7 +257,7 @@ export const runVerificationMatrix = async (options: RunMatrixOptions): Promise<
     }
     if (httpDriver.schemaIssues.length > 0) {
       cells.push({
-        targetId: 'mcp-schema-conformance',
+        sampleId: 'mcp-schema-conformance',
         category: 'html-article',
         formFactor: 'mcp-http',
         status: 'fail',
@@ -236,7 +291,7 @@ export const runVerificationMatrix = async (options: RunMatrixOptions): Promise<
             sampleAllPassed = false;
           }
           cells.push({
-            targetId: sample.id,
+            sampleId: sample.id,
             category: sample.category,
             formFactor: ff,
             status,
@@ -247,7 +302,7 @@ export const runVerificationMatrix = async (options: RunMatrixOptions): Promise<
           sampleAllPassed = false;
           const durationMs = Math.round(performance.now() - started);
           cells.push({
-            targetId: sample.id,
+            sampleId: sample.id,
             category: sample.category,
             formFactor: ff,
             status: 'fail',
@@ -257,7 +312,7 @@ export const runVerificationMatrix = async (options: RunMatrixOptions): Promise<
         }
       }
 
-      // Enforce byte-for-byte 3-way parity across cli, mcp-stdio, and mcp-http in replay mode (LV-5)
+      // Enforce byte-for-byte 3-way parity across cli, mcp-stdio, and mcp-http in deterministic offline replay mode (LV-5, D34)
       if (
         options.mode === 'replay' &&
         sampleOutcomes.cli !== undefined &&
@@ -292,15 +347,11 @@ export const runVerificationMatrix = async (options: RunMatrixOptions): Promise<
         }
 
         if (sampleAllPassed) {
-          // For transcript samples, keep curated dual-hop (watch + srv1 XML) cassette unless direct XML is also captured
-          if (sample.tool === 'fetch_transcript' && existing !== undefined) {
-            continue;
-          }
           try {
-            const exchanges = await recordLiveExchangeChain(sample.url, sample.headers);
+            const exchanges = await recordLiveSampleExchanges(sample);
             const candidate: Cassette = {
               version: 1,
-              targetId: sample.id,
+              sampleId: sample.id,
               recordedAt,
               exchanges,
             };
@@ -312,10 +363,11 @@ export const runVerificationMatrix = async (options: RunMatrixOptions): Promise<
           } catch (error: unknown) {
             const detail = error instanceof Error ? error.message : String(error);
             process.stderr.write(`Warning: failed to record cassette for "${sample.id}": ${detail}\n`);
+            updateCassette(existing, { version: 1, sampleId: sample.id, recordedAt, exchanges: [] }, false);
           }
         } else {
           // Enforce D34: never overwrite existing valid Cassette when live verification fails
-          updateCassette(existing, { version: 1, targetId: sample.id, recordedAt, exchanges: [] }, false);
+          updateCassette(existing, { version: 1, sampleId: sample.id, recordedAt, exchanges: [] }, false);
         }
       }
     }

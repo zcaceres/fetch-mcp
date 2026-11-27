@@ -1,6 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
 import http from 'node:http';
-import type { AddressInfo } from 'node:net';
 import zlib from 'node:zlib';
 import { executeFetch } from '../../fetching/execute.ts';
 import { ResolvedIp, TargetUrl } from '../../fetching/nouns.ts';
@@ -75,7 +74,10 @@ describe('real HTTP transport (Slice 05)', () => {
     });
 
     await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
-    const addr = server.address() as AddressInfo;
+    const addr = server.address();
+    if (typeof addr !== 'object' || addr === null) {
+      throw new Error('Expected TCP AddressInfo from local test server');
+    }
     port = addr.port;
   });
 

@@ -30,7 +30,7 @@ const redactUrlCredentials = (rawUrl: string): string => {
       }
       return parsed.href;
     } catch {
-      return rawUrl.replace(/^([a-zA-Z][a-zA-Z0-9+.-]*:\/\/)[^/?#]*@/, '$1<redacted>@');
+      return rawUrl.replace(/^([a-zA-Z][a-zA-Z0-9+.-]*:\/\/).*@/, '$1<redacted>@');
     }
   }
   if (rawUrl.startsWith('//')) {
@@ -43,7 +43,7 @@ const redactUrlCredentials = (rawUrl: string): string => {
       }
       return rawUrl;
     } catch {
-      return rawUrl.replace(/^(\/\/)[^/?#]*@/, '$1<redacted>@');
+      return rawUrl.replace(/^(\/\/).*@/, '$1<redacted>@');
     }
   }
   return rawUrl;
@@ -354,7 +354,7 @@ export const formatReportSummary = (report: VerificationReport): string => {
   for (const cell of report.cells) {
     const icon = statusLabel(cell.status);
     const detail = cell.details ? ` — ${cell.details}` : '';
-    lines.push(`  [${icon}] ${cell.targetId} (${cell.formFactor}, ${cell.durationMs}ms)${detail}`);
+    lines.push(`  [${icon}] ${cell.sampleId} (${cell.formFactor}, ${cell.durationMs}ms)${detail}`);
   }
   return lines.join('\n');
 };

@@ -71,7 +71,8 @@ Scenario: Curated Live Samples exercise all four web and YouTube categories
 Scenario: Matrix runner executes every Live Sample across cli, mcp-stdio, and mcp-http
   Given built `dist/cli.js` and `dist/index.js` binaries and the offline replay proxy (or live internet)
   When the Agent or Operator runs the matrix verification runner
-  Then every Live Sample runs across `cli`, `mcp-stdio`, and `mcp-http`, verifying Output Checks and exact success/refusal output parity across all three Form Factors (D1, D32, D34, D35)
+  Then every Live Sample runs across `cli`, `mcp-stdio`, and `mcp-http`, verifying Output Checks and success/refusal consistency across all three Form Factors (D1, D32, D34, D35)
+  And in deterministic offline Cassette replay mode, all three Form Factors match byte-for-byte on `ok` status and output text (D34, D35)
 ```
 
 ## 6. Refresh & Report On Demand Against Live Internet

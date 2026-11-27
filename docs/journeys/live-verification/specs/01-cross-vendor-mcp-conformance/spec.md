@@ -27,8 +27,8 @@ strict runtime unknown-key refusal per `D28`), create the pure `src/verification
 - Unit tests in `src/verification/verification.test.ts` and scenario `scenarios/live-verification/01-cross-vendor-mcp-conformance.txt`.
 
 ### Out
-- Wire-level Cassette recording/redaction and structural assertion evaluation (Slice 02; `LV-2`).
-- Local HTTPS `CONNECT` replay proxy and real-internet corpus (Slice 03; `LV-3`, `LV-4`).
+- Wire-level Cassette recording/redaction and Output Check evaluation (Slice 02; `LV-2`).
+- Local HTTPS `CONNECT` replay proxy and real-internet Live Samples (Slice 03; `LV-3`, `LV-4`).
 - Multi-form-factor matrix runner across CLI + stdio + Streamable HTTP (Slice 04; `LV-5`, `LV-6`).
 
 ## Vocabulary

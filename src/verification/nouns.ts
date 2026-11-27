@@ -52,7 +52,7 @@ export type CassetteExchange = {
 
 export type Cassette = {
   readonly version: 1;
-  readonly targetId: string;
+  readonly sampleId: string;
   readonly recordedAt: string;
   readonly exchanges: readonly CassetteExchange[];
 };
@@ -90,7 +90,7 @@ export type CellOutcome = {
 export type CellStatus = 'pass' | 'fail' | 'skipped_env';
 
 export type VerificationCell = {
-  readonly targetId: string;
+  readonly sampleId: string;
   readonly category: SampleCategory;
   readonly formFactor: FormFactor;
   readonly status: CellStatus;
