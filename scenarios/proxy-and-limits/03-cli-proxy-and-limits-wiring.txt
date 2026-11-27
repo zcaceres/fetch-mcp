@@ -1,0 +1,85 @@
+# Slice 03: CLI Proxy & Limits Wiring
+# Covers PL-1, PL-2, PL-4, PL-8 (Operator limits on fetch-transcript, NO_PROXY port/IPv6 matching, and --proxy overriding NO_PROXY on fetch-transcript)
+
+# Operator DEFAULT_LIMIT and MAX_RESPONSE_BYTES apply to fetch-transcript too (PL-1, PL-2, D9, D25, I5)
+> dns set www.youtube.com 142.250.190.78
+dns: www.youtube.com -> 142.250.190.78
+
+> env set DEFAULT_LIMIT 30
+env: DEFAULT_LIMIT=30
+
+> ytdlp available true
+ytdlp: available true
+
+> ytdlp serve https://www.youtube.com/watch?v=lim1 en <transcript><text start="0" dur="1">Longer transcript text here</text></transcript>
+ytdlp: serve en https://www.youtube.com/watch?v=lim1
+
+> fetch-transcript https://www.youtube.com/watch?v=lim1
+| [Transcript language: en — en]
+
+> env set DEFAULT_LIMIT notanumber
+env: DEFAULT_LIMIT=notanumber
+
+> fetch-transcript https://www.youtube.com/watch?v=lim1
+error: Invalid DEFAULT_LIMIT "notanumber": must be a non-negative integer
+
+> env clear
+env: cleared
+
+# MAX_RESPONSE_BYTES caps direct transcript fallback responses (PL-1, I5)
+> env set MAX_RESPONSE_BYTES 50
+env: MAX_RESPONSE_BYTES=50
+
+> ytdlp available false
+ytdlp: available false
+
+> origin serve https://www.youtube.com/watch?v=bigyt 200 <html><script>var ytInitialPlayerResponse = {"captions":{"playerCaptionsTracklistRenderer":{"captionTracks":[]}}};</script></html>
+origin: 200 https://www.youtube.com/watch?v=bigyt
+
+> fetch-transcript https://www.youtube.com/watch?v=bigyt
+error: Response too large: exceeded 50 byte limit
+
+> env clear
+env: cleared
+
+# NO_PROXY port matching and explicit --proxy override on fetch-transcript (PL-4, PL-8, D6, D24, D26)
+> env set HTTP_PROXY http://proxy.internal:8080
+env: HTTP_PROXY=http://proxy.internal:8080
+
+> env set NO_PROXY example.com:8080,www.youtube.com
+env: NO_PROXY=example.com:8080,www.youtube.com
+
+> dns set example.com 93.184.216.34
+dns: example.com -> 93.184.216.34
+
+> origin serve http://example.com:8080/p 200 <p>port-direct</p>
+origin: 200 http://example.com:8080/p
+
+> origin serve http://example.com:9090/p 200 <p>port-proxied</p>
+origin: 200 http://example.com:9090/p
+
+> fetch html http://example.com:8080/p
+| <p>port-direct</p>
+
+> origin last-proxy http://example.com:8080/p
+proxy: direct
+
+> fetch html http://example.com:9090/p
+| <p>port-proxied</p>
+
+> origin last-proxy http://example.com:9090/p
+proxy: http://proxy.internal:8080/
+
+> ytdlp available true
+ytdlp: available true
+
+> dns fail www.youtube.com ENOTFOUND
+dns: fail www.youtube.com
+
+> fetch-transcript https://www.youtube.com/watch?v=lim1 --proxy socks5://127.0.0.1:1080
+| [Transcript language: en — en]
+|
+| [0:00] Longer transcript text here
+
+> ytdlp last-args
+args: --write-sub --write-auto-sub --sub-lang en --sub-format srv1 --skip-download -o <tmp>/sub --proxy socks5://127.0.0.1:1080 -- https://www.youtube.com/watch?v=lim1

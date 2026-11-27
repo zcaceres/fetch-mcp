@@ -3,18 +3,18 @@
 import { realpathSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import pkg from '../package.json' with { type: 'json' };
-import { Fetcher } from './Fetcher.ts';
 import { executeFetch } from './fetching/execute.ts';
 import { type Headers, WEB_FORMATS, type WebFormat } from './fetching/nouns.ts';
-import type { FetchPorts } from './fetching/ports.ts';
+import type { FetchPorts, ResolveProxyPort } from './fetching/ports.ts';
 import { normalizeHostname } from './fetching/queries.ts';
-import { DEFAULT_LIMIT, MAX_RESPONSE_BYTES, validateResolvedIps } from './fetching/verbs.ts';
+import { validateResolvedIps } from './fetching/verbs.ts';
 import { createRealDnsLookup } from './integrations/dns/client.ts';
 import { createRealHttpGet } from './integrations/origin/client.ts';
 import { createRealYtDlp } from './integrations/ytdlp/client.ts';
+import { parseOperatorLimits, resolveProxyPolicy } from './policy/verbs.ts';
 import { err, ok, type Result } from './shared/result.ts';
 import { executeFetchTranscript } from './transcript/execute.ts';
-import type { CheckHostPort, FetchPagePort, YtDlpPort } from './transcript/ports.ts';
+import type { CheckHostPort, FetchPagePort, ResolveTranscriptProxyPort, YtDlpPort } from './transcript/ports.ts';
 
 const USAGE = `mcp-fetch v${pkg.version}
 
@@ -180,16 +180,6 @@ export const parseCliArgs = (argv: readonly string[]): Result<CliAction, string>
   });
 };
 
-const parsePositiveEnvInt = (raw: string | undefined, fallback: number, allowZero: boolean): number => {
-  if (raw === undefined) return fallback;
-  const n = Number.parseInt(raw, 10);
-  if (Number.isNaN(n) || (allowZero ? n < 0 : n <= 0)) return fallback;
-  return n;
-};
-
-const hasEnvProxy = (env: NodeJS.ProcessEnv): boolean =>
-  Boolean(env.HTTPS_PROXY || env.https_proxy || env.HTTP_PROXY || env.http_proxy || env.ALL_PROXY || env.all_proxy);
-
 export const runCli = async (argv: readonly string[], deps: CliDeps = {}): Promise<number> => {
   const stdout = deps.stdout ?? ((text: string) => process.stdout.write(text));
   const stderr = deps.stderr ?? ((text: string) => process.stderr.write(text));
@@ -212,31 +202,36 @@ export const runCli = async (argv: readonly string[], deps: CliDeps = {}): Promi
       return 0;
 
     case 'transcript': {
-      // Proxy routing waits on the `proxy-and-limits` journey; fall back to legacy Fetcher only when proxy is configured and no custom ports were injected.
-      if (!deps.ports && !deps.ytDlp && (action.proxy !== undefined || hasEnvProxy(env))) {
-        const payload = {
-          url: action.url,
-          ...(Object.keys(action.headers).length > 0 ? { headers: { ...action.headers } } : {}),
-          ...(action.maxLength !== undefined ? { max_length: action.maxLength } : {}),
-          ...(action.startIndex !== undefined ? { start_index: action.startIndex } : {}),
-          ...(action.proxy !== undefined ? { proxy: action.proxy } : {}),
-          ...(action.lang !== undefined ? { lang: action.lang } : {}),
-        };
-        const legacy = await Fetcher.youtubeTranscript(payload);
-        const text = legacy.content[0]?.text ?? '';
-        if (legacy.isError) {
-          stderr(`${text}\n`);
-          return 1;
-        }
-        stdout(text);
-        return 0;
+      const limits = parseOperatorLimits(env);
+      if (!limits.ok) {
+        stderr(`${limits.error.message}\n`);
+        return 1;
       }
 
-      const defaultLimit = parsePositiveEnvInt(env.DEFAULT_LIMIT, DEFAULT_LIMIT, true);
-      const maxResponseBytes = parsePositiveEnvInt(env.MAX_RESPONSE_BYTES, MAX_RESPONSE_BYTES, false);
-      const fetchPorts: FetchPorts = deps.ports ?? {
+      const { defaultLimit, maxResponseBytes } = limits.value;
+      const resolveFetchProxy: ResolveProxyPort = (targetUrl) => {
+        const resolved = resolveProxyPolicy(targetUrl, env, action.proxy);
+        if (!resolved.ok) {
+          return err({ kind: 'invalid_request', message: resolved.error.message });
+        }
+        return ok(resolved.value.kind === 'proxy' ? String(resolved.value.url) : undefined);
+      };
+
+      const resolveTranscriptProxy: ResolveTranscriptProxyPort = (targetUrl) => {
+        const resolved = resolveProxyPolicy(targetUrl, env, action.proxy);
+        if (!resolved.ok) {
+          return err({ kind: 'invalid_request', message: resolved.error.message });
+        }
+        return ok(resolved.value.kind === 'proxy' ? String(resolved.value.url) : undefined);
+      };
+
+      const basePorts: FetchPorts = deps.ports ?? {
         httpGet: createRealHttpGet({ maxBytes: maxResponseBytes }),
         dnsLookup: createRealDnsLookup(),
+      };
+      const fetchPorts: FetchPorts = {
+        ...basePorts,
+        resolveProxy: basePorts.resolveProxy ?? resolveFetchProxy,
       };
 
       const fetchPage: FetchPagePort = async (targetUrl, reqHeaders) => {
@@ -274,7 +269,7 @@ export const runCli = async (argv: readonly string[], deps: CliDeps = {}): Promi
           ...(action.startIndex !== undefined ? { startIndex: action.startIndex } : {}),
           ...(action.maxLength !== undefined ? { maxLength: action.maxLength } : {}),
         },
-        { fetchPage, checkHost, ytDlp },
+        { fetchPage, checkHost, resolveProxy: resolveTranscriptProxy, ytDlp },
         { defaultLimit },
       );
 
@@ -287,39 +282,28 @@ export const runCli = async (argv: readonly string[], deps: CliDeps = {}): Promi
     }
 
     case 'fetch': {
-      // Proxy routing waits on the `proxy-and-limits` journey; fall back to legacy Fetcher only when proxy is configured and no custom ports were injected.
-      if (!deps.ports && (action.proxy !== undefined || hasEnvProxy(env))) {
-        const legacyPayload = {
-          url: action.url,
-          ...(Object.keys(action.headers).length > 0 ? { headers: { ...action.headers } } : {}),
-          ...(action.maxLength !== undefined ? { max_length: action.maxLength } : {}),
-          ...(action.startIndex !== undefined ? { start_index: action.startIndex } : {}),
-          ...(action.proxy !== undefined ? { proxy: action.proxy } : {}),
-        };
-        const legacy =
-          action.format === 'html'
-            ? await Fetcher.html(legacyPayload)
-            : action.format === 'markdown'
-              ? await Fetcher.markdown(legacyPayload)
-              : action.format === 'readable'
-                ? await Fetcher.readable(legacyPayload)
-                : action.format === 'text'
-                  ? await Fetcher.txt(legacyPayload)
-                  : await Fetcher.json(legacyPayload);
-        const text = legacy.content[0]?.text ?? '';
-        if (legacy.isError) {
-          stderr(`${text}\n`);
-          return 1;
-        }
-        stdout(text);
-        return 0;
+      const limits = parseOperatorLimits(env);
+      if (!limits.ok) {
+        stderr(`${limits.error.message}\n`);
+        return 1;
       }
 
-      const defaultLimit = parsePositiveEnvInt(env.DEFAULT_LIMIT, DEFAULT_LIMIT, true);
-      const maxResponseBytes = parsePositiveEnvInt(env.MAX_RESPONSE_BYTES, MAX_RESPONSE_BYTES, false);
-      const ports: FetchPorts = deps.ports ?? {
+      const { defaultLimit, maxResponseBytes } = limits.value;
+      const resolveFetchProxy: ResolveProxyPort = (targetUrl) => {
+        const resolved = resolveProxyPolicy(targetUrl, env, action.proxy);
+        if (!resolved.ok) {
+          return err({ kind: 'invalid_request', message: resolved.error.message });
+        }
+        return ok(resolved.value.kind === 'proxy' ? String(resolved.value.url) : undefined);
+      };
+
+      const basePorts: FetchPorts = deps.ports ?? {
         httpGet: createRealHttpGet({ maxBytes: maxResponseBytes }),
         dnsLookup: createRealDnsLookup(),
+      };
+      const ports: FetchPorts = {
+        ...basePorts,
+        resolveProxy: basePorts.resolveProxy ?? resolveFetchProxy,
       };
 
       const result = await executeFetch(

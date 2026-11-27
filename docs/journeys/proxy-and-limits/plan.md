@@ -54,13 +54,12 @@ a scenario that runs it.
    ([spec](specs/01-operator-limits-and-proxy-policy/spec.md), `scenarios/proxy-and-limits/01-operator-limits-and-proxy-policy.txt`)
 2. **02 — Real HTTP, HTTPS CONNECT & SOCKS Proxy Transport.** Extends `src/integrations/origin/client.ts` with zero-dependency HTTP proxy forwarding (`Proxy-Authorization`), HTTPS `CONNECT` tunneling, and RFC 1928 SOCKS5/5h + SOCKS4/4a tunneling with credential redaction, `30s` timeout, and `MAX_RESPONSE_BYTES` caps, backed by real local proxy integration tests and `origin proxy-fail`. Covers PL-9.
    ([spec](specs/02-real-proxy-transport/spec.md), `scenarios/proxy-and-limits/02-real-proxy-transport.txt`)
+3. **03 — CLI Proxy & Limits Wiring.** Wires `src/cli.ts` (`fetch` and `transcript`) to `src/policy/` + real proxied `createRealHttpGet` and `createRealYtDlp`, enforces fail-fast Operator limits (`D25`), and removes the legacy `Fetcher` import and proxy fallback from `src/cli.ts`. Covers PL-10.
+   ([spec](specs/03-cli-proxy-and-limits-wiring/spec.md), `scenarios/proxy-and-limits/03-cli-proxy-and-limits-wiring.txt`)
 
 ### Next
 
-In the order we expect to build them; reorder freely. Each says where it came from: criteria, a finding (a
-`/dd-verify` note) or a decision.
-
-1. **03 — CLI Proxy & Limits Wiring.** Wires `src/cli.ts` (`fetch` and `transcript`) to `src/policy/` + real proxied `createRealHttpGet` and `createRealYtDlp`, enforces fail-fast Operator limits (`D25`), and removes the legacy `Fetcher` import and proxy fallback from `src/cli.ts`. From PL-10.
+*(None — all slices for `proxy-and-limits` are complete and verified.)*
 
 ## Deferred
 

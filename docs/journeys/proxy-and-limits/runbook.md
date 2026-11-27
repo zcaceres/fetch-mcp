@@ -19,6 +19,7 @@ Every external system is mocked in memory and starts from its fixtures; `reset` 
 |---|---|
 | `scenarios/proxy-and-limits/01-operator-limits-and-proxy-policy.txt` | Tracer bullet: `DEFAULT_LIMIT`/`MAX_RESPONSE_BYTES` valid & invalid env vars, env proxy precedence & bare `host:port`, `NO_PROXY` vs CLI `--proxy`, malformed/unsupported proxy refusal, per-hop redirect Proxy Policy re-evaluation, local SSRF + delegated DNS for both `fetch` and `fetch transcript` (`--proxy` to `yt-dlp` and direct fallback) [PL-1, PL-2, PL-3, PL-4, PL-5, PL-6, PL-7, PL-8] |
 | `scenarios/proxy-and-limits/02-real-proxy-transport.txt` | SOCKS4/4a/5/5h DNS delegation and proxied failure reporting with credential redaction [PL-9] |
+| `scenarios/proxy-and-limits/03-cli-proxy-and-limits-wiring.txt` | Operator `DEFAULT_LIMIT` & `MAX_RESPONSE_BYTES` on `fetch-transcript`, `NO_PROXY` port matching, and `--proxy` overriding `NO_PROXY` on `fetch-transcript` [PL-1, PL-2, PL-4, PL-8] |
 
 ```bash
 bun run harness run scenarios/proxy-and-limits
