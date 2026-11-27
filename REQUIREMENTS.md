@@ -12,6 +12,8 @@ What each journey's users can do and see is in its acceptance criteria, which ci
 - **Fetch Transcript:** an Agent or CLI User fetches a YouTube video's captions and receives a Windowed Excerpt of the Transcript ([acceptance criteria](docs/journeys/fetch-transcript/acceptance-criteria.md)).
 - **Proxy & Limits:** an Operator configures environment proxy routing and response limits (or a CLI User passes `--proxy`), enforced consistently across `fetch` and `fetch transcript` ([acceptance criteria](docs/journeys/proxy-and-limits/acceptance-criteria.md)).
 - **MCP Interface:** an Agent connects over MCP stdio (`2025-11-25`), discovers the six Terminology-aligned tools, and invokes them over the shared domain core with Operator-only proxy routing ([acceptance criteria](docs/journeys/mcp-interface/acceptance-criteria.md)).
+- **Streamable HTTP:** an Agent connects over MCP `2025-11-25` Streamable HTTP (`mcp-fetch-server --http` on `/mcp`), guarded by localhost `Origin`/`Host` validation and sharing the same domain core and Operator trust boundary ([acceptance criteria](docs/journeys/streamable-http/acceptance-criteria.md)).
+- **Live Verification:** an Agent or Operator validates cross-vendor MCP conformance (Anthropic, Gemini, OpenAI) and verifies real-internet **Live Samples** and wire-level **Cassettes** across all three supported **Form Factors** (`cli`, `mcp-stdio`, `mcp-http`) offline and on demand against the live internet ([acceptance criteria](docs/journeys/live-verification/acceptance-criteria.md)).
 
 ## Sources
 
@@ -20,8 +22,11 @@ something they cover.
 
 - [README.md](README.md): project overview, MCP tools, CLI usage, environment variables, and security features (v2.0.0).
 - [package.json](package.json): package metadata (`mcp-fetch-server` v2.0.0), binaries, scripts, and runtime dependencies.
-- [src/](src/): Functional DDD implementation (`shared/`, `policy/`, `fetching/`, `transcript/`, `mcp/`, `integrations/`, `index.ts`, `cli.ts`).
+- [src/](src/): Functional DDD implementation (`shared/`, `policy/`, `fetching/`, `transcript/`, `mcp/`, `verification/`, `integrations/`, `index.ts`, `cli.ts`).
 - [docs/github/README.md](docs/github/README.md): exported GitHub issues and pull requests (as of 2026-09-27).
+- Anthropic / MCP `2025-11-25` server specification & `@modelcontextprotocol/inspector` docs (reviewed 2026-11-27): `stdio` stdout hygiene, Streamable HTTP transport, `2025-11-25` tool annotations, and cross-client testing.
+- Google Gemini CLI MCP server documentation (reviewed 2026-11-27): `mcpServers` stdio/Streamable HTTP configuration and Gemini API tool schema validation rules.
+- OpenAI Responses API & Agents SDK MCP documentation (reviewed 2026-11-27): `MCPServerStdio` / `MCPServerStreamableHttp` / hosted MCP expectations, root `additionalProperties: false` strict schema rules, and tool safety annotations.
 
 ## Terminology
 
@@ -31,7 +36,7 @@ noun marked *(derived)* is computed from others, never stored, and its entry say
 
 ### Actors
 
-- **Agent:** an untrusted MCP client or AI model invoking tools over stdio (D1, D2).
+- **Agent:** an untrusted MCP client or AI model invoking tools over MCP (`stdio` or Streamable HTTP) (D1, D2, D32).
 - **CLI User:** a local human or script invoking `mcp-fetch` directly from the terminal (D1, D2).
 - **Operator:** the person or runtime configuring process-level limits and proxy policy via environment variables (D2).
 
@@ -48,7 +53,12 @@ noun marked *(derived)* is computed from others, never stored, and its entry say
 - **Caption Track:** a YouTube video's timed-text track metadata (`languageCode`, display `name`, and `baseUrl`) extracted from a watch page and matched against the requested caption language code (D7, D20, D30).
 - **Rendered Output:** the unpersisted string produced by transforming a Raw Response into the requested Format (`html`, `markdown`, `readable`, `text`, or `json`) via a fallible verb (D3, D4, D14, D16, D17, D30).
 - **Transcript:** unpersisted formatted timestamped caption lines prefixed with a language header, produced by a fallible verb from a YouTube video via `yt-dlp` or direct page/caption-XML parsing (D3, D4, D7, D22, D30).
+- **Form Factor:** one of the three supported interfaces through which Fetch MCP runs: `cli`, `mcp-stdio`, or `mcp-http` (D1, D3, D32, D35).
+- **Cassette:** a versioned, secret-redacted wire-level HTTP/YouTube recording (status, headers, raw bytes per hop) captured from a real-internet **Live Sample** for deterministic offline replay across all supported **Form Factors** (D31, D34, D35, I7).
+- **Live Sample:** a curated real-world URL paired with the tool/subcommand to invoke on it, its **Output Checks**, and its optional **Cassette** (D34, D35).
+- **Output Check:** a structural check evaluated against a **Live Sample** outcome (`expect_ok`, `expect_error`, `min_length`, `contains`, `not_contains`, `valid_json`, or `starts_with`) (D34, D35).
 - **Windowed Excerpt** *(derived)*: the character substring of Rendered Output or Transcript selected by `startIndex` and `maxLength` (with `maxLength = 0` meaning no limit); computed by an infallible query and never stored (D4, D9, D30).
+- **Verification Report** *(derived)*: the pass / fail / `skipped_env` matrix and totals computed by an infallible query across every **Live Sample** × **Form Factor** (D30, D34, D35).
 
 ### Verbs
 
@@ -56,6 +66,8 @@ noun marked *(derived)* is computed from others, never stored, and its entry say
 - **fetch transcript:** retrieve a YouTube video's captions (trying `yt-dlp` first, then direct extraction), build a Transcript, and return a Windowed Excerpt (D4, D7).
 - **parse operator limits:** parse and validate Operator Limits (`DEFAULT_LIMIT`, `MAX_RESPONSE_BYTES`) from OS Environment, failing explicitly on invalid values (D9, D25, D29, D30).
 - **resolve proxy policy:** determine the effective Proxy Policy for a Target URL from explicit CLI `--proxy` or Operator proxy environment variables honoring `NO_PROXY`, failing explicitly on malformed or unsupported proxy URLs (D5, D23, D24, D25, D30).
+- **parse cassette:** parse and validate raw JSON into a typed **Cassette**, failing explicitly on schema mismatch (D34, D35).
+- **update cassette:** redact secrets from a recorded **Cassette** and refuse to overwrite an existing valid **Cassette** when live verification fails (D31, D34, D35, I7).
 
 ## External Systems
 
@@ -88,7 +100,7 @@ system computes a value for us, its rule for it is recorded here, as that system
 - `fetch transcript` extracts `ytInitialPlayerResponse` resiliently (scanning past non-JSON matches and skipping malformed individual track entries), parses `srv1`/`srv3` XML (decoding standard, decimal, case-insensitive hex, and double-encoded HTML entities), and returns a Windowed Excerpt of the Transcript, formatted as a language header followed by timestamped caption lines (D4, D9, D15, D21).
 
 ### Interfaces & Proxy Routing
-- The MCP stdio server (`mcp-fetch-server`) exposes six tools aligned to Terminology: `fetch_html`, `fetch_markdown`, `fetch_readable`, `fetch_text`, `fetch_json`, and `fetch_transcript`, accepting custom request headers and never accepting a caller-supplied `proxy` parameter (D1, D6, D10, D12, I6).
+- The MCP server (`mcp-fetch-server`, over `stdio` or Streamable HTTP via `--http`) exposes six tools aligned to Terminology: `fetch_html`, `fetch_markdown`, `fetch_readable`, `fetch_text`, `fetch_json`, and `fetch_transcript`, accepting custom request headers and never accepting a caller-supplied `proxy` parameter (D1, D6, D10, D12, D32, D33, I6).
 - The local CLI (`mcp-fetch`) exposes six matching subcommands (`html`, `markdown`, `readable`, `text`, `json`, `transcript`) and supports `--header`, `--proxy`, `--max-length`, `--start-index`, and `--lang` (`--lang` is valid only on `transcript` and rejected on web subcommands) (D1, D6, D10, D12).
 - Operator proxy configuration (`HTTPS_PROXY`, `HTTP_PROXY`, `ALL_PROXY`, honoring `NO_PROXY`) and CLI `--proxy` overrides support HTTP, HTTPS, and SOCKS (`socks4`, `socks4a`, `socks5`, `socks5h`) proxies, re-evaluating Proxy Policy per redirect hop, redacting proxy credentials from all error/diagnostic output, and failing explicitly on invalid or blank proxy URLs or invalid `DEFAULT_LIMIT` / `MAX_RESPONSE_BYTES` env settings (D2, D5, D6, D23, D24, D25, D26, D31, I7).
 - Typed domain errors map to `isError: true` text results in MCP responses and `stderr` output with exit code `1` in the CLI (D14).
@@ -126,7 +138,7 @@ for an undecided rule and will change with it.
 - Non-GET HTTP methods (POST, PUT, DELETE, etc.) and persistent cookie jars or sessions (D3).
 - Multi-tenant authentication and per-user access scoping (D3; see [issue #47](docs/github/issues/047-question-about-auth-approach.md)).
 - Persistent caching or local storage of fetched pages (D3).
-- Remote MCP transports over HTTP or SSE (D3).
+- Legacy HTTP+SSE MCP transport (replaced by Streamable HTTP per MCP `2025-11-25`, D3, D32).
 
 ## Decision Log
 
@@ -140,11 +152,11 @@ for an undecided rule and will change with it.
 
 ### D3. Core scope and explicit non-goals
 
-- **Decided (2026-11-25):** Fetch MCP is a lightweight, SSRF-hardened web fetcher that retrieves public HTTP(S) content and YouTube video transcripts and returns them in agent-ready text formats. Headless browser rendering, non-GET HTTP methods/cookie jars, multi-tenant auth, persistent response caching, and remote MCP HTTP/SSE transports are out of scope for now.
+- **Decided (2026-11-27):** Fetch MCP is a lightweight, SSRF-hardened web fetcher that retrieves public HTTP(S) content and YouTube video transcripts and returns them in agent-ready text formats over three supported form factors: local CLI (`mcp-fetch`), MCP `stdio` (`mcp-fetch-server`), and MCP Streamable HTTP (`D32`). Headless browser rendering, non-GET HTTP methods/cookie jars, multi-tenant auth, persistent response caching, and legacy HTTP+SSE MCP transport are out of scope for now.
 
 ### D4. Canonical domain vocabulary
 
-- **Decided (2026-11-26):** The domain speaks a unified vocabulary (extended by D19 and D30): Nouns are **Target URL**, **Format** (`html`, `markdown`, `readable`, `text`, `json`, `youtube-transcript`), **Window**, **Fetch Request**, **Wire Response**, **Raw Response**, **Operator Limits**, **Proxy Policy**, **Caption Track**, **Rendered Output**, and **Transcript**; Derived Noun is **Windowed Excerpt**; Verbs are **fetch**, **fetch transcript**, **parse operator limits**, and **resolve proxy policy**.
+- **Decided (2026-11-27):** The domain speaks a unified vocabulary (extended by D19, D30, and D35): Nouns are **Target URL**, **Format** (`html`, `markdown`, `readable`, `text`, `json`, `youtube-transcript`), **Window**, **Fetch Request**, **Wire Response**, **Raw Response**, **Operator Limits**, **Proxy Policy**, **Caption Track**, **Rendered Output**, **Transcript**, **Form Factor**, **Cassette**, **Live Sample**, and **Output Check**; Derived Nouns are **Windowed Excerpt** and **Verification Report**; Verbs are **fetch**, **fetch transcript**, **parse operator limits**, **resolve proxy policy**, **parse cassette**, and **update cassette**.
 
 ### D5. Supported proxy protocols
 
@@ -238,9 +250,9 @@ for an undecided rule and will change with it.
 
 - **Decided (2026-11-27):** `mcp-fetch-server` advertises only implemented capabilities (`tools: {}`, never `resources` or `prompts`) and rejects any unrecognized `cursor` string on `tools/list` with JSON-RPC `-32602` (`InvalidParams`). Malformed non-spec JSON-RPC `params` types (such as `cursor: null` or numeric `cursor`) keep `@modelcontextprotocol/sdk`'s default `-32603` schema rejection before handlers run. Adoption of MCP `2026-07-28` `server/discover` remains deferred until `@modelcontextprotocol/sdk` supports it (D13). Resolves U4.
 
-### D28. MCP `tools/call` error surface and silent `proxy` stripping
+### D28. MCP `tools/call` error surface and strict unknown-key rejection
 
-- **Decided (2026-11-27):** Unknown tool names on `tools/call` return JSON-RPC `-32602` (`InvalidParams`). Tool argument validation errors (on valid JSON-RPC object `arguments` or omitted `arguments`) and domain/transport/proxy errors return `CallToolResult` with `isError: true` and the typed error message so the Agent can inspect and self-correct (D14). Malformed non-object JSON-RPC `arguments` types (such as `null`, strings, or arrays) keep `@modelcontextprotocol/sdk`'s default `-32603` schema rejection. Caller-supplied `proxy` properties are omitted from all MCP tool schemas and silently stripped/ignored if smuggled in arguments (I6).
+- **Decided (2026-11-27):** Unknown tool names on `tools/call` return JSON-RPC `-32602` (`InvalidParams`). Tool argument validation errors (on valid JSON-RPC object `arguments` or omitted `arguments`) — including any unexpected or undocumented property such as a smuggled `proxy` key — and domain/transport/proxy errors return `CallToolResult` with `isError: true` and the typed error message so the Agent can inspect and self-correct without touching the network (D14, D33, I6). Malformed non-object JSON-RPC `arguments` types (such as `null`, strings, or arrays) keep `@modelcontextprotocol/sdk`'s default `-32603` schema rejection. Caller-supplied `proxy` properties are omitted from all MCP tool schemas (`additionalProperties: false`, D33, I6).
 
 ### D29. Fail-fast Operator limits at MCP server startup
 
@@ -248,11 +260,27 @@ for an undecided rule and will change with it.
 
 ### D30. Extended domain vocabulary and derived-noun boundary
 
-- **Decided (2026-11-26):** Formalize **Operator Limits**, **Wire Response**, and **Caption Track** as Terminology nouns and **parse operator limits** and **resolve proxy policy** as Terminology verbs for the `src/policy/` context (D4, D7, D9, D17, D20, D23–D25, D29). Reserve the *(derived)* marker strictly for **Windowed Excerpt** (computed by an infallible query in `queries.ts`); **Rendered Output** and **Transcript** remain unpersisted verb outputs because D14, D16, D17, and D22 require their construction to fail with typed `Result` errors.
+- **Decided (2026-11-27):** Formalize **Operator Limits**, **Wire Response**, and **Caption Track** as Terminology nouns and **parse operator limits** and **resolve proxy policy** as Terminology verbs for the `src/policy/` context (D4, D7, D9, D17, D20, D23–D25, D29). Reserve the *(derived)* marker strictly for nouns computed by an infallible query in `queries.ts` (**Windowed Excerpt** and **Verification Report**, D35); **Rendered Output** and **Transcript** remain unpersisted verb outputs because D14, D16, D17, and D22 require their construction to fail with typed `Result` errors.
 
 ### D31. Mandatory proxy credential redaction
 
 - **Decided (2026-11-27):** Proxy URL credentials (username and password, in both valid URLs and malformed proxy strings — including passwords containing `@`, `/`, `?`, `#`, or `%`) are always redacted before appearing in error messages, CLI `stderr`, MCP tool results, or harness output (I7; relates to D5, D14, D23, D25).
+
+### D32. Streamable HTTP MCP transport form factor
+
+- **Decided (2026-11-27):** In addition to MCP `stdio` and the local CLI (`D1`), `mcp-fetch-server` supports the MCP `2025-11-25` **Streamable HTTP** transport via `mcp-fetch-server --http [--host <addr>] [--port <n>]` (defaulting to `127.0.0.1:3000` on endpoint `/mcp`, stateless per-request handling, with `Origin` and `Host` header validation to prevent DNS rebinding against localhost). It shares the exact same domain core and enforces identical Operator-only limits and proxy policy (`I6`, `D29`). Legacy HTTP+SSE remains out of scope (`D3`).
+
+### D33. Cross-vendor MCP schema compatibility and `2025-11-25` tool annotations
+
+- **Decided (2026-11-27):** All six MCP tool schemas (`D12`) conform to Anthropic (Claude), Google (Gemini), and OpenAI MCP server requirements: root `additionalProperties: false` (matched by strict runtime validation per `D28`), typed `headers` (`additionalProperties: { type: "string" }`), flat standard JSON Schema without unsupported composition keywords, MCP `2025-11-25` tool annotations (`readOnlyHint: true`, `destructiveHint: false`, `idempotentHint: true`, `openWorldHint: true`), clean `stdout` JSON-RPC hygiene (`stdio`), and stock `@modelcontextprotocol/sdk` `Client` interop over built `dist/` binaries.
+
+### D34. On-demand record-and-replay real-internet verification
+
+- **Decided (2026-11-27):** Real-internet and multi-form-factor verification captures HTTP/YouTube wire-level **Cassettes** (status, headers, raw bytes per hop, redacted of secrets) into `fixtures/cassettes/` across four curated real-world categories of **Live Samples** (HTML article/Readability & Markdown/docs, public JSON & compressed/redirected/non-ASCII UTF-8, real refusal cases like 404/binary/SSRF, and live public YouTube transcripts) and replays them offline against unmodified built `dist/` binaries via a local HTTPS `CONNECT` replay proxy (`HTTP_PROXY`/`HTTPS_PROXY` + temporary `NODE_EXTRA_CA_CERTS`, keeping `I1`–`I7` completely intact) across all three supported **Form Factors** (`cli`, `mcp-stdio`, `mcp-http`) using resilient **Output Checks** (D35). Live verification/refresh runs on demand via an agent-runnable command kept separate from default offline `bun test` / PR CI, never overwrites an existing valid **Cassette** on live failure, prints a structured **Verification Report** JSON + human summary (`pass` / `fail` / `skipped_env` per **Live Sample** × **Form Factor**), and exits `1` if any cell fails. In offline replay mode, every **Live Sample** is strictly required and never skipped. In live mode, optional live samples (such as `youtube-me-at-the-zoo`) are classified as `skipped_env` (exit `0`) only when the fetch itself fails (`!outcome.ok` due to environment/network/bot-gating/rate-limiting); if the fetch succeeds (`outcome.ok === true`) and an **Output Check** fails, the cell always marks `fail` and exits `1`.
+
+### D35. Verification context vocabulary
+
+- **Decided (2026-11-27):** Formalize the `src/verification/` context's vocabulary in Terminology (extending D4, D30, and D34): Nouns are **Form Factor** (`cli`, `mcp-stdio`, `mcp-http`), **Cassette**, **Live Sample**, and **Output Check**; Derived Noun is **Verification Report** *(derived)*; Verbs are **parse cassette** and **update cassette**.
 
 ## Undecided Questions
 

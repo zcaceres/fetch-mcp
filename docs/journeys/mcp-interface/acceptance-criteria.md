@@ -16,7 +16,7 @@ invariants it cites. Scenarios that share an id make up one criterion.
 1. **Start & Validate Operator Limits.** Server validates `DEFAULT_LIMIT` and `MAX_RESPONSE_BYTES` at startup, failing fast to `stderr` with exit `1` if invalid.
 2. **Initialize & Advertise Capabilities.** Server completes the MCP `2025-11-25` handshake advertising only `tools` (never unimplemented `resources` or `prompts`).
 3. **List Tools.** Server lists the six Terminology-aligned tools with no `proxy` property in any schema and rejects unrecognized pagination cursors with `-32602`.
-4. **Dispatch Tool Calls.** Server rejects unknown tool names with `-32602`, strips any smuggled `proxy` argument, and routes valid calls through the shared domain core under Operator Proxy Policy and limits.
+4. **Dispatch Tool Calls.** Server rejects unknown tool names with `-32602`, rejects unexpected arguments (including any smuggled `proxy`) with `isError: true`, and routes valid calls through the shared domain core under Operator Proxy Policy and limits.
 5. **Return Tool Result.** Server returns `CallToolResult` with `isError: false` on success and `isError: true` with the typed error text on validation or domain failures.
 6. **Clean v2.0.0 Distribution.** Legacy v1.2.0 modules are retired, Biome covers all of `src/**`, and `README.md`/`package.json` reflect v2.0.0.
 
@@ -61,11 +61,11 @@ Scenario: tools/list rejects any unrecognized pagination cursor with JSON-RPC -3
 
 ```gherkin
 @MI-5 @D1 @D4 @D6 @D12 @D14 @D24 @D26 @D28 @I6
-Scenario: tools/call routes all six tools through the shared domain core while silently stripping any smuggled proxy argument
+Scenario: tools/call routes all six tools through the shared domain core under Operator Proxy Policy and rejects smuggled proxy arguments
   Given an Agent calls fetch_html, fetch_markdown, fetch_readable, fetch_text, fetch_json, or fetch_transcript with optional headers, start_index, max_length, and lang
-  When the Agent also smuggles a proxy argument into the call
-  Then the smuggled proxy argument is silently stripped and ignored (D28, I6)
-  And the server applies Operator env Proxy Policy and returns CallToolResult with isError: false and the Windowed Excerpt text (D1, D24, D26)
+  Then the server applies Operator env Proxy Policy and returns CallToolResult with isError: false and the Windowed Excerpt text (D1, D24, D26)
+  When the Agent smuggles a proxy or other unexpected argument into the call
+  Then the server rejects the call with CallToolResult isError: true without touching the network (D28, I6)
 
 @MI-6 @D14 @D28
 Scenario: Unknown tool names return JSON-RPC -32602 while argument validation and domain errors return isError: true

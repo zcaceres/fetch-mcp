@@ -4,7 +4,7 @@
 
 [![npm version](https://img.shields.io/npm/v/mcp-fetch-server.svg)](https://www.npmjs.com/package/mcp-fetch-server)
 
-A lightweight, SSRF-hardened MCP stdio server (`mcp-fetch-server`) and local CLI (`mcp-fetch`) for fetching public web content as HTML, Markdown, readable article Markdown, plain text, JSON, or YouTube transcripts. Supports Node.js `>= 20` LTS and Bun.
+A lightweight, SSRF-hardened MCP server (`mcp-fetch-server`, supporting both `stdio` and `2025-11-25` Streamable HTTP) and local CLI (`mcp-fetch`) for fetching public web content as HTML, Markdown, readable article Markdown, plain text, JSON, or YouTube transcripts. Supports Node.js `>= 20` LTS and Bun.
 
 <a href="https://glama.ai/mcp/servers/nu09wf23ao">
   <img width="380" height="200" src="https://glama.ai/mcp/servers/nu09wf23ao/badge" alt="Fetch Server MCP server" />
@@ -52,6 +52,14 @@ Add to your MCP client configuration:
   }
 }
 ```
+
+### As a Streamable HTTP MCP server
+
+```bash
+npx mcp-fetch-server --http --host 127.0.0.1 --port 3000
+```
+
+Exposes stateless MCP `2025-11-25` Streamable HTTP on `/mcp` with `Host` and `Origin` DNS-rebinding guards (defaults to `127.0.0.1:3000`).
 
 ### As a CLI
 
@@ -155,9 +163,11 @@ Example with custom limits and an Operator proxy:
 bun install
 bun run lint                       # Biome lint & formatting check
 bun run typecheck                  # TypeScript typecheck
-bun test                           # Unit, integration, and scenario tests
-bun run harness run scenarios      # Replay all DD harness scenarios
 bun run build                      # Build dist/index.js and dist/cli.js
+bun test                           # Unit, integration, scenario, and offline replay matrix tests
+bun run harness run scenarios      # Replay all DD harness scenarios
+bun run verify:replay              # Run 3-form-factor offline cassette replay (CLI, stdio, Streamable HTTP)
+bun run verify:live                # On-demand live-internet verification across all 3 form factors (add -- --record to refresh cassettes)
 ```
 
 ## License

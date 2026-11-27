@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "targetId": "refusal-404",
+  "recordedAt": "2026-11-27T20:05:26.745Z",
+  "exchanges": [
+    {
+      "url": "https://www.iana.org/fetch-mcp-missing-404",
+      "method": "GET",
+      "status": 404,
+      "headers": {
+        "date": "Fri, 27 Nov 2026 20:05:33 GMT",
+        "content-type": "text/html; charset=utf-8",
+        "transfer-encoding": "chunked",
+        "connection": "keep-alive",
+        "server": "cloudflare",
+        "x-content-type-options": "nosniff, nosniff",
+        "x-frame-options": "DENY",
+        "referrer-policy": "same-origin",
+        "cross-origin-opener-policy": "same-origin",
+        "cache-control": "public, max-age=3600",
+        "content-security-policy": "upgrade-insecure-requests; default-src 'self' https://*.iana.org; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.google.com https://cse.google.com https://clients1.google.com; style-src 'self' 'unsafe-inline' https://www.google.com; child-src 'self' https://www.youtube.com https://clients1.google.com https://cse.google.com https://www.google.com/; img-src 'self' https://data.iana.org https://www.iana.org https://www.google.com https://www.googleapis.com https://clients1.google.com https://*.gstatic.com;",
+        "strict-transport-security": "max-age=48211200; preload",
+        "age": "73",
+        "cf-cache-status": "HIT",
+        "content-encoding": "br",
+        "cf-ray": "a613bf958904fd76-DEN",
+        "alt-svc": "h3=\":443\"; ma=86400"
+      },
+      "bodyBase64": "E3cQAOSaWtZHU+1Qv8TlT7odyymcY1zBSsJGIAP6G7ly07pvrdFauhfCYJ2fvWwZHbm+KvAsFIgcoENS5E6KIkp1ssJV6aoMp4h1rcPkgbclvssU1WMpk0Fht41eUMfgQ4ap5zPssN5CoC+60D3FxPkgp9wWFxIU/tYqYbeRbWZiRU+qnKeBD9IPOQGcQHurg1Q9zuA05GsVSZPjw4qlpQgAAC2s1UduD1JN0v4srXRKypKn70d6fOtyf2HMfrVr9ivelTolqZCicdvqc+Z55IO0A3WsrA5LKbZDp8yb+B0B4EpebWm92yybDV+WVodbG5PRbzSIGaDc58+0Zf1a6ILPNTVma7aXPtTkN60NgPDR5XbPfLleme12tb1Yh2C45UheHjPzg4tsBy6p5c1y3Sx37dIspQ+xGO9Ba4FhXIhCCHfN4MgEUof4RbxkTf0tYPfkHb0mkpVMW8gUkzW05KlwoQtggU8vt+t9syG9XJnNrkw3HWLnZg/DwCN1LOfhyDjQjGZCwxAfny07uf4xbfCc9TG5HxKxns4WwxNMGMj6JPHuNxKXYlDO/q8cM2x5HVyS+OK1Sf6fjZO2MEk8vjTJ9a2gJkxZYt2EKf8f0BpBhquNa1B8IVxhDkcUoj5u2AQzSxQiRzphPLvgGKG2hdY/tedhYFOM5NlJFIuqX+F0OCMjdQzJGNAZLspK9SsUi2rERy3MYYLj7LIg/xcD2KC7zDOAv7iawXGGKcEvH07QzFCR+bxCcdzgCMjB/754IOtyuLLk6ZYlT2WIncQfkVvVW5A3cGLA7QB6ZwPbUWYgOAKsbFmpEcVCdQULIZSYJSr4CEezUJ74hRIvFPaNdFJ/OWZmo2scy9dB6bQq9k3kSAOnJpU91aypedQvvUMQN/hgjp/LVQwhS3wVQoZPwTOAfw4wzr6NH1jQ3L/WZ4nlo+Mbag8xxZEklvWrFzVnecYXyfwtJYmP7h7hFY8h2Rw41MQlvjYYq89KOURTe4guvYhLtFE95iUOS+kq6j/LMncwyZRaTq4Cwn2T2w2zYVISXz16BfVPVxTuUibiT+vZjYqaKbHEupkSt34bwal3DG1Zf7xiXhMjzWXXc7MduPgTPCeJb+zAyeRfcZcyNZRY/0odFhH2296G1p7lU5J45JOuefelp8QeZJPajFSRpGCvEv40v2a96Rl6Rk1Lt3bUvb1hifU3TcpXRR18Jp171H8O3qbAlf1Nn2xCAa9qbGOp0seN+il5VB/rrm+PBJ1jatTody939//vvwSdCw05N8Pk7e+JAdx6Tms5pvMhQ2+pNIrNoq3eWMMGmhm2E52crpQasy2tJu/vlWn4toCzvWINq8nBo6U0rBThGZCHvvPYEFrf0F9GOZ1OJyqJj+7Ux2OlCNtT+GdjW546FtfIHTkfstXcUDKHuBIUFmywcaxnzgoDrL9Zdvct8kpTkb8khyTxDcchQWjhRBgs40kjWmPa65mVam5SP02DdlhdVKrPg0MB"
+    }
+  ]
+}

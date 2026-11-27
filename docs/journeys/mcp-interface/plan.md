@@ -21,8 +21,9 @@ introducing new domain rules. At startup, `src/index.ts` validates Operator limi
 `createMcpServer` advertises only `capabilities: { tools: {} }` on MCP `2025-11-25` (`D13`, `D27`), exposes the six
 breaking Terminology-aligned tools (`fetch_html`, `fetch_markdown`, `fetch_readable`, `fetch_text`, `fetch_json`,
 `fetch_transcript`) with zero `proxy` schema properties (`D6`, `D12`, `I6`), rejects unrecognized `tools/list` cursors
-and unknown `tools/call` tool names with JSON-RPC `-32602` (`D27`, `D28`), silently strips any smuggled `proxy`
-argument (`D28`, `I6`), and maps domain/validation errors to `CallToolResult` `{ isError: true }` (`D14`, `D28`). Once
+and unknown `tools/call` tool names with JSON-RPC `-32602` (`D27`, `D28`), strictly rejects unexpected arguments
+(including any smuggled `proxy`) with `isError: true` (`D28`, `D33`, `I6`), and maps domain/validation errors to
+`CallToolResult` `{ isError: true }` (`D14`, `D28`). Once
 wired, legacy v1.2.0 modules (`Fetcher.ts`, `httpClient.ts`, `ssrf.ts`, `YouTubeTranscript.ts`, `types.ts`) are
 retired, Biome expands to all of `src/**`, `README.md` is updated, and `package.json` bumps to `2.0.0`.
 
@@ -47,7 +48,7 @@ scenario that runs it.
 
 ### Done
 
-1. **01 — MCP Server Core Wiring & Conformance (Tracer Bullet).** Adds `src/mcp/server.ts` (`listTools`, `dispatchToolCall`, `createMcpServer`), rewires `src/index.ts` onto the shared domain core with fail-fast startup limits (`D29`), updates `src/index.test.ts` for MCP `2025-11-25` conformance (`-32602` invalid cursor & unknown tool, 6 D12 tool names, `I6` proxy stripping, startup env validation, `isError: true` domain errors), and adds `mcp` harness command + scenario. Covers MI-1, MI-2, MI-3, MI-4, MI-5, MI-6.
+1. **01 — MCP Server Core Wiring & Conformance (Tracer Bullet).** Adds `src/mcp/server.ts` (`listTools`, `dispatchToolCall`, `createMcpServer`), rewires `src/index.ts` onto the shared domain core with fail-fast startup limits (`D29`), updates `src/index.test.ts` for MCP `2025-11-25` conformance (`-32602` invalid cursor & unknown tool, 6 D12 tool names, `D28`/`I6` strict unknown-key refusal, startup env validation, `isError: true` domain errors), and adds `mcp` harness command + scenario. Covers MI-1, MI-2, MI-3, MI-4, MI-5, MI-6.
    ([spec](specs/01-mcp-server-core-wiring/spec.md), `scenarios/mcp-interface/01-mcp-server-core-wiring.txt`)
 2. **02 — Legacy Retirement, Lint Expansion & v2.0.0 Docs.** Ports unique real-caption fixture tests from `src/YouTubeTranscript.fixture.test.ts` into `src/transcript/fixtures.test.ts`, removes retired legacy files (`Fetcher.ts`, `httpClient.ts`, `ssrf.ts`, `YouTubeTranscript.ts`, `types.ts` and their legacy tests), expands `biome.json` to `src/**`, updates `README.md` for v2.0.0 (`D10`, `D12`), and bumps `package.json` to `2.0.0`. Covers MI-7.
    ([spec](specs/02-legacy-retirement-and-v2-docs/spec.md))
@@ -61,4 +62,4 @@ scenario that runs it.
 ## Deferred
 
 - MCP `2026-07-28` `server/discover` (issue #50): deferred until `@modelcontextprotocol/sdk` adds support (`D13`, `D27`).
-- Remote MCP transports over HTTP / SSE (`D3`).
+- Legacy HTTP+SSE MCP transport (replaced by Streamable HTTP per `D3`, `D32`).

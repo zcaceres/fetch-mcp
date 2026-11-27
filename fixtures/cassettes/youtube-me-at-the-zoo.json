@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "targetId": "youtube-me-at-the-zoo",
+  "recordedAt": "2026-11-27T00:00:00Z",
+  "exchanges": [
+    {
+      "url": "https://www.youtube.com/watch?v=jNQXAC9IVRw",
+      "method": "GET",
+      "status": 200,
+      "headers": {
+        "content-type": "text/html; charset=utf-8"
+      },
+      "bodyBase64": "PCFkb2N0eXBlIGh0bWw+PGh0bWw+PGhlYWQ+PHRpdGxlPk1lIGF0IHRoZSB6b28gLSBZb3VUdWJlPC90aXRsZT48L2hlYWQ+PGJvZHk+PHNjcmlwdD52YXIgeXRJbml0aWFsUGxheWVyUmVzcG9uc2UgPSB7ImNhcHRpb25zIjp7InBsYXllckNhcHRpb25zVHJhY2tsaXN0UmVuZGVyZXIiOnsiY2FwdGlvblRyYWNrcyI6W3siYmFzZVVybCI6Imh0dHBzOi8vd3d3LnlvdXR1YmUuY29tL2FwaS90aW1lZHRleHQ/dj1qTlFYQUM5SVZSdyZsYW5nPWVuIiwibmFtZSI6eyJzaW1wbGVUZXh0IjoiRW5nbGlzaCJ9LCJsYW5ndWFnZUNvZGUiOiJlbiJ9XX19fTs8L3NjcmlwdD48L2JvZHk+PC9odG1sPg=="
+    },
+    {
+      "url": "https://www.youtube.com/api/timedtext?v=jNQXAC9IVRw&lang=en&fmt=srv1",
+      "method": "GET",
+      "status": 200,
+      "headers": {
+        "content-type": "application/xml; charset=utf-8"
+      },
+      "bodyBase64": "PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiID8+PHRyYW5zY3JpcHQ+PHRleHQgc3RhcnQ9IjEuMiIgZHVyPSIyLjE2Ij5BbGwgcmlnaHQsIHNvIGhlcmUgd2UgYXJlLCBpbiBmcm9udCBvZiB0aGUgZWxlcGhhbnRzPC90ZXh0Pjx0ZXh0IHN0YXJ0PSIxMi42MTYiIGR1cj0iMS43NTEiPmFuZCB0aGF0JmFtcDsjMzk7cyBjb29sPC90ZXh0PjwvdHJhbnNjcmlwdD4="
+    }
+  ]
+}

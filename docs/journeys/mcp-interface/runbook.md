@@ -17,7 +17,7 @@ Every external system is mocked in memory and starts from its fixtures; `reset` 
 
 | Scenario | Shows |
 |---|---|
-| `scenarios/mcp-interface/01-mcp-server-core-wiring.txt` | Tracer bullet: `tools/list` D12 tool names & no `proxy` schema property, `-32602` invalid cursor & unknown/legacy tool rejection, `tools/call` across web & transcript tools, silent `proxy` smuggling strip (`I6`), Operator env proxy & limits enforcement, and `isError: true` domain/argument errors [MI-1, MI-3, MI-4, MI-5, MI-6] |
+| `scenarios/mcp-interface/01-mcp-server-core-wiring.txt` | Tracer bullet: `tools/list` D12 tool names & no `proxy` schema property, `-32602` invalid cursor & unknown/legacy tool rejection, `tools/call` across web & transcript tools, strict `proxy`/unknown-key rejection (`D28`, `I6`), Operator env proxy & limits enforcement, and `isError: true` domain/argument errors [MI-1, MI-3, MI-4, MI-5, MI-6] |
 
 ```bash
 bun run harness run scenarios/mcp-interface

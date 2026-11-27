@@ -1,0 +1,53 @@
+{
+  "version": 1,
+  "targetId": "iana-readable",
+  "recordedAt": "2026-11-27T20:05:26.745Z",
+  "exchanges": [
+    {
+      "url": "http://iana.org/help/example-domains",
+      "method": "GET",
+      "status": 301,
+      "headers": {
+        "date": "Fri, 27 Nov 2026 20:05:28 GMT",
+        "server": "Apache",
+        "location": "https://www.iana.org/help/example-domains",
+        "cache-control": "max-age=345600",
+        "expires": "Tue, 01 Dec 2026 20:05:28 GMT",
+        "content-length": "249",
+        "keep-alive": "timeout=2, max=358",
+        "connection": "Keep-Alive",
+        "content-type": "text/html; charset=iso-8859-1"
+      },
+      "bodyBase64": "PCFET0NUWVBFIEhUTUwgUFVCTElDICItLy9JRVRGLy9EVEQgSFRNTCAyLjAvL0VOIj4KPGh0bWw+PGhlYWQ+Cjx0aXRsZT4zMDEgTW92ZWQgUGVybWFuZW50bHk8L3RpdGxlPgo8L2hlYWQ+PGJvZHk+CjxoMT5Nb3ZlZCBQZXJtYW5lbnRseTwvaDE+CjxwPlRoZSBkb2N1bWVudCBoYXMgbW92ZWQgPGEgaHJlZj0iaHR0cHM6Ly93d3cuaWFuYS5vcmcvaGVscC9leGFtcGxlLWRvbWFpbnMiPmhlcmU8L2E+LjwvcD4KPC9ib2R5PjwvaHRtbD4K"
+    },
+    {
+      "url": "https://www.iana.org/help/example-domains",
+      "method": "GET",
+      "status": 200,
+      "headers": {
+        "date": "Fri, 27 Nov 2026 20:05:29 GMT",
+        "content-type": "text/html; charset=utf-8",
+        "content-length": "1790",
+        "connection": "keep-alive",
+        "server": "cloudflare",
+        "x-content-type-options": "nosniff, nosniff",
+        "x-frame-options": "DENY",
+        "referrer-policy": "same-origin",
+        "cross-origin-opener-policy": "same-origin",
+        "cache-control": "public, max-age=3600",
+        "expires": "Fri, 27 Nov 2026 20:41:04 GMT",
+        "vary": "Accept-Encoding",
+        "content-encoding": "br",
+        "content-security-policy": "upgrade-insecure-requests; default-src 'self' https://*.iana.org; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.google.com https://cse.google.com https://clients1.google.com; style-src 'self' 'unsafe-inline' https://www.google.com; child-src 'self' https://www.youtube.com https://clients1.google.com https://cse.google.com https://www.google.com/; img-src 'self' https://data.iana.org https://www.iana.org https://www.google.com https://www.googleapis.com https://clients1.google.com https://*.gstatic.com;",
+        "age": "459",
+        "strict-transport-security": "max-age=48211200; preload",
+        "accept-ranges": "bytes",
+        "last-modified": "Fri, 27 Nov 2026 19:57:49 GMT",
+        "cf-cache-status": "HIT",
+        "cf-ray": "a613bf78bb01fd76-DEN",
+        "alt-svc": "h3=\":443\"; ma=86400"
+      },
+      "bodyBase64": "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"
+    }
+  ]
+}

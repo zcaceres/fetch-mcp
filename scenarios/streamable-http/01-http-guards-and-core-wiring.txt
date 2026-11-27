@@ -1,0 +1,72 @@
+# Slice 01: Streamable HTTP Guards & Core Wiring (Tracer Bullet)
+# Covers SH-1, SH-2, SH-3, SH-4, SH-5
+
+# Startup CLI flag parsing for stdio vs --http (SH-1, D32)
+> mcp-http check-args
+mode: stdio
+
+> mcp-http check-args --http
+mode: http 127.0.0.1:3000
+
+> mcp-http check-args --http --host 127.0.0.1 --port 8080
+mode: http 127.0.0.1:8080
+
+> mcp-http check-args --port 8080
+error: --port requires --http
+
+> mcp-http check-args --http --port 99999
+error: Invalid --port "99999": must be an integer between 1 and 65535
+
+# Host and Origin DNS-rebinding guards reject untrusted headers with HTTP 403 (SH-2, D32)
+> mcp-http request POST /mcp --host attacker.example --body {"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}
+status: 403
+body: Forbidden Host header: "attacker.example"
+
+> mcp-http request POST /mcp --host 127.0.0.1:3000 --origin https://evil.example --body {"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}
+status: 403
+body: Forbidden Origin header: "https://evil.example"
+
+# Unknown paths, legacy /sse, unsupported methods, and malformed JSON fail explicitly (SH-5, D3, D14, D32)
+> mcp-http request GET /sse --host 127.0.0.1:3000
+status: 404
+body: Not Found
+
+> mcp-http request PUT /mcp --host 127.0.0.1:3000
+status: 405
+body: Method Not Allowed
+
+> mcp-http request POST /mcp --host 127.0.0.1:3000 --body not-json
+status: 400
+body: Invalid JSON body
+
+# Stateless MCP 2025-11-25 initialize, tools/list, and -32602 cursor over POST /mcp (SH-3, D12, D27, D32)
+> mcp-http request POST /mcp --host 127.0.0.1:3000 --origin http://localhost:5173 --body {"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"test","version":"1.0.0"}}}
+status: 200
+body: initialize 2025-11-25 capabilities=tools
+
+> mcp-http request POST /mcp --host 127.0.0.1:3000 --body {"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}
+status: 200
+body: tools=fetch_html,fetch_markdown,fetch_readable,fetch_text,fetch_json,fetch_transcript
+
+> mcp-http request POST /mcp --host 127.0.0.1:3000 --body {"jsonrpc":"2.0","id":3,"method":"tools/list","params":{"cursor":"bad"}}
+status: 200
+body: error (-32602): Invalid pagination cursor
+
+# tools/call routes through shared domain core under Operator Proxy Policy and blocks SSRF (SH-4, D24, D28, I1, I6)
+> dns set example.com 93.184.216.34
+dns: example.com -> 93.184.216.34
+
+> origin serve https://example.com/http-mcp 200 <p>Hello Streamable HTTP</p>
+origin: 200 https://example.com/http-mcp
+
+> mcp-http request POST /mcp --host 127.0.0.1:3000 --body {"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"fetch_text","arguments":{"url":"https://example.com/http-mcp"}}}
+status: 200
+body: isError=false text=Hello Streamable HTTP
+
+> mcp-http request POST /mcp --host 127.0.0.1:3000 --body {"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"fetch_html","arguments":{"url":"http://127.0.0.1/secret"}}}
+status: 200
+body: isError=true text=Blocked Target URL: private address "127.0.0.1"
+
+> mcp-http request POST /mcp --host 127.0.0.1:3000 --body {"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"fetch_txt","arguments":{"url":"https://example.com/http-mcp"}}}
+status: 200
+body: error (-32602): Unknown tool: fetch_txt

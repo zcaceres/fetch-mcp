@@ -23,14 +23,29 @@ export const MCP_TOOL_NAMES = [
 
 export type McpToolName = (typeof MCP_TOOL_NAMES)[number];
 
+export type McpToolSchemaProperty = {
+  readonly type: string;
+  readonly description: string;
+  readonly additionalProperties?: { readonly type: string };
+};
+
+export type McpToolAnnotations = {
+  readonly readOnlyHint: true;
+  readonly destructiveHint: false;
+  readonly idempotentHint: true;
+  readonly openWorldHint: true;
+};
+
 export type McpToolDefinition = {
   readonly name: McpToolName;
   readonly description: string;
   readonly inputSchema: {
     readonly type: 'object';
-    readonly properties: Readonly<Record<string, { readonly type: string; readonly description: string }>>;
+    readonly properties: Readonly<Record<string, McpToolSchemaProperty>>;
     readonly required: readonly ['url'];
+    readonly additionalProperties: false;
   };
+  readonly annotations: McpToolAnnotations;
 };
 
 export type McpToolCallResult = {
@@ -64,35 +79,57 @@ const WEB_TOOL_FORMAT: Readonly<Record<Exclude<McpToolName, 'fetch_transcript'>,
 
 const isMcpToolName = (name: string): name is McpToolName => (MCP_TOOL_NAMES as readonly string[]).includes(name);
 
-// Zod v4 strips unknown keys by default, silently discarding any smuggled `proxy` field (I6, D28).
-const WebToolArgsSchema = z.object({
+// Strict Zod schemas reject unexpected keys (including any smuggled `proxy` field) with isError: true (I6, D28, D33).
+const WebToolArgsSchema = z.strictObject({
   url: z.string(),
   headers: z.record(z.string(), z.string()).optional(),
   max_length: z.number().optional(),
   start_index: z.number().optional(),
 });
 
-const TranscriptToolArgsSchema = WebToolArgsSchema.extend({
+const TranscriptToolArgsSchema = z.strictObject({
+  url: z.string(),
+  headers: z.record(z.string(), z.string()).optional(),
+  max_length: z.number().optional(),
+  start_index: z.number().optional(),
   lang: z.string().optional(),
 });
 
 const formatZodError = (error: z.ZodError): string => {
   const first = error.issues[0];
   if (!first) return 'Invalid arguments';
+  if (first.code === 'unrecognized_keys') {
+    const keys = first.keys.map((k) => JSON.stringify(k)).join(', ');
+    return `Invalid arguments: Unrecognized ${first.keys.length === 1 ? 'key' : 'keys'}: ${keys}`;
+  }
   const field = first.path.length > 0 ? `${first.path.join('.')}: ` : '';
   const detail = first.message.replace(/^Invalid input:\s*/i, '');
   return `Invalid arguments: ${field}${detail}`;
 };
 
-const buildCommonProperties = (defaultLimit: number) => ({
+const READ_ONLY_TOOL_ANNOTATIONS: McpToolAnnotations = {
+  readOnlyHint: true,
+  destructiveHint: false,
+  idempotentHint: true,
+  openWorldHint: true,
+};
+
+const buildCommonProperties = (defaultLimit: number): Readonly<Record<string, McpToolSchemaProperty>> => ({
   url: { type: 'string', description: 'URL of the website to fetch' },
-  headers: { type: 'object', description: 'Optional headers to include in the request' },
-  max_length: { type: 'number', description: `Maximum number of characters to return (default: ${defaultLimit})` },
+  headers: {
+    type: 'object',
+    description: 'Optional headers to include in the request',
+    additionalProperties: { type: 'string' },
+  },
+  max_length: {
+    type: 'number',
+    description: `Maximum number of characters to return (default: ${defaultLimit}; 0 = unlimited)`,
+  },
   start_index: { type: 'number', description: 'Start content from this character index (default: 0)' },
 });
 
 /**
- * Lists the six Terminology-aligned MCP tools (D12, I6) and rejects any unrecognized cursor with -32602 (D27).
+ * Lists the six Terminology-aligned MCP tools (D12, D33, I6) and rejects any unrecognized cursor with -32602 (D27).
  */
 export const listTools = (
   defaultLimit: number,
@@ -108,23 +145,27 @@ export const listTools = (
       {
         name: 'fetch_html',
         description: 'Fetch a website and return its unmodified contents as HTML',
-        inputSchema: { type: 'object', properties: common, required: ['url'] },
+        inputSchema: { type: 'object', properties: common, required: ['url'], additionalProperties: false },
+        annotations: READ_ONLY_TOOL_ANNOTATIONS,
       },
       {
         name: 'fetch_markdown',
         description: 'Fetch a website and return its contents converted to Markdown',
-        inputSchema: { type: 'object', properties: common, required: ['url'] },
+        inputSchema: { type: 'object', properties: common, required: ['url'], additionalProperties: false },
+        annotations: READ_ONLY_TOOL_ANNOTATIONS,
       },
       {
         name: 'fetch_readable',
         description:
           'Fetch a website and return its main content parsed by Mozilla Readability, converted to Markdown. Strips navigation, ads, and boilerplate.',
-        inputSchema: { type: 'object', properties: common, required: ['url'] },
+        inputSchema: { type: 'object', properties: common, required: ['url'], additionalProperties: false },
+        annotations: READ_ONLY_TOOL_ANNOTATIONS,
       },
       {
         name: 'fetch_text',
         description: 'Fetch a website and return plain text with HTML tags, scripts, and styles removed',
-        inputSchema: { type: 'object', properties: common, required: ['url'] },
+        inputSchema: { type: 'object', properties: common, required: ['url'], additionalProperties: false },
+        annotations: READ_ONLY_TOOL_ANNOTATIONS,
       },
       {
         name: 'fetch_json',
@@ -133,7 +174,9 @@ export const listTools = (
           type: 'object',
           properties: { ...common, url: { type: 'string', description: 'URL of the JSON resource to fetch' } },
           required: ['url'],
+          additionalProperties: false,
         },
+        annotations: READ_ONLY_TOOL_ANNOTATIONS,
       },
       {
         name: 'fetch_transcript',
@@ -146,7 +189,9 @@ export const listTools = (
             lang: { type: 'string', description: "Language code for captions (default: 'en')" },
           },
           required: ['url'],
+          additionalProperties: false,
         },
+        annotations: READ_ONLY_TOOL_ANNOTATIONS,
       },
     ],
   });
@@ -265,7 +310,8 @@ export const dispatchToolCall = async (
 };
 
 /**
- * Creates an MCP 2025-11-25 stdio server advertising only the `tools` capability (D13, D27, D28).
+ * Creates an MCP 2025-11-25 server (shared by stdio and Streamable HTTP transports) advertising only the `tools`
+ * capability (D13, D27, D28, D32, D33).
  */
 export const createMcpServer = (deps: McpServerDeps): Server => {
   const server = new Server(
@@ -293,7 +339,9 @@ export const createMcpServer = (deps: McpServerDeps): Server => {
           type: 'object' as const,
           properties: { ...tool.inputSchema.properties },
           required: [...tool.inputSchema.required],
+          additionalProperties: tool.inputSchema.additionalProperties,
         },
+        annotations: { ...tool.annotations },
       })),
     };
   });

@@ -26,14 +26,14 @@ jobs:
       - name: Typecheck
         run: bun run typecheck
 
-      - name: Run unit, integration, and MCP conformance tests
+      - name: Build distribution bundles
+        run: bun run build
+
+      - name: Run unit, integration, MCP conformance, and replay matrix tests
         run: bun test
 
       - name: Replay DD harness scenarios
         run: bun run harness run scenarios
-
-      - name: Build distribution bundles
-        run: bun run build
 
   node-smoke:
     name: Node.js ${{ matrix.node-version }} Bundle Smoke Check
@@ -105,6 +105,8 @@ jobs:
             );
             for (const tool of listed.result.tools) {
               assert.equal("proxy" in tool.inputSchema.properties, false);
+              assert.equal(tool.inputSchema.additionalProperties, false);
+              assert.equal(tool.annotations.readOnlyHint, true);
             }
 
             const badCursor = responses.find((r) => r.id === 3);

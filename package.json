@@ -32,6 +32,8 @@
     "typecheck": "tsc --noEmit",
     "lint": "biome ci .",
     "lint:fix": "biome check --write .",
+    "verify:replay": "bun run build && bun run src/integrations/replay/runner.ts --replay",
+    "verify:live": "bun run build && bun run src/integrations/replay/runner.ts --live",
     "publish:npm": "bun run build && bun test && npm publish"
   },
   "bin": {

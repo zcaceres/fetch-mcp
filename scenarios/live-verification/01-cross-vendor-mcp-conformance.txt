@@ -1,0 +1,31 @@
+# Slice 01: Cross-Vendor MCP Schema & Strict Conformance (Tracer Bullet)
+# Covers LV-1 (D12, D28, D33, I6)
+
+# All six D12 tools pass Anthropic, Gemini, and OpenAI schema and 2025-11-25 annotation checks (LV-1, D33, I6)
+> verify-mcp check-schemas
+conformance: ok (6 tools: anthropic, gemini, openai)
+
+# Strict runtime validation rejects smuggled proxy and other unexpected keys with isError: true before connecting (LV-1, D28, I6)
+> dns set example.com 93.184.216.34
+dns: example.com -> 93.184.216.34
+
+> origin serve https://example.com/strict 200 <p>Should not be fetched</p>
+origin: 200 https://example.com/strict
+
+> verify-mcp check-strict fetch_html {"url":"https://example.com/strict","proxy":"http://evil:8080"}
+isError: true
+| Invalid arguments: Unrecognized key: "proxy"
+
+> origin last-proxy https://example.com/strict
+(not requested)
+
+> verify-mcp check-strict fetch_transcript {"url":"https://www.youtube.com/watch?v=abc","proxy":"socks5://evil:1080"}
+isError: true
+| Invalid arguments: Unrecognized key: "proxy"
+
+> verify-mcp check-strict fetch_text {"url":"https://example.com/strict","unknownFlag":true}
+isError: true
+| Invalid arguments: Unrecognized key: "unknownFlag"
+
+> origin last-proxy https://example.com/strict
+(not requested)

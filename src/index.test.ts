@@ -203,6 +203,13 @@ describe('MCP stdio server conformance (MI-1, MI-2, MI-3, MI-4, MI-6)', () => {
       ]);
       for (const tool of listed.tools) {
         expect(tool.inputSchema.properties).not.toHaveProperty('proxy');
+        expect(tool.inputSchema.additionalProperties).toBe(false);
+        expect(tool.annotations).toEqual({
+          readOnlyHint: true,
+          destructiveHint: false,
+          idempotentHint: true,
+          openWorldHint: true,
+        });
       }
 
       let cursorError: unknown;
@@ -258,7 +265,7 @@ describe('MCP dispatchToolCall & listTools (MI-3, MI-4, MI-5, MI-6)', () => {
     });
   });
 
-  it('dispatches all six D12 tools over shared core, strips smuggled proxy, and honors Operator env proxy (MI-5, I6)', async () => {
+  it('dispatches all six D12 tools over shared core, rejects smuggled proxy, and honors Operator env proxy (MI-5, D28, I6)', async () => {
     const origin = createOriginMock();
     const dns = createDnsMock();
     const ytDlp = createYtDlpMock();
@@ -284,11 +291,18 @@ describe('MCP dispatchToolCall & listTools (MI-3, MI-4, MI-5, MI-6)', () => {
       limits: { defaultLimit: 5000, maxResponseBytes: 10 * 1024 * 1024 },
     };
 
-    const htmlRes = await dispatchToolCall(
+    const smuggledRes = await dispatchToolCall(
       'fetch_html',
       { url: 'https://remote.invalid/page', proxy: 'http://attacker:80' },
       deps,
     );
+    expect(smuggledRes).toEqual({
+      ok: true,
+      value: { content: [{ type: 'text', text: 'Invalid arguments: Unrecognized key: "proxy"' }], isError: true },
+    });
+    expect(origin.lastProxy('https://remote.invalid/page')).toBeUndefined();
+
+    const htmlRes = await dispatchToolCall('fetch_html', { url: 'https://remote.invalid/page' }, deps);
     expect(htmlRes.ok && !htmlRes.value.isError).toBe(true);
     expect(origin.lastProxy('https://remote.invalid/page')).toBe('socks5://127.0.0.1:1080');
 
@@ -312,9 +326,19 @@ describe('MCP dispatchToolCall & listTools (MI-3, MI-4, MI-5, MI-6)', () => {
       value: { content: [{ type: 'text', text: '{"hello":"world"}' }], isError: false },
     });
 
-    const trRes = await dispatchToolCall(
+    const smuggledTr = await dispatchToolCall(
       'fetch_transcript',
       { url: 'https://www.youtube.com/watch?v=m1', lang: 'en', proxy: 'http://evil:80' },
+      deps,
+    );
+    expect(smuggledTr).toEqual({
+      ok: true,
+      value: { content: [{ type: 'text', text: 'Invalid arguments: Unrecognized key: "proxy"' }], isError: true },
+    });
+
+    const trRes = await dispatchToolCall(
+      'fetch_transcript',
+      { url: 'https://www.youtube.com/watch?v=m1', lang: 'en' },
       deps,
     );
     expect(trRes).toEqual({
@@ -325,7 +349,6 @@ describe('MCP dispatchToolCall & listTools (MI-3, MI-4, MI-5, MI-6)', () => {
       },
     });
     expect(ytDlp.lastArgs()).toContain('socks5://127.0.0.1:1080');
-    expect(ytDlp.lastArgs()).not.toContain('http://evil:80');
   });
 
   it('returns -32602 for unknown tools and isError: true for invalid arguments (MI-6, D28)', async () => {
