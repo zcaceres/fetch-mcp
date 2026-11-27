@@ -89,4 +89,51 @@ describe('offline multi-form-factor cassette replay matrix (LV-3, LV-4, LV-5, D3
     expect(exchanges.map((e) => e.url)).toEqual([watchUrl, `${trackBase}&fmt=srv1`]);
     expect(origin.lastHeaders(`${trackBase}&fmt=srv1`)).not.toHaveProperty('Authorization');
   });
+
+  it('recordLiveSampleExchanges normalizes caption URLs with URLSearchParams and keeps headers stripped after a cross-origin watch redirect (LV-3, LV-6, I4)', async () => {
+    const origin = createOriginMock();
+    const dns = createDnsMock();
+    dns.set('youtu.be', ['142.250.190.78']);
+    dns.set('www.youtube.com', ['142.250.190.78']);
+
+    const shortUrl = 'https://youtu.be/demo';
+    const watchUrl = 'https://www.youtube.com/watch?v=demo';
+    const trackBase = 'https://www.youtube.com/api/timedtext?v=demo&sparams=ip,ipbits,expire&lang=en';
+    const expectedCaptionUrl =
+      'https://www.youtube.com/api/timedtext?v=demo&sparams=ip%2Cipbits%2Cexpire&lang=en&fmt=srv1';
+
+    origin.serve(shortUrl, 302, '', { Location: watchUrl });
+    origin.serve(
+      watchUrl,
+      200,
+      `<html><script>var ytInitialPlayerResponse = ${JSON.stringify({
+        captions: {
+          playerCaptionsTracklistRenderer: {
+            captionTracks: [{ baseUrl: trackBase, languageCode: 'en', name: { simpleText: 'English' } }],
+          },
+        },
+      })};</script></html>`,
+    );
+    origin.serve(expectedCaptionUrl, 200, '<transcript><text start="0" dur="1">Hello</text></transcript>');
+
+    const exchanges = await recordLiveSampleExchanges(
+      {
+        id: 'yt-redir',
+        category: 'youtube-transcript',
+        description: 'Redirected transcript with comma sparams',
+        tool: 'fetch_transcript',
+        cliSubcommand: 'transcript',
+        url: shortUrl,
+        lang: 'en',
+        headers: { Authorization: 'Bearer yt-secret', Cookie: 'sid=secret', 'X-Keep': 'yes' },
+        checks: [{ kind: 'expect_ok' }],
+      },
+      { httpGet: origin.get, dnsLookup: dns.lookup },
+    );
+
+    expect(exchanges.map((e) => e.url)).toEqual([shortUrl, watchUrl, expectedCaptionUrl]);
+    expect(origin.lastHeaders(expectedCaptionUrl)).not.toHaveProperty('Authorization');
+    expect(origin.lastHeaders(expectedCaptionUrl)).not.toHaveProperty('Cookie');
+    expect(origin.lastHeaders(expectedCaptionUrl)).toMatchObject({ 'X-Keep': 'yes' });
+  });
 });

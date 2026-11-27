@@ -181,13 +181,22 @@ export const recordLiveSampleExchanges = async (
     throw new Error(selected.error.message);
   }
 
-  const captionUrl = selected.value.baseUrl.includes('fmt=')
-    ? selected.value.baseUrl
-    : `${selected.value.baseUrl}&fmt=srv1`;
-  const captionHeaders =
-    new URL(captionUrl).origin !== new URL(lastWatch.url).origin && sample.headers
-      ? stripCrossOriginHeaders(sample.headers)
-      : sample.headers;
+  let captionUrl = selected.value.baseUrl;
+  let crossedOrigin = true;
+  try {
+    const parsedCaptionUrl = new URL(captionUrl);
+    if (!parsedCaptionUrl.searchParams.has('fmt')) {
+      parsedCaptionUrl.searchParams.set('fmt', 'srv1');
+    }
+    captionUrl = parsedCaptionUrl.href;
+    crossedOrigin =
+      parsedCaptionUrl.origin !== new URL(sample.url).origin ||
+      parsedCaptionUrl.origin !== new URL(lastWatch.url).origin;
+  } catch {
+    // Let recordLiveExchangeChain fail with a typed validation error on malformed URLs
+  }
+
+  const captionHeaders = crossedOrigin && sample.headers ? stripCrossOriginHeaders(sample.headers) : sample.headers;
   const captionExchanges = await recordLiveExchangeChain(captionUrl, captionHeaders, ports);
   return [...watchExchanges, ...captionExchanges];
 };
