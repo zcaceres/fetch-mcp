@@ -1,0 +1,68 @@
+# Slice 03: Real yt-dlp Client & CLI Wiring
+# Covers FT-2 (DNS failure / empty / mixed IPv4-mapped IPv6 before yt-dlp), FT-3 (timeout), FT-4 (timeout fallback)
+
+# Setup public DNS for allowlisted YouTube host
+> dns set www.youtube.com 142.250.190.78
+dns: www.youtube.com -> 142.250.190.78
+
+# When yt-dlp times out (30s timeout), fall back cleanly to direct extraction (FT-3, FT-4, D7, D9)
+> ytdlp available true
+ytdlp: available true
+
+> ytdlp timeout https://www.youtube.com/watch?v=slowsub
+ytdlp: timeout https://www.youtube.com/watch?v=slowsub
+
+> origin serve https://www.youtube.com/watch?v=slowsub 200 <html><script>var ytInitialPlayerResponse = {"captions":{"playerCaptionsTracklistRenderer":{"captionTracks":[{"baseUrl":"https://www.youtube.com/api/timedtext?v=slowsub&lang=en","name":{"simpleText":"English"},"languageCode":"en"}]}}};</script></html>
+origin: 200 https://www.youtube.com/watch?v=slowsub
+
+> origin serve https://www.youtube.com/api/timedtext?v=slowsub&lang=en&fmt=srv1 200 <transcript><text start="3.0" dur="2.0">Recovered after yt-dlp timeout</text></transcript>
+origin: 200 https://www.youtube.com/api/timedtext?v=slowsub&lang=en&fmt=srv1
+
+> fetch-transcript https://www.youtube.com/watch?v=slowsub
+| [Transcript language: en — English]
+|
+| [0:03] Recovered after yt-dlp timeout
+
+> ytdlp last-args
+args: --write-sub --write-auto-sub --sub-lang en --sub-format srv1 --skip-download -o <tmp>/sub -- https://www.youtube.com/watch?v=slowsub
+
+# yt-dlp regional prefix match and Windowed Excerpt slicing (FT-3, FT-6, FT-9, D15, D20)
+> ytdlp serve https://www.youtube.com/watch?v=reg1 en-US <transcript><text start="1.0" dur="2.0">Hello from US captions</text></transcript>
+ytdlp: serve en-US https://www.youtube.com/watch?v=reg1
+
+> fetch-transcript https://www.youtube.com/watch?v=reg1 --lang EN --start-index 0 --max-length 36
+| [Transcript language: en-US — en-US]
+
+# DNS lookup failure, empty DNS answer, and mixed public + IPv4-mapped loopback block BEFORE invoking yt-dlp (FT-2, FT-4, I2, I3)
+> reset
+the world is back to its fixtures
+
+> ytdlp available true
+ytdlp: available true
+
+> dns fail www.youtube.com ENOTFOUND
+dns: fail www.youtube.com
+
+> fetch-transcript https://www.youtube.com/watch?v=dnsfail
+error: Blocked Target URL: DNS lookup failed for "www.youtube.com": ENOTFOUND
+
+> ytdlp last-args
+(not invoked)
+
+> dns empty www.youtube.com
+dns: www.youtube.com -> (empty)
+
+> fetch-transcript https://www.youtube.com/watch?v=dnsempty
+error: Blocked Target URL: DNS lookup returned no addresses for "www.youtube.com"
+
+> ytdlp last-args
+(not invoked)
+
+> dns set www.youtube.com 142.250.190.78 ::ffff:127.0.0.1
+dns: www.youtube.com -> 142.250.190.78, ::ffff:127.0.0.1
+
+> fetch-transcript https://www.youtube.com/watch?v=dnsmixed
+error: Blocked Target URL: hostname "www.youtube.com" resolved to private IP "::ffff:127.0.0.1"
+
+> ytdlp last-args
+(not invoked)

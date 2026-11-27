@@ -7,10 +7,14 @@ import { Fetcher } from './Fetcher.ts';
 import { executeFetch } from './fetching/execute.ts';
 import { type Headers, WEB_FORMATS, type WebFormat } from './fetching/nouns.ts';
 import type { FetchPorts } from './fetching/ports.ts';
-import { DEFAULT_LIMIT, MAX_RESPONSE_BYTES } from './fetching/verbs.ts';
+import { normalizeHostname } from './fetching/queries.ts';
+import { DEFAULT_LIMIT, MAX_RESPONSE_BYTES, validateResolvedIps } from './fetching/verbs.ts';
 import { createRealDnsLookup } from './integrations/dns/client.ts';
 import { createRealHttpGet } from './integrations/origin/client.ts';
+import { createRealYtDlp } from './integrations/ytdlp/client.ts';
 import { err, ok, type Result } from './shared/result.ts';
+import { executeFetchTranscript } from './transcript/execute.ts';
+import type { CheckHostPort, FetchPagePort, YtDlpPort } from './transcript/ports.ts';
 
 const USAGE = `mcp-fetch v${pkg.version}
 
@@ -58,6 +62,7 @@ export type CliAction =
 
 export type CliDeps = {
   readonly ports?: FetchPorts;
+  readonly ytDlp?: YtDlpPort;
   readonly env?: NodeJS.ProcessEnv;
   readonly stdout?: (text: string) => void;
   readonly stderr?: (text: string) => void;
@@ -207,21 +212,77 @@ export const runCli = async (argv: readonly string[], deps: CliDeps = {}): Promi
       return 0;
 
     case 'transcript': {
-      const payload = {
-        url: action.url,
-        ...(Object.keys(action.headers).length > 0 ? { headers: { ...action.headers } } : {}),
-        ...(action.maxLength !== undefined ? { max_length: action.maxLength } : {}),
-        ...(action.startIndex !== undefined ? { start_index: action.startIndex } : {}),
-        ...(action.proxy !== undefined ? { proxy: action.proxy } : {}),
-        ...(action.lang !== undefined ? { lang: action.lang } : {}),
+      // Proxy routing waits on the `proxy-and-limits` journey; fall back to legacy Fetcher only when proxy is configured and no custom ports were injected.
+      if (!deps.ports && !deps.ytDlp && (action.proxy !== undefined || hasEnvProxy(env))) {
+        const payload = {
+          url: action.url,
+          ...(Object.keys(action.headers).length > 0 ? { headers: { ...action.headers } } : {}),
+          ...(action.maxLength !== undefined ? { max_length: action.maxLength } : {}),
+          ...(action.startIndex !== undefined ? { start_index: action.startIndex } : {}),
+          ...(action.proxy !== undefined ? { proxy: action.proxy } : {}),
+          ...(action.lang !== undefined ? { lang: action.lang } : {}),
+        };
+        const legacy = await Fetcher.youtubeTranscript(payload);
+        const text = legacy.content[0]?.text ?? '';
+        if (legacy.isError) {
+          stderr(`${text}\n`);
+          return 1;
+        }
+        stdout(text);
+        return 0;
+      }
+
+      const defaultLimit = parsePositiveEnvInt(env.DEFAULT_LIMIT, DEFAULT_LIMIT, true);
+      const maxResponseBytes = parsePositiveEnvInt(env.MAX_RESPONSE_BYTES, MAX_RESPONSE_BYTES, false);
+      const fetchPorts: FetchPorts = deps.ports ?? {
+        httpGet: createRealHttpGet({ maxBytes: maxResponseBytes }),
+        dnsLookup: createRealDnsLookup(),
       };
-      const result = await Fetcher.youtubeTranscript(payload);
-      const text = result.content[0]?.text ?? '';
-      if (result.isError) {
-        stderr(`${text}\n`);
+
+      const fetchPage: FetchPagePort = async (targetUrl, reqHeaders) => {
+        const res = await executeFetch(
+          { url: targetUrl, format: 'html', headers: reqHeaders, maxLength: 0 },
+          fetchPorts,
+          { maxResponseBytes },
+        );
+        if (!res.ok) {
+          const kind = res.error.kind === 'blocked_url' ? 'blocked_url' : 'fetch_error';
+          return err({ kind, message: res.error.message });
+        }
+        return ok(String(res.value));
+      };
+
+      const checkHost: CheckHostPort = async (hostname) => {
+        const host = normalizeHostname(hostname);
+        const lookup = await fetchPorts.dnsLookup(host);
+        if (!lookup.ok) {
+          return err({ kind: 'blocked_url', message: lookup.error.message });
+        }
+        const validated = validateResolvedIps(host, lookup.value);
+        if (!validated.ok) {
+          return err({ kind: 'blocked_url', message: validated.error.message });
+        }
+        return ok(undefined);
+      };
+
+      const ytDlp = deps.ytDlp ?? createRealYtDlp({ maxBytes: maxResponseBytes });
+      const result = await executeFetchTranscript(
+        {
+          url: action.url,
+          headers: action.headers,
+          ...(action.lang !== undefined ? { lang: action.lang } : {}),
+          ...(action.startIndex !== undefined ? { startIndex: action.startIndex } : {}),
+          ...(action.maxLength !== undefined ? { maxLength: action.maxLength } : {}),
+        },
+        { fetchPage, checkHost, ytDlp },
+        { defaultLimit },
+      );
+
+      if (!result.ok) {
+        stderr(`${result.error.message}\n`);
         return 1;
       }
-      stdout(text);
+      stdout(result.value);
       return 0;
     }
 

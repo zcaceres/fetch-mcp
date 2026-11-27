@@ -1,0 +1,79 @@
+# Slice 02: yt-dlp Primary & Fallback
+# Covers FT-3, FT-4
+
+# Setup public DNS for allowlisted YouTube host
+> dns set www.youtube.com 142.250.190.78
+dns: www.youtube.com -> 142.250.190.78
+
+# When yt-dlp is available, it runs first with --write-sub, --write-auto-sub, and -- sentinel without scraping watch page (FT-3, D7, D21)
+> ytdlp available true
+ytdlp: available true
+
+> ytdlp serve https://www.youtube.com/watch?v=yt1 en <transcript><text start="2.0" dur="3.0">From yt-dlp &amp;#39;auto&amp;#39;</text></transcript>
+ytdlp: serve en https://www.youtube.com/watch?v=yt1
+
+> fetch-transcript https://www.youtube.com/watch?v=yt1 --lang en
+| [Transcript language: en — en]
+|
+| [0:02] From yt-dlp 'auto'
+
+> ytdlp last-args
+args: --write-sub --write-auto-sub --sub-lang en --sub-format srv1 --skip-download -o <tmp>/sub -- https://www.youtube.com/watch?v=yt1
+
+> origin last-headers https://www.youtube.com/watch?v=yt1
+(not requested)
+
+# When yt-dlp fails or produces no subtitle file, fall back cleanly to direct extraction (FT-4, D7)
+> origin serve https://www.youtube.com/watch?v=fb1 200 <html><script>var ytInitialPlayerResponse = {"captions":{"playerCaptionsTracklistRenderer":{"captionTracks":[{"baseUrl":"https://www.youtube.com/api/timedtext?v=fb1&lang=en","name":{"simpleText":"English"},"languageCode":"en"}]}}};</script></html>
+origin: 200 https://www.youtube.com/watch?v=fb1
+
+> origin serve https://www.youtube.com/api/timedtext?v=fb1&lang=en&fmt=srv1 200 <transcript><text start="0" dur="2">From direct fallback</text></transcript>
+origin: 200 https://www.youtube.com/api/timedtext?v=fb1&lang=en&fmt=srv1
+
+> ytdlp fail https://www.youtube.com/watch?v=fb1 exit status 1
+ytdlp: fail https://www.youtube.com/watch?v=fb1
+
+> fetch-transcript https://www.youtube.com/watch?v=fb1
+| [Transcript language: en — English]
+|
+| [0:00] From direct fallback
+
+> ytdlp empty https://www.youtube.com/watch?v=fb1
+ytdlp: empty https://www.youtube.com/watch?v=fb1
+
+> fetch-transcript https://www.youtube.com/watch?v=fb1
+| [Transcript language: en — English]
+|
+| [0:00] From direct fallback
+
+# When yt-dlp misses a requested language, direct fallback surfaces available languages cleanly (FT-4, FT-6, D7, D20)
+> fetch-transcript https://www.youtube.com/watch?v=fb1 --lang fr
+error: No captions available in language "fr" (available: en)
+
+# Validation and SSRF errors are NEVER swallowed and NEVER invoke yt-dlp (FT-1, FT-2, FT-4, I2, I3)
+> reset
+the world is back to its fixtures
+
+> ytdlp available true
+ytdlp: available true
+
+> fetch-transcript https://www.youtube.com/watch?v=demo --lang --exec
+error: Invalid language code "--exec": only letters, digits, and hyphens are allowed
+
+> ytdlp last-args
+(not invoked)
+
+> fetch-transcript https://example.com/not-youtube
+error: Blocked Target URL: host "example.com" is not an allowlisted YouTube domain
+
+> ytdlp last-args
+(not invoked)
+
+> dns set www.youtube.com 10.0.0.1
+dns: www.youtube.com -> 10.0.0.1
+
+> fetch-transcript https://www.youtube.com/watch?v=rebind
+error: Blocked Target URL: hostname "www.youtube.com" resolved to private IP "10.0.0.1"
+
+> ytdlp last-args
+(not invoked)

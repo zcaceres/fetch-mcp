@@ -2,6 +2,7 @@ import { describe, expect, it } from 'bun:test';
 import { parseCliArgs, runCli } from './cli.ts';
 import { createDnsMock } from './integrations/dns/mock.ts';
 import { createOriginMock } from './integrations/origin/mock.ts';
+import { createYtDlpMock } from './integrations/ytdlp/mock.ts';
 
 describe('parseCliArgs (D12)', () => {
   it('parses all six aligned subcommands', () => {
@@ -151,5 +152,124 @@ describe('runCli (FW-15)', () => {
     });
     expect(versionCode).toBe(0);
     expect(versionOut).toMatch(/^\d+\.\d+\.\d+\n$/);
+  });
+});
+
+describe('runCli transcript (FT-10)', () => {
+  it('uses yt-dlp primary via executeFetchTranscript and writes Windowed Excerpt to stdout with exit 0', async () => {
+    const origin = createOriginMock();
+    const dns = createDnsMock();
+    dns.set('www.youtube.com', ['142.250.190.78']);
+    const ytDlp = createYtDlpMock();
+    ytDlp.setAvailable(true);
+    ytDlp.serve(
+      'https://www.youtube.com/watch?v=cli1',
+      'en-US',
+      '<transcript><text start="1.0" dur="2.0">Hello CLI</text></transcript>',
+    );
+
+    let out = '';
+    let errOut = '';
+    const code = await runCli(
+      [
+        'transcript',
+        'https://www.youtube.com/watch?v=cli1',
+        '--lang',
+        'en',
+        '--start-index',
+        '0',
+        '--max-length',
+        '54',
+      ],
+      {
+        ports: { httpGet: origin.get, dnsLookup: dns.lookup },
+        ytDlp,
+        stdout: (s) => {
+          out += s;
+        },
+        stderr: (s) => {
+          errOut += s;
+        },
+      },
+    );
+
+    expect(code).toBe(0);
+    expect(out).toBe('[Transcript language: en-US — en-US]\n\n[0:01] Hello CLI');
+    expect(errOut).toBe('');
+    expect(origin.lastHeaders('https://www.youtube.com/watch?v=cli1')).toBeUndefined();
+  });
+
+  it('falls back to direct extraction when yt-dlp fails and honors --lang and --header', async () => {
+    const origin = createOriginMock();
+    const dns = createDnsMock();
+    dns.set('www.youtube.com', ['142.250.190.78']);
+    origin.serve(
+      'https://www.youtube.com/watch?v=cli2',
+      200,
+      '<html><script>var ytInitialPlayerResponse = {"captions":{"playerCaptionsTracklistRenderer":{"captionTracks":[{"baseUrl":"https://www.youtube.com/api/timedtext?v=cli2&lang=de","name":{"simpleText":"German"},"languageCode":"de"}]}}};</script></html>',
+    );
+    origin.serve(
+      'https://www.youtube.com/api/timedtext?v=cli2&lang=de&fmt=srv1',
+      200,
+      '<transcript><text start="0" dur="2">Hallo CLI</text></transcript>',
+    );
+    const ytDlp = createYtDlpMock();
+    ytDlp.setAvailable(true);
+    ytDlp.fail('https://www.youtube.com/watch?v=cli2', 'exit 1');
+
+    let out = '';
+    let errOut = '';
+    const code = await runCli(
+      ['transcript', 'https://www.youtube.com/watch?v=cli2', '--lang', 'de', '--header', 'Accept-Language: de'],
+      {
+        ports: { httpGet: origin.get, dnsLookup: dns.lookup },
+        ytDlp,
+        stdout: (s) => {
+          out += s;
+        },
+        stderr: (s) => {
+          errOut += s;
+        },
+      },
+    );
+
+    expect(code).toBe(0);
+    expect(out).toBe('[Transcript language: de — German]\n\n[0:00] Hallo CLI');
+    expect(errOut).toBe('');
+    expect(origin.lastHeaders('https://www.youtube.com/watch?v=cli2')?.['Accept-Language']).toBe('de');
+  });
+
+  it('writes typed error to stderr with exit 1 on non-YouTube host, DNS SSRF, or missing language', async () => {
+    const origin = createOriginMock();
+    const dns = createDnsMock();
+    dns.set('www.youtube.com', ['10.0.0.1']);
+    const ytDlp = createYtDlpMock();
+    ytDlp.setAvailable(true);
+
+    let errHost = '';
+    const hostCode = await runCli(['transcript', 'https://example.com/not-youtube'], {
+      ports: { httpGet: origin.get, dnsLookup: dns.lookup },
+      ytDlp,
+      stdout: () => {},
+      stderr: (s) => {
+        errHost += s;
+      },
+    });
+    expect(hostCode).toBe(1);
+    expect(errHost).toBe('Blocked Target URL: host "example.com" is not an allowlisted YouTube domain\n');
+    expect(ytDlp.lastArgs()).toBeUndefined();
+
+    let errDns = '';
+    const dnsCode = await runCli(['transcript', 'https://www.youtube.com/watch?v=rebind'], {
+      ports: { httpGet: origin.get, dnsLookup: dns.lookup },
+      ytDlp,
+      stdout: () => {},
+      stderr: (s) => {
+        errDns += s;
+      },
+    });
+    expect(dnsCode).toBe(1);
+    expect(errDns).toBe('Blocked Target URL: hostname "www.youtube.com" resolved to private IP "10.0.0.1"\n');
+    expect(ytDlp.lastArgs()).toBeUndefined();
   });
 });
