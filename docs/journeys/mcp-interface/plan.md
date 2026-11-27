@@ -49,13 +49,12 @@ scenario that runs it.
 
 1. **01 — MCP Server Core Wiring & Conformance (Tracer Bullet).** Adds `src/mcp/server.ts` (`listTools`, `dispatchToolCall`, `createMcpServer`), rewires `src/index.ts` onto the shared domain core with fail-fast startup limits (`D29`), updates `src/index.test.ts` for MCP `2025-11-25` conformance (`-32602` invalid cursor & unknown tool, 6 D12 tool names, `I6` proxy stripping, startup env validation, `isError: true` domain errors), and adds `mcp` harness command + scenario. Covers MI-1, MI-2, MI-3, MI-4, MI-5, MI-6.
    ([spec](specs/01-mcp-server-core-wiring/spec.md), `scenarios/mcp-interface/01-mcp-server-core-wiring.txt`)
+2. **02 — Legacy Retirement, Lint Expansion & v2.0.0 Docs.** Ports unique real-caption fixture tests from `src/YouTubeTranscript.fixture.test.ts` into `src/transcript/fixtures.test.ts`, removes retired legacy files (`Fetcher.ts`, `httpClient.ts`, `ssrf.ts`, `YouTubeTranscript.ts`, `types.ts` and their legacy tests), expands `biome.json` to `src/**`, updates `README.md` for v2.0.0 (`D10`, `D12`), and bumps `package.json` to `2.0.0`. Covers MI-7.
+   ([spec](specs/02-legacy-retirement-and-v2-docs/spec.md))
 
 ### Next
 
-In the order we expect to build them; reorder freely. Each says where it came from: criteria, a finding (a
-`/dd-verify` note) or a decision.
-
-1. **02 — Legacy Retirement, Lint Expansion & v2.0.0 Docs.** Ports unique real-caption fixture tests from `src/YouTubeTranscript.fixture.test.ts` into `src/transcript/`, removes retired legacy files (`Fetcher.ts`, `httpClient.ts`, `ssrf.ts`, `YouTubeTranscript.ts`, `types.ts` and their legacy tests), expands `biome.json` to `src/**`, updates `README.md` for v2.0.0 (`D10`, `D12`), and bumps `package.json` to `2.0.0`. From MI-7.
+*(None — all planned slices are complete.)*
 
 ## Deferred
 

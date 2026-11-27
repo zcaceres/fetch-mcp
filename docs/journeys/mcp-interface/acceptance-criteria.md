@@ -18,6 +18,7 @@ invariants it cites. Scenarios that share an id make up one criterion.
 3. **List Tools.** Server lists the six Terminology-aligned tools with no `proxy` property in any schema and rejects unrecognized pagination cursors with `-32602`.
 4. **Dispatch Tool Calls.** Server rejects unknown tool names with `-32602`, strips any smuggled `proxy` argument, and routes valid calls through the shared domain core under Operator Proxy Policy and limits.
 5. **Return Tool Result.** Server returns `CallToolResult` with `isError: false` on success and `isError: true` with the typed error text on validation or domain failures.
+6. **Clean v2.0.0 Distribution.** Legacy v1.2.0 modules are retired, Biome covers all of `src/**`, and `README.md`/`package.json` reflect v2.0.0.
 
 ## 1. Start & Validate Operator Limits
 

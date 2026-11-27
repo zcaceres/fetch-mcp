@@ -2,20 +2,7 @@
   "$schema": "https://biomejs.dev/schemas/2.6.9/schema.json",
   "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
   "files": {
-    "includes": [
-      "src/shared/**",
-      "src/policy/**",
-      "src/fetching/**",
-      "src/transcript/**",
-      "src/mcp/**",
-      "src/integrations/**",
-      "src/index.ts",
-      "src/index.test.ts",
-      "src/cli.ts",
-      "src/cli.test.ts",
-      "cli/**",
-      "biome.json"
-    ]
+    "includes": ["src/**", "cli/**", "biome.json"]
   },
   "formatter": { "indentStyle": "space", "indentWidth": 2, "lineWidth": 120 },
   "javascript": { "formatter": { "quoteStyle": "single" } },

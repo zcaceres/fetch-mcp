@@ -18,9 +18,9 @@ What each journey's users can do and see is in its acceptance criteria, which ci
 Where the context came from: briefs, documents, designs, tickets, code, people. Re-read them before deciding
 something they cover.
 
-- [README.md](README.md): project overview, MCP tools, CLI usage, environment variables, and security features (v1.2.0).
-- [package.json](package.json): package metadata (`mcp-fetch-server` v1.2.0), binaries, scripts, and runtime dependencies.
-- [src/](src/): existing implementation (`index.ts`, `cli.ts`, `Fetcher.ts`, `httpClient.ts`, `ssrf.ts`, `YouTubeTranscript.ts`, `types.ts`).
+- [README.md](README.md): project overview, MCP tools, CLI usage, environment variables, and security features (v2.0.0).
+- [package.json](package.json): package metadata (`mcp-fetch-server` v2.0.0), binaries, scripts, and runtime dependencies.
+- [src/](src/): Functional DDD implementation (`shared/`, `policy/`, `fetching/`, `transcript/`, `mcp/`, `integrations/`, `index.ts`, `cli.ts`).
 - [docs/github/README.md](docs/github/README.md): exported GitHub issues and pull requests (as of 2026-09-27).
 
 ## Terminology
