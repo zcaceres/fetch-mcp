@@ -6,13 +6,15 @@ import { buildYtDlpArgs } from '../../transcript/queries.ts';
 type YtDlpEntry =
   | { readonly kind: 'xml'; readonly lang: string; readonly xml: string }
   | { readonly kind: 'empty' }
-  | { readonly kind: 'fail'; readonly reason: string };
+  | { readonly kind: 'fail'; readonly reason: string }
+  | { readonly kind: 'timeout' };
 
 export type YtDlpMock = YtDlpPort & {
   readonly setAvailable: (available: boolean) => void;
   readonly serve: (url: string, lang: string, xml: string) => void;
   readonly empty: (url: string) => void;
   readonly fail: (url: string, reason: string) => void;
+  readonly timeout: (url: string) => void;
   readonly lastArgs: () => readonly string[] | undefined;
 };
 
@@ -38,6 +40,9 @@ export const createYtDlpMock = (): YtDlpMock => {
     if (entry.kind === 'fail') {
       return err(entry.reason);
     }
+    if (entry.kind === 'timeout') {
+      return err('yt-dlp timed out after 30000ms');
+    }
     const target = lang.toLowerCase();
     const entryLang = entry.lang.toLowerCase();
     if (entryLang !== target && !entryLang.startsWith(`${target}-`)) {
@@ -60,6 +65,9 @@ export const createYtDlpMock = (): YtDlpMock => {
     },
     fail: (url, reason) => {
       routes.set(normalizeKey(url), { kind: 'fail', reason });
+    },
+    timeout: (url) => {
+      routes.set(normalizeKey(url), { kind: 'timeout' });
     },
     lastArgs: () => recordedArgs,
   };

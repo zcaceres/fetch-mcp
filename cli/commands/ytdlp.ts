@@ -2,7 +2,7 @@ import { err, ok } from '../../src/shared/result.ts';
 import type { Command } from '../command.ts';
 
 const USAGE =
-  'usage: ytdlp available <true|false> | ytdlp serve <url> <lang> <xml...> | ytdlp empty <url> | ytdlp fail <url> <reason...> | ytdlp last-args';
+  'usage: ytdlp available <true|false> | ytdlp serve <url> <lang> <xml...> | ytdlp empty <url> | ytdlp fail <url> <reason...> | ytdlp timeout <url> | ytdlp last-args';
 
 export const ytdlpCommand: Command = {
   kind: 'world',
@@ -45,6 +45,15 @@ export const ytdlpCommand: Command = {
       }
       world.ytdlp.fail(url, reasonParts.join(' '));
       return ok([`ytdlp: fail ${url}`]);
+    }
+
+    if (action === 'timeout') {
+      const [url] = rest;
+      if (!url) {
+        return err('usage: ytdlp timeout <url>');
+      }
+      world.ytdlp.timeout(url);
+      return ok([`ytdlp: timeout ${url}`]);
     }
 
     if (action === 'last-args') {

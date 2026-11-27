@@ -39,7 +39,7 @@ Every system outside ours is mocked in `src/integrations/<system>/`; world comma
 
 | System | What we need from it | World commands |
 |---|---|---|
-| ytdlp (`src/integrations/ytdlp/`) | Optional local `yt-dlp` subprocess (`isAvailable`, `downloadSubtitles`) | `ytdlp available <true\|false>`, `ytdlp serve <url> <lang> <xml...>`, `ytdlp empty <url>`, `ytdlp fail <url> <reason...>`, `ytdlp last-args` |
+| ytdlp (`src/integrations/ytdlp/`) | Optional local `yt-dlp` subprocess (`isAvailable`, `downloadSubtitles`) | `ytdlp available <true\|false>`, `ytdlp serve <url> <lang> <xml...>`, `ytdlp empty <url>`, `ytdlp fail <url> <reason...>`, `ytdlp timeout <url>`, `ytdlp last-args` |
 | origin (`src/integrations/origin/`) | YouTube watch page HTML and caption track XML (via `FetchPagePort` → `executeFetch`) | Reuses `origin serve`, `origin header`, `origin fail`, etc. from `fetch-web-content` |
 | dns (`src/integrations/dns/`) | Hostname resolution for YouTube hosts in direct extraction | Reuses `dns set`, `dns empty`, `dns fail` from `fetch-web-content` |
 
@@ -54,13 +54,12 @@ a scenario that runs it.
    ([spec](specs/01-direct-transcript-extraction/spec.md), `scenarios/fetch-transcript/01-direct-transcript-extraction.txt`)
 2. **02 — yt-dlp Primary & Fallback.** Adds `src/integrations/ytdlp/mock.ts`, `ytdlp` world commands (`available`, `serve`, `empty`, `fail`, `last-args`), `buildYtDlpArgs`, `CheckHostPort`, and `yt-dlp`-primary with direct fallback in `executeFetchTranscript`, proving validation/SSRF errors are never swallowed (`I2`, `I3`) and `--write-sub`/`--write-auto-sub`/`--` flags are enforced (`D7`, `D21`). Covers FT-3 (core/mock), FT-4.
    ([spec](specs/02-ytdlp-primary-and-fallback/spec.md), `scenarios/fetch-transcript/02-ytdlp-primary-and-fallback.txt`)
+3. **03 — Real yt-dlp Client & CLI Wiring.** Implements async `src/integrations/ytdlp/client.ts` (`execFile`, `--` sentinel, `D20` `.srv1` language selection, temp dir cleanup, `30s` timeout enforcing D9/FT-3, `MAX_RESPONSE_BYTES` file cap enforcing I5), rewires `mcp-fetch transcript` in `src/cli.ts` off legacy `Fetcher.youtubeTranscript` onto `executeFetchTranscript`, and adds `ytdlp timeout` + `FT-2` `dns fail`/`dns empty` scenario coverage. Covers FT-2, FT-3, FT-6, FT-10.
+   ([spec](specs/03-real-ytdlp-and-cli-wiring/spec.md), `scenarios/fetch-transcript/03-real-ytdlp-and-cli-wiring.txt`)
 
 ### Next
 
-In the order we expect to build them; reorder freely. Each says where it came from: criteria, a finding (a
-`/dd-verify` note) or a decision.
-
-1. **03 — Real yt-dlp Client & CLI Wiring.** Implements async `src/integrations/ytdlp/client.ts` (`execFile`, `--` sentinel, temp dir cleanup, `30s` timeout enforcing D9/FT-3) and rewires `mcp-fetch transcript` in `src/cli.ts` off legacy `Fetcher.youtubeTranscript` onto `executeFetchTranscript`. Also closes the `FT-3` subprocess timeout gap and `FT-2` `dns fail`/`dns empty` scenario gap noted in `notes/2026-11-26-fetch-transcript-verify.md`. From FT-3, FT-10, and `notes/2026-11-26-fetch-transcript-verify.md`.
+*(None — all slices for `fetch-transcript` are complete and verified.)*
 
 ## Deferred
 
