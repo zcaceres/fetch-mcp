@@ -33,7 +33,7 @@ prepends `# <article.title>` when present; and clearly binary `Content-Type` res
 
 The Terminology this slice uses.
 
-- **Target URL**, **Format** (`WebFormat`: `html`, `markdown`, `readable`, `text`, `json`), **Window**, **Fetch Request**, **Raw Response**, **Rendered Output** *(derived)*, **Windowed Excerpt** *(derived)*, **fetch**.
+- **Target URL**, **Format** (`WebFormat`: `html`, `markdown`, `readable`, `text`, `json`), **Window**, **Fetch Request**, **Raw Response**, **Rendered Output**, **Windowed Excerpt** *(derived)*, **fetch**.
 
 ## What it reads and writes
 

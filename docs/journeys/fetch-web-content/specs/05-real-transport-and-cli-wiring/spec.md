@@ -3,8 +3,7 @@
 Part of the [Fetch Web Content plan](../../plan.md). Decisions referenced as D# / U# / I# are in
 [`REQUIREMENTS.md`](../../../../../REQUIREMENTS.md). Builds on [slice 04](../04-limits-compression-and-timeouts/spec.md).
 
-Covers [acceptance criteria](../../acceptance-criteria.md) FW-4 (socket IP pinning) and FW-15 (CLI wiring), closing
-Gap #1 from [2026-11-25-fetch-web-content-verify.md](../../../../../notes/2026-11-25-fetch-web-content-verify.md).
+Covers [acceptance criteria](../../acceptance-criteria.md) FW-4 (socket IP pinning) and FW-15 (CLI wiring).
 
 ## Goal
 
@@ -30,15 +29,15 @@ integration tests), and `bun run harness run scenarios/fetch-web-content` (Slice
 - `package.json` & `biome.json`: update `engines.node` to `>=20` (`D13`) and include `src/cli.ts` and `src/cli.test.ts` in Biome linting.
 
 **Out:**
-- Operator proxy routing (`HTTP_PROXY`/`HTTPS_PROXY`/`ALL_PROXY`/`NO_PROXY`, SOCKS, `--proxy`) and Operator env limit scenarios (waits on `proxy-and-limits` journey; `--proxy` continues to be parsed in `src/cli.ts` and falls back cleanly until `proxy-and-limits` replaces legacy transport).
-- `transcript` YouTube redesign (`yt-dlp` / direct scrape ports & domain core; waits on `fetch-transcript` journey — `src/cli.ts` delegates `transcript` to existing `Fetcher.youtubeTranscript` meanwhile).
-- MCP stdio server (`src/index.ts`) tool renames and wiring (waits on `mcp-interface` journey).
+- Operator proxy routing and Operator env limit configuration (covered in `proxy-and-limits`).
+- YouTube transcript domain core and `yt-dlp` client (covered in `fetch-transcript`).
+- MCP stdio server tool renames and wiring (covered in `mcp-interface`).
 
 ## Vocabulary
 
 The Terminology this slice uses.
 
-- **CLI User**, **Target URL**, **Format** (`WebFormat`: `html`, `markdown`, `readable`, `text`, `json`), **Window**, **Fetch Request**, **WireResponse**, **Raw Response**, **Rendered Output** *(derived)*, **Windowed Excerpt** *(derived)*, **fetch**.
+- **CLI User**, **Target URL**, **Format** (`WebFormat`: `html`, `markdown`, `readable`, `text`, `json`), **Window**, **Fetch Request**, **Wire Response**, **Raw Response**, **Rendered Output**, **Windowed Excerpt** *(derived)*, **fetch**.
 
 ## What it reads and writes
 

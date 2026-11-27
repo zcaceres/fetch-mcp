@@ -83,7 +83,7 @@ const normalizeIncomingHeaders = (raw: http.IncomingHttpHeaders): Headers => {
   return result;
 };
 
-const createPinnedLookup = (pinnedIps: readonly ResolvedIp[]): net.LookupFunction => {
+export const createPinnedLookup = (pinnedIps: readonly ResolvedIp[]): net.LookupFunction => {
   const records: dns.LookupAddress[] = pinnedIps.map((address) => ({
     address,
     family: net.isIPv6(address) ? 6 : 4,
@@ -95,15 +95,15 @@ const createPinnedLookup = (pinnedIps: readonly ResolvedIp[]): net.LookupFunctio
     if (records.length === 0) {
       const error: NodeJS.ErrnoException = new Error(`Blocked Target URL: no pinned IP available for "${hostname}"`);
       if (wantsAll) {
-        callback(error, []);
+        process.nextTick(callback, error, []);
       } else {
-        callback(error, '', 0);
+        process.nextTick(callback, error, '', 0);
       }
       return;
     }
 
     if (wantsAll) {
-      callback(null, records);
+      process.nextTick(callback, null, records);
       return;
     }
 
@@ -119,11 +119,11 @@ const createPinnedLookup = (pinnedIps: readonly ResolvedIp[]): net.LookupFunctio
       const error: NodeJS.ErrnoException = new Error(
         `Blocked Target URL: no IPv${familyFilter} address found for "${hostname}"`,
       );
-      callback(error, '', 0);
+      process.nextTick(callback, error, '', 0);
       return;
     }
 
-    callback(null, match.address, match.family);
+    process.nextTick(callback, null, match.address, match.family);
   };
 };
 
@@ -266,63 +266,75 @@ export const createRealHttpGet = (options: RealHttpGetOptions = {}): HttpGetPort
 
       let req: http.ClientRequest;
 
-      if (parsedProxy && !tunnelSocket) {
-        // HTTP or HTTPS proxy forwarding an http: target via absolute-URI request
-        const proxyAuth = buildProxyAuthHeader(parsedProxy);
-        const reqHeaders: Record<string, string> = {
-          ...headers,
-          Host: targetUrl.host,
-          ...(proxyAuth ? { 'Proxy-Authorization': proxyAuth } : {}),
-        };
-        const transport = parsedProxy.protocol === 'https:' ? https : http;
-        req = transport.request(
-          {
-            protocol: parsedProxy.protocol,
-            hostname: normalizeHostname(parsedProxy.hostname),
-            port: getEffectivePort(parsedProxy),
-            path: targetUrl.href,
-            method: 'GET',
-            headers: reqHeaders,
-            agent: false,
-            timeout: timeoutMs,
-          },
-          onResponse,
-        );
-      } else if (tunnelSocket) {
-        const established = tunnelSocket;
-        const isHttps = targetUrl.protocol === 'https:';
-        const transport = isHttps ? https : http;
-        const agent = isHttps ? new SingleHttpsTunnelAgent(established) : new SingleHttpTunnelAgent(established);
-        req = transport.request(
-          {
-            protocol: targetUrl.protocol,
-            hostname: normalizeHostname(targetUrl.hostname),
-            port: getEffectivePort(targetUrl),
-            path: `${targetUrl.pathname}${targetUrl.search}`,
-            method: 'GET',
-            headers: { ...headers },
-            agent,
-            timeout: timeoutMs,
-          },
-          onResponse,
-        );
-      } else {
-        const transport = targetUrl.protocol === 'https:' ? https : http;
-        const lookup = createPinnedLookup(pinnedIps);
-        req = transport.request(
-          {
-            protocol: targetUrl.protocol,
-            hostname: normalizeHostname(targetUrl.hostname),
-            port: getEffectivePort(targetUrl),
-            path: `${targetUrl.pathname}${targetUrl.search}`,
-            method: 'GET',
-            headers: { ...headers },
-            agent: false,
-            lookup,
-            timeout: timeoutMs,
-          },
-          onResponse,
-        );
+      try {
+        if (parsedProxy && !tunnelSocket) {
+          // HTTP or HTTPS proxy forwarding an http: target via absolute-URI request
+          const proxyAuth = buildProxyAuthHeader(parsedProxy);
+          const reqHeaders: Record<string, string> = {
+            ...headers,
+            Host: targetUrl.host,
+            ...(proxyAuth ? { 'Proxy-Authorization': proxyAuth } : {}),
+          };
+          const transport = parsedProxy.protocol === 'https:' ? https : http;
+          req = transport.request(
+            {
+              protocol: parsedProxy.protocol,
+              hostname: normalizeHostname(parsedProxy.hostname),
+              port: getEffectivePort(parsedProxy),
+              path: targetUrl.href,
+              method: 'GET',
+              headers: reqHeaders,
+              agent: false,
+              timeout: timeoutMs,
+            },
+            onResponse,
+          );
+        } else if (tunnelSocket) {
+          const established = tunnelSocket;
+          const isHttps = targetUrl.protocol === 'https:';
+          const transport = isHttps ? https : http;
+          const agent = isHttps ? new SingleHttpsTunnelAgent(established) : new SingleHttpTunnelAgent(established);
+          req = transport.request(
+            {
+              protocol: targetUrl.protocol,
+              hostname: normalizeHostname(targetUrl.hostname),
+              port: getEffectivePort(targetUrl),
+              path: `${targetUrl.pathname}${targetUrl.search}`,
+              method: 'GET',
+              headers: { ...headers },
+              agent,
+              timeout: timeoutMs,
+            },
+            onResponse,
+          );
+        } else {
+          const transport = targetUrl.protocol === 'https:' ? https : http;
+          const lookup = createPinnedLookup(pinnedIps);
+          req = transport.request(
+            {
+              protocol: targetUrl.protocol,
+              hostname: normalizeHostname(targetUrl.hostname),
+              port: getEffectivePort(targetUrl),
+              path: `${targetUrl.pathname}${targetUrl.search}`,
+              method: 'GET',
+              headers: { ...headers },
+              agent: false,
+              lookup,
+              timeout: timeoutMs,
+            },
+            onResponse,
+          );
+        }
+      } catch (error: unknown) {
+        tunnelSocket?.destroy();
+        const code = typeof error === 'object' && error !== null && 'code' in error ? String(error.code) : '';
+        const detail = error instanceof Error ? error.message : String(error);
+        if (code === 'ERR_INVALID_HTTP_TOKEN' || code === 'ERR_INVALID_CHAR') {
+          finish(err({ kind: 'invalid_request', message: detail }));
+          return;
+        }
+        finish(err({ kind: 'network_error', message: networkErrorMessage(detail) }));
+        return;
       }
 
       req.on('timeout', () => {

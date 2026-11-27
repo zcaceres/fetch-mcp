@@ -24,18 +24,18 @@ CLI `transcript` tests), and `bun run harness run scenarios` (all `fetch-web-con
 **In:**
 - `src/integrations/ytdlp/client.ts`: real async `YtDlpPort` (`createRealYtDlp(options?)`) with `isAvailable()` (cached `--version` probe returning `boolean`, never throwing) and `downloadSubtitles(url, lang)` (`mkdtemp`, `execFile` with `buildYtDlpArgs`, default `30000ms` timeout per `D9`, `MAX_RESPONSE_BYTES` file-size guard per `I5`, `.srv1` discovery, guaranteed `rm` cleanup in `finally`).
 - `src/integrations/ytdlp/client.test.ts`: real subprocess integration tests using tiny temporary executable scripts to prove argv/sentinel passing, `.srv1` discovery + `matchedLang` extraction, non-zero exit handling, missing `.srv1` handling, timeout termination, `maxBytes` refusal, `isAvailable()` caching/missing-binary handling, and temp-dir cleanup in both success and failure paths.
-- `src/cli.ts` & `src/cli.test.ts`: rewire `mcp-fetch transcript` onto `executeFetchTranscript` (wired with `FetchPagePort` → `executeFetch`, `CheckHostPort` → `dnsLookup` + `validateResolvedIps`, and `YtDlpPort` → `createRealYtDlp()`), preserving the proxy fallback seam to legacy `Fetcher.youtubeTranscript` only when `--proxy` or Operator proxy env vars are set (until `proxy-and-limits` replaces proxy routing). Add `ytDlp?: YtDlpPort` to `CliDeps` and unit/integration tests for `mcp-fetch transcript` in `src/cli.test.ts` (`FT-10`).
+- `src/cli.ts` & `src/cli.test.ts`: wire `mcp-fetch transcript` onto `executeFetchTranscript` (linked to `FetchPagePort` → `executeFetch`, `CheckHostPort` → `dnsLookup` + `validateResolvedIps`, and `YtDlpPort` → `createRealYtDlp()`), with `ytDlp?: YtDlpPort` in `CliDeps` and unit/integration tests in `src/cli.test.ts` (`FT-10`).
 - `src/integrations/ytdlp/mock.ts` & `cli/commands/ytdlp.ts`: add `timeout(url)` mock control and `ytdlp timeout <url>` world command.
 
 **Out:**
-- Proxy routing for `yt-dlp` (`--proxy` / `HTTPS_PROXY`/`HTTP_PROXY`/`ALL_PROXY`/`NO_PROXY`) and removal of the legacy proxy fallback seam in `src/cli.ts` (waits on `proxy-and-limits` journey, `U3`).
-- MCP `fetch_transcript` server tool schema and dispatch in `src/index.ts` (waits on `mcp-interface` journey, `U4`).
+- Proxy routing for `yt-dlp` (covered in `proxy-and-limits`, `D23`, `D26`).
+- MCP `fetch_transcript` server tool schema and dispatch (covered in `mcp-interface`, `D27`, `D28`).
 
 ## Vocabulary
 
 The Terminology this slice uses.
 
-- **CLI User**, **Target URL**, **Format** (`youtube-transcript`), **Window**, **Fetch Request**, **Transcript** *(derived)*, **Windowed Excerpt** *(derived)*, **fetch transcript**.
+- **CLI User**, **Target URL**, **Format** (`youtube-transcript`), **Window**, **Fetch Request**, **Caption Track**, **Transcript**, **Windowed Excerpt** *(derived)*, **fetch transcript**.
 
 ## What it reads and writes
 
@@ -56,7 +56,7 @@ No new domain verbs; `src/transcript/` remains pure and isolated from `src/fetch
 
 ## Queries (`src/transcript/queries.ts`)
 
-Unchanged from Slice 02 (`isAllowedYouTubeHost`, `decodeHtmlEntities`, `parseCaptionXml`, `buildYtDlpArgs`, `windowedTranscript`).
+Unchanged from Slice 02 (`isAllowedYouTubeHost`, `decodeHtmlEntities`, `parseCaptionXml`, `buildYtDlpArgs`, `windowedExcerpt`).
 
 ## Harness
 

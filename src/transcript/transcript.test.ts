@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'bun:test';
 import { err, ok } from '../shared/result.ts';
 import { executeFetchTranscript } from './execute.ts';
-import { LanguageCode, Transcript, YouTubeUrl } from './nouns.ts';
+import { LanguageCode, TargetUrl, Transcript } from './nouns.ts';
 import {
   buildYtDlpArgs,
   decodeHtmlEntities,
   isAllowedYouTubeHost,
   parseCaptionXml,
-  windowedTranscript,
+  windowedExcerpt,
 } from './queries.ts';
 import { buildTranscript, extractCaptionTracks, prepareTranscriptRequest, selectCaptionTrack } from './verbs.ts';
 
@@ -39,7 +39,7 @@ describe('transcript domain (Slice 01)', () => {
       expect(result).toEqual({
         ok: true,
         value: {
-          url: YouTubeUrl('https://www.youtube.com/watch?v=abc123'),
+          url: TargetUrl('https://www.youtube.com/watch?v=abc123'),
           lang: LanguageCode('en'),
           headers: {},
           window: { startIndex: 0, maxLength: 5000 },
@@ -135,6 +135,18 @@ describe('transcript domain (Slice 01)', () => {
           message: 'Invalid header "X-Bad\\nName": CR/LF control characters are not allowed',
         },
       });
+      const cases: readonly Record<string, string>[] = [
+        { '': 'v' },
+        { 'Bad Header': 'v' },
+        { 'X-Test': 'bad\u0000val' },
+      ];
+      for (const headers of cases) {
+        const res = prepareTranscriptRequest({ url: 'https://youtu.be/abc', headers });
+        expect(res.ok).toBe(false);
+        if (!res.ok) {
+          expect(res.error.kind).toBe('invalid_request');
+        }
+      }
     });
   });
 
@@ -205,7 +217,7 @@ describe('transcript domain (Slice 01)', () => {
     });
   });
 
-  describe('buildTranscript & windowedTranscript', () => {
+  describe('buildTranscript & windowedExcerpt', () => {
     it('formats Transcript with language header and timestamps (D4, D21)', () => {
       const res = buildTranscript('<transcript><text start="0" dur="2">Hi</text></transcript>', 'en', 'English');
       expect(res).toEqual({
@@ -227,37 +239,33 @@ describe('transcript domain (Slice 01)', () => {
 
     it('slices Transcript into a Windowed Excerpt cleanly (D9, D15)', () => {
       const t = Transcript('[Transcript language: de — German]\n\n[0:00] Hallo');
-      expect(String(windowedTranscript(t, { startIndex: 0, maxLength: 34 }))).toBe(
-        '[Transcript language: de — German]',
-      );
-      expect(String(windowedTranscript(t, { startIndex: 0, maxLength: 0 }))).toBe(String(t));
-      expect(String(windowedTranscript(t, { startIndex: 500, maxLength: 10 }))).toBe('');
+      expect(String(windowedExcerpt(t, { startIndex: 0, maxLength: 34 }))).toBe('[Transcript language: de — German]');
+      expect(String(windowedExcerpt(t, { startIndex: 0, maxLength: 0 }))).toBe(String(t));
+      expect(String(windowedExcerpt(t, { startIndex: 500, maxLength: 10 }))).toBe('');
     });
   });
 
   describe('buildYtDlpArgs (D21)', () => {
     it('builds safe argv with --write-sub, --write-auto-sub, and -- end-of-options sentinel', () => {
-      expect(buildYtDlpArgs(YouTubeUrl('https://www.youtube.com/watch?v=abc'), LanguageCode('en'), '/tmp/sub')).toEqual(
-        [
-          '--write-sub',
-          '--write-auto-sub',
-          '--sub-lang',
-          'en',
-          '--sub-format',
-          'srv1',
-          '--skip-download',
-          '-o',
-          '/tmp/sub',
-          '--',
-          'https://www.youtube.com/watch?v=abc',
-        ],
-      );
+      expect(buildYtDlpArgs(TargetUrl('https://www.youtube.com/watch?v=abc'), LanguageCode('en'), '/tmp/sub')).toEqual([
+        '--write-sub',
+        '--write-auto-sub',
+        '--sub-lang',
+        'en',
+        '--sub-format',
+        'srv1',
+        '--skip-download',
+        '-o',
+        '/tmp/sub',
+        '--',
+        'https://www.youtube.com/watch?v=abc',
+      ]);
     });
 
     it('includes --proxy before the -- sentinel when provided', () => {
       expect(
         buildYtDlpArgs(
-          YouTubeUrl('https://www.youtube.com/watch?v=abc'),
+          TargetUrl('https://www.youtube.com/watch?v=abc'),
           LanguageCode('es'),
           '/tmp/sub',
           'http://proxy:8080',

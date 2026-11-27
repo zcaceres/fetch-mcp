@@ -1,11 +1,11 @@
 import type { Result } from '../shared/result.ts';
-import type { Headers, LanguageCode, TranscriptError, YouTubeUrl } from './nouns.ts';
+import type { Headers, LanguageCode, TargetUrl, TranscriptError } from './nouns.ts';
 
 export type FetchPagePort = (url: string, headers: Headers) => Promise<Result<string, TranscriptError>>;
 
 export type CheckHostPort = (hostname: string) => Promise<Result<void, TranscriptError>>;
 
-export type ResolveTranscriptProxyPort = (targetUrl: YouTubeUrl) => Result<string | undefined, TranscriptError>;
+export type ResolveTranscriptProxyPort = (targetUrl: TargetUrl) => Result<string | undefined, TranscriptError>;
 
 export type YtDlpResult = {
   readonly xml: string;
@@ -16,7 +16,7 @@ export type YtDlpResult = {
 export type YtDlpPort = {
   readonly isAvailable: () => Promise<boolean>;
   readonly downloadSubtitles: (
-    url: YouTubeUrl,
+    url: TargetUrl,
     lang: LanguageCode,
     proxyUrl?: string,
   ) => Promise<Result<YtDlpResult, string>>;

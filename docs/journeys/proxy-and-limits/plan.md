@@ -8,7 +8,7 @@ decisions (D#) and questions (U#) are in [`REQUIREMENTS.md`](../../../REQUIREMEN
 The designs, flows, tickets and documents behind this journey, from its design session.
 
 - [`REQUIREMENTS.md`](../../../REQUIREMENTS.md): system terminology, D2, D5, D6, D8, D9, D14, D15, D21, D23–D26, I1–I6.
-- [src/httpClient.ts](../../../src/httpClient.ts) & [src/types.ts](../../../src/types.ts): v1.2.0 proxy precedence, `NO_PROXY`, HTTP/CONNECT proxy logic, and env limit defaults.
+- [src/policy/](../../../src/policy/), [src/integrations/origin/proxy.ts](../../../src/integrations/origin/proxy.ts), [src/integrations/origin/client.ts](../../../src/integrations/origin/client.ts): Functional DDD proxy policy, real HTTP/CONNECT/SOCKS transport, and Operator limits.
 - [PR #44](../../github/pull-requests/044-fix-remove-user-controlled-proxy-parameter-to-prevent-ssrf-bypass-cwe-918.md) & [PR #46](../../github/pull-requests/046-add-support-for-environment-proxies-http-https-socks-and-improve-node-js-pr.md): proxy trust boundary (`I6`) and HTTP/HTTPS/SOCKS + bare `host:port` requirements.
 
 ## Shape

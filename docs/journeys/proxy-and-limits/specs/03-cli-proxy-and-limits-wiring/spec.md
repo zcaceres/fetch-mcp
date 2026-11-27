@@ -32,13 +32,13 @@ cleanly.
 - `scenarios/proxy-and-limits/03-cli-proxy-and-limits-wiring.txt`: scripts `DEFAULT_LIMIT` & `MAX_RESPONSE_BYTES` on `fetch-transcript`, `NO_PROXY` port & IPv6 rules, and explicit `--proxy` overriding `NO_PROXY` on `fetch-transcript`.
 
 **Out:**
-- MCP server (`src/index.ts`) Operator env proxy/limit wiring, tool renames, and deletion of legacy `Fetcher.ts`/`httpClient.ts`/`ssrf.ts`/`YouTubeTranscript.ts`/`types.ts` (waits on `mcp-interface` journey, `U4`).
+- MCP server (`src/index.ts`) Operator env proxy/limit wiring, tool renames, and legacy retirement (covered in `mcp-interface`, `D27`–`D29`).
 
 ## Vocabulary
 
 The Terminology this slice uses.
 
-- **Operator**, **CLI User**, **Target URL**, **Format**, **Window**, **Fetch Request**, **Proxy Policy**, **Windowed Excerpt** *(derived)*, **fetch**, **fetch transcript**.
+- **Operator**, **CLI User**, **Target URL**, **Format**, **Window**, **Fetch Request**, **Operator Limits**, **Proxy Policy**, **Windowed Excerpt** *(derived)*, **parse operator limits**, **resolve proxy policy**, **fetch**, **fetch transcript**.
 
 ## What it reads and writes
 

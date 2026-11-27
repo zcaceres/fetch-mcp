@@ -50,7 +50,7 @@ scenarios) pass cleanly.
 
 The Terminology this slice uses.
 
-- **Operator**, **CLI User**, **Target URL**, **Window**, **Fetch Request**, **Raw Response**, **Proxy Policy**, **Windowed Excerpt** *(derived)*, **fetch**, **fetch transcript**.
+- **Operator**, **CLI User**, **Target URL**, **Window**, **Fetch Request**, **Raw Response**, **Operator Limits**, **Proxy Policy**, **Windowed Excerpt** *(derived)*, **parse operator limits**, **resolve proxy policy**, **fetch**, **fetch transcript**.
 
 ## What it reads and writes
 

@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
 import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { LanguageCode, YouTubeUrl } from '../../transcript/nouns.ts';
+import { LanguageCode, TargetUrl } from '../../transcript/nouns.ts';
 import { createRealYtDlp } from './client.ts';
 
 describe('real yt-dlp client (Slice 03)', () => {
@@ -62,7 +62,7 @@ exit 0`,
 
     const client = createRealYtDlp({ binary: stub });
     const result = await client.downloadSubtitles(
-      YouTubeUrl('https://www.youtube.com/watch?v=demo1'),
+      TargetUrl('https://www.youtube.com/watch?v=demo1'),
       LanguageCode('en'),
     );
 
@@ -109,7 +109,7 @@ exit 1`,
 
     const failClient = createRealYtDlp({ binary: failStub });
     const failRes = await failClient.downloadSubtitles(
-      YouTubeUrl('https://www.youtube.com/watch?v=bad'),
+      TargetUrl('https://www.youtube.com/watch?v=bad'),
       LanguageCode('en'),
     );
     expect(failRes.ok).toBe(false);
@@ -132,7 +132,7 @@ exit 0`,
 
     const emptyClient = createRealYtDlp({ binary: emptyStub });
     const emptyRes = await emptyClient.downloadSubtitles(
-      YouTubeUrl('https://www.youtube.com/watch?v=nosub'),
+      TargetUrl('https://www.youtube.com/watch?v=nosub'),
       LanguageCode('en'),
     );
     expect(emptyRes).toEqual({ ok: false, error: 'yt-dlp did not produce subtitle files' });
@@ -153,7 +153,7 @@ sleep 5`,
     );
 
     const client = createRealYtDlp({ binary: slowStub, timeoutMs: 350 });
-    const res = await client.downloadSubtitles(YouTubeUrl('https://www.youtube.com/watch?v=slow'), LanguageCode('en'));
+    const res = await client.downloadSubtitles(TargetUrl('https://www.youtube.com/watch?v=slow'), LanguageCode('en'));
 
     expect(res).toEqual({ ok: false, error: 'yt-dlp timed out after 350ms' });
     expect(existsSync(readFileSync(slowTmpFile, 'utf-8').trim())).toBe(false);
@@ -174,7 +174,7 @@ exit 0`,
     );
 
     const client = createRealYtDlp({ binary: bigStub, maxBytes: 50 });
-    const res = await client.downloadSubtitles(YouTubeUrl('https://www.youtube.com/watch?v=big'), LanguageCode('en'));
+    const res = await client.downloadSubtitles(TargetUrl('https://www.youtube.com/watch?v=big'), LanguageCode('en'));
 
     expect(res).toEqual({ ok: false, error: 'yt-dlp subtitle file exceeded 50 byte limit' });
     expect(existsSync(readFileSync(bigTmpFile, 'utf-8').trim())).toBe(false);
@@ -196,7 +196,7 @@ exit 0`,
 
     const client = createRealYtDlp({ binary: stub });
     const exactRes = await client.downloadSubtitles(
-      YouTubeUrl('https://www.youtube.com/watch?v=multi'),
+      TargetUrl('https://www.youtube.com/watch?v=multi'),
       LanguageCode('EN'),
     );
     expect(exactRes).toEqual({

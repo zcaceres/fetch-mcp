@@ -3,8 +3,7 @@
 Part of the [Fetch Web Content plan](../../plan.md). Decisions referenced as D# / U# / I# are in
 [`REQUIREMENTS.md`](../../../../../REQUIREMENTS.md). Builds on [slice 03](../03-formats-and-content-guards/spec.md).
 
-Covers [acceptance criteria](../../acceptance-criteria.md) FW-2, FW-7, and FW-8 (plus Gap #2 from
-[2026-11-25-fetch-web-content-verify.md](../../../../../notes/2026-11-25-fetch-web-content-verify.md)).
+Covers [acceptance criteria](../../acceptance-criteria.md) FW-2, FW-7, and FW-8.
 
 ## Goal
 
@@ -42,7 +41,7 @@ origins exceeding `30s` fail with a typed timeout error without retrying (`D9`, 
 
 The Terminology this slice uses.
 
-- **Target URL**, **Format** (`WebFormat`), **Window**, **Fetch Request**, **Raw Response**, **Rendered Output** *(derived)*, **Windowed Excerpt** *(derived)*, **fetch**.
+- **Target URL**, **Format** (`WebFormat`), **Window**, **Fetch Request**, **Wire Response**, **Raw Response**, **Rendered Output**, **Windowed Excerpt** *(derived)*, **fetch**.
 
 ## What it reads and writes
 
@@ -55,7 +54,7 @@ The Terminology this slice uses.
 
 | Function | Rule | Error |
 |---|---|---|
-| `prepareFetch(input: RawFetchInput, defaultLimit?: number): Result<FetchRequest, FetchError>` | Same as Slice 03, plus rejects any header name or value containing `\r` or `\n`, deduplicates duplicate caller headers case-insensitively (last value wins), and applies default `User-Agent` (`DEFAULT_USER_AGENT`) and `Accept-Encoding: gzip, deflate, br` only when not supplied case-insensitively (D14, D18). | Same as Slice 03, plus:<br>`Invalid header "<name>": CR/LF control characters are not allowed` |
+| `prepareFetch(input: RawFetchInput, defaultLimit?: number): Result<FetchRequest, FetchError>` | Same as Slice 03, plus rejects any header name or value containing `\r` or `\n`, deduplicates duplicate caller headers case-insensitively (last value wins), and applies default `User-Agent` (`DEFAULT_USER_AGENT`) and `Accept-Encoding: gzip, deflate, br` only when not supplied case-insensitively (D14, D18). | Same as Slice 03, plus:<br>`Invalid header <JSON.stringify(key)>: CR/LF control characters are not allowed` |
 | `decodeResponseBody(url: TargetUrl, headers: Headers, rawBytes: Uint8Array, maxBytes?: number): Result<string, FetchError>` | Rejects declared `Content-Length > maxBytes` and `rawBytes.byteLength > maxBytes` (`maxBytes` defaults to `MAX_RESPONSE_BYTES = 10_485_760`, D9, I5); decompresses `gzip`/`x-gzip`, `deflate`, and `br` under `maxOutputLength: maxBytes` (I5); passes missing, `identity`, or unknown `Content-Encoding` through unchanged as UTF-8 (D17). | `Response too large: <contentLength> bytes exceeds <maxBytes> byte limit`<br>`Response too large: exceeded <maxBytes> byte limit`<br>`Failed to decompress <encoding> response from <url>` |
 | `validateResolvedIps`, `validateRedirectHop`, `evaluateResponse` | Unchanged from Slice 03. | Unchanged from Slice 03 |
 

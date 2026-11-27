@@ -90,6 +90,12 @@ describe('policy domain (Slice 01)', () => {
       expect(redactProxyUrl('socks5://alice:p%40ss@127.0.0.1:1080')).toBe('socks5://127.0.0.1:1080');
       expect(redactProxyUrl('http://127.0.0.1:8080/')).toBe('http://127.0.0.1:8080/');
       expect(redactProxyUrl('http://user:secret@bad host')).toBe('http://<redacted>@bad host');
+      expect(redactProxyUrl('user:topsecret@bad host:8080')).toBe('<redacted>@bad host:8080');
+      expect(redactProxyUrl('user:topsecret@proxy.internal:8080')).toBe('<redacted>@proxy.internal:8080');
+      expect(redactProxyUrl('http://user:p@ss@bad host:8080')).toBe('http://<redacted>@bad host:8080');
+      expect(redactProxyUrl('http://proxy.internal:8080/path?email=a@b.com')).toBe(
+        'http://proxy.internal:8080/path?email=a@b.com',
+      );
     });
   });
 
@@ -173,6 +179,13 @@ describe('policy domain (Slice 01)', () => {
         error: {
           kind: 'invalid_proxy',
           message: 'Invalid proxy URL: "http://<redacted>@bad host:80"',
+        },
+      });
+      expect(resolveProxyPolicy('http://example.com', {}, 'user:topsecret@bad host:8080')).toEqual({
+        ok: false,
+        error: {
+          kind: 'invalid_proxy',
+          message: 'Invalid proxy URL: "<redacted>@bad host:8080"',
         },
       });
     });

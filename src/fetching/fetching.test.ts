@@ -106,6 +106,21 @@ describe('fetching domain', () => {
       });
     });
 
+    it('rejects empty, non-token, or control-character custom headers before connecting (D14, D18)', () => {
+      const cases: readonly Record<string, string>[] = [
+        { '': 'v' },
+        { 'Bad Header': 'v' },
+        { 'X-Test': 'bad\u0000val' },
+      ];
+      for (const headers of cases) {
+        const result = prepareFetch({ url: 'https://example.com/', format: 'html', headers });
+        expect(result.ok).toBe(false);
+        if (!result.ok) {
+          expect(result.error.kind).toBe('invalid_request');
+        }
+      }
+    });
+
     it('rejects malformed URLs', () => {
       const result = prepareFetch({ url: 'not-a-url', format: 'html' });
       expect(result).toEqual({

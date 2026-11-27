@@ -233,6 +233,12 @@ describe('MCP stdio server conformance (MI-1, MI-2, MI-3, MI-4, MI-6)', () => {
       });
       expect(ssrfRes.isError).toBe(true);
       expect(ssrfRes.content).toEqual([{ type: 'text', text: 'Blocked Target URL: private address "127.0.0.1"' }]);
+
+      const badHeaderRes = await client.callTool({
+        name: 'fetch_html',
+        arguments: { url: 'http://93.184.216.34/', headers: { 'Bad Header': 'v' } },
+      });
+      expect(badHeaderRes.isError).toBe(true);
     } finally {
       await client.close();
     }

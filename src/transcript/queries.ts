@@ -1,4 +1,4 @@
-import { type LanguageCode, type Transcript, type Window, WindowedExcerpt, type YouTubeUrl } from './nouns.ts';
+import { type LanguageCode, type TargetUrl, type Transcript, type Window, WindowedExcerpt } from './nouns.ts';
 
 export const ALLOWED_YOUTUBE_HOSTS: ReadonlySet<string> = new Set([
   'youtube.com',
@@ -85,7 +85,7 @@ export const parseCaptionXml = (xml: string): readonly string[] => {
  * sentinel immediately before the Target URL (D21).
  */
 export const buildYtDlpArgs = (
-  url: YouTubeUrl,
+  url: TargetUrl,
   lang: LanguageCode,
   outputTemplate: string,
   proxy?: string,
@@ -108,7 +108,7 @@ export const buildYtDlpArgs = (
  * Slices a Transcript into a Windowed Excerpt (D9, D14, D15, D19).
  * Returns sliced text only, with no appended footer or metadata.
  */
-export const windowedTranscript = (transcript: Transcript, window: Window): WindowedExcerpt => {
+export const windowedExcerpt = (transcript: Transcript, window: Window): WindowedExcerpt => {
   if (window.startIndex >= transcript.length) {
     return WindowedExcerpt('');
   }

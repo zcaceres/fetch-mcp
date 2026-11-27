@@ -77,6 +77,7 @@ describe('parseCliArgs (D12)', () => {
     expect(parseCliArgs(['html', 'https://example.com', '--start-index', '-5']).ok).toBe(false);
     expect(parseCliArgs(['html', 'https://example.com', '--header']).ok).toBe(false);
     expect(parseCliArgs(['html', 'https://example.com', '--header', 'no-colon']).ok).toBe(false);
+    expect(parseCliArgs(['html', 'https://example.com', '--header', ' : v']).ok).toBe(false);
     expect(parseCliArgs(['html', 'https://example.com', '--proxy']).ok).toBe(false);
     expect(parseCliArgs(['html', 'https://example.com', '--proxy', '--max-length', '10']).ok).toBe(false);
     expect(parseCliArgs(['html', 'https://example.com', '--lang']).ok).toBe(false);

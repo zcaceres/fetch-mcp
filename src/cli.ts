@@ -85,7 +85,11 @@ const parseHeaderFlag = (value: string | undefined): Result<readonly [string, st
   if (idx <= 0) {
     return err(`Invalid --header "${value}": expected Key:Value`);
   }
-  return ok([value.slice(0, idx).trim(), value.slice(idx + 1).trim()]);
+  const key = value.slice(0, idx).trim();
+  if (key.length === 0) {
+    return err(`Invalid --header "${value}": expected Key:Value`);
+  }
+  return ok([key, value.slice(idx + 1).trim()]);
 };
 
 export const parseCliArgs = (argv: readonly string[]): Result<CliAction, string> => {

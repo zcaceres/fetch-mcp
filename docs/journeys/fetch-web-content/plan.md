@@ -8,7 +8,7 @@ decisions (D#) and questions (U#) are in [`REQUIREMENTS.md`](../../../REQUIREMEN
 The designs, flows, tickets and documents behind this journey, from its design session.
 
 - [`REQUIREMENTS.md`](../../../REQUIREMENTS.md): system terminology, D1–D18, I1–I6.
-- [src/Fetcher.ts](../../../src/Fetcher.ts), [src/httpClient.ts](../../../src/httpClient.ts), [src/ssrf.ts](../../../src/ssrf.ts), [src/cli.ts](../../../src/cli.ts): v1.2.0 reference implementation being redesigned around Functional DDD.
+- [src/fetching/](../../../src/fetching/), [src/integrations/origin/](../../../src/integrations/origin/), [src/integrations/dns/](../../../src/integrations/dns/), [src/cli.ts](../../../src/cli.ts): Functional DDD web-fetching implementation and real CLI wiring.
 
 ## Shape
 

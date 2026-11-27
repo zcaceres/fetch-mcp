@@ -40,7 +40,7 @@ cleanly, and `node dist/cli.js --version` prints `2.0.0`.
 
 The Terminology this slice uses.
 
-- **Agent**, **CLI User**, **Operator**, **Target URL**, **Format**, **Window**, **Proxy Policy**, **Transcript** *(derived)*, **Windowed Excerpt** *(derived)*, **fetch**, **fetch transcript**.
+- **Agent**, **CLI User**, **Operator**, **Target URL**, **Format**, **Window**, **Operator Limits**, **Proxy Policy**, **Transcript**, **Windowed Excerpt** *(derived)*, **fetch**, **fetch transcript**.
 
 ## Placeholders
 

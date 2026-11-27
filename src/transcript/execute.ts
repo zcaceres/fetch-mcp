@@ -1,7 +1,7 @@
 import { ok, type Result } from '../shared/result.ts';
 import type { RawTranscriptInput, TranscriptError, WindowedExcerpt } from './nouns.ts';
 import type { TranscriptPorts } from './ports.ts';
-import { windowedTranscript } from './queries.ts';
+import { windowedExcerpt } from './queries.ts';
 import {
   buildTranscript,
   DEFAULT_TRANSCRIPT_LIMIT,
@@ -45,7 +45,7 @@ export const executeFetchTranscript = async (
     if (sub.ok) {
       const built = buildTranscript(sub.value.xml, sub.value.lang, sub.value.langName);
       if (built.ok) {
-        return ok(windowedTranscript(built.value, prepared.value.window));
+        return ok(windowedExcerpt(built.value, prepared.value.window));
       }
     }
   }
@@ -69,5 +69,5 @@ export const executeFetchTranscript = async (
   const transcript = buildTranscript(xml.value, selected.value.languageCode, selected.value.name);
   if (!transcript.ok) return transcript;
 
-  return ok(windowedTranscript(transcript.value, prepared.value.window));
+  return ok(windowedExcerpt(transcript.value, prepared.value.window));
 };

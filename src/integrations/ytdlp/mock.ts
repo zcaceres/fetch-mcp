@@ -1,5 +1,5 @@
 import { err, ok, type Result } from '../../shared/result.ts';
-import type { LanguageCode, YouTubeUrl } from '../../transcript/nouns.ts';
+import type { LanguageCode, TargetUrl } from '../../transcript/nouns.ts';
 import type { YtDlpPort, YtDlpResult } from '../../transcript/ports.ts';
 import { buildYtDlpArgs } from '../../transcript/queries.ts';
 
@@ -32,7 +32,7 @@ export const createYtDlpMock = (): YtDlpMock => {
   };
 
   const downloadSubtitles = async (
-    url: YouTubeUrl,
+    url: TargetUrl,
     lang: LanguageCode,
     proxyUrl?: string,
   ): Promise<Result<YtDlpResult, string>> => {

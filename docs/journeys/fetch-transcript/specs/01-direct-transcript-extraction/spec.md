@@ -23,8 +23,8 @@ a Windowed Excerpt (`D15`).
 
 **In:**
 - Bounded context `src/transcript/`:
-  - `nouns.ts`: `YouTubeUrl`, `LanguageCode`, `Window`, `Headers`, `CaptionTrack`, `TranscriptRequest`, `RawTranscriptInput`, `Transcript`, `WindowedExcerpt`, `TranscriptError`.
-  - `queries.ts`: `isAllowedYouTubeHost`, `decodeHtmlEntities`, `parseCaptionXml`, `windowedTranscript`.
+  - `nouns.ts`: `TargetUrl`, `LanguageCode`, `Window`, `Headers`, `CaptionTrack`, `FetchRequest`, `RawTranscriptInput`, `Transcript`, `WindowedExcerpt`, `TranscriptError`.
+  - `queries.ts`: `isAllowedYouTubeHost`, `decodeHtmlEntities`, `parseCaptionXml`, `windowedExcerpt`.
   - `verbs.ts`: `prepareTranscriptRequest`, `extractCaptionTracks`, `selectCaptionTrack`, `buildTranscript`.
   - `ports.ts`: `FetchPagePort`, `TranscriptPorts`.
   - `execute.ts`: `executeFetchTranscript(input, ports, options?)` (direct extraction path; `yt-dlp` port added in Slice 02).
@@ -41,16 +41,16 @@ a Windowed Excerpt (`D15`).
 
 The Terminology this slice uses.
 
-- **Target URL**, **Format** (`youtube-transcript`), **Window**, **Fetch Request**, **Transcript** *(derived)*, **Windowed Excerpt** *(derived)*, **fetch transcript**.
+- **Target URL**, **Format** (`youtube-transcript`), **Window**, **Fetch Request**, **Caption Track**, **Transcript**, **Windowed Excerpt** *(derived)*, **fetch transcript**.
 
 ## What it reads and writes
 
 | Payload | Shape |
 |---|---|
-| `YouTubeUrl` | `Brand<string, 'YouTubeUrl'>` |
+| `TargetUrl` | `Brand<string, 'TargetUrl'>` |
 | `LanguageCode` | `Brand<string, 'LanguageCode'>` (matches `/^[a-zA-Z0-9][a-zA-Z0-9-]*$/`, default `'en'`) |
 | `CaptionTrack` | `{ readonly languageCode: string; readonly name: string; readonly baseUrl: string }` |
-| `TranscriptRequest` | `{ readonly url: YouTubeUrl; readonly lang: LanguageCode; readonly headers: Headers; readonly window: Window }` |
+| `FetchRequest` | `{ readonly url: TargetUrl; readonly lang: LanguageCode; readonly headers: Headers; readonly window: Window }` |
 | `Transcript` | `Brand<string, 'Transcript'>` |
 | `WindowedExcerpt` | `Brand<string, 'WindowedExcerpt'>` |
 | `TranscriptError` | Discriminated union `{ readonly kind: 'invalid_request' \| 'blocked_url' \| 'fetch_error' \| 'not_found' \| 'language_not_found' \| 'parse_error'; readonly message: string }` |
@@ -59,7 +59,7 @@ The Terminology this slice uses.
 
 | Function | Rule | Error |
 |---|---|---|
-| `prepareTranscriptRequest(input: RawTranscriptInput, defaultLimit?: number): Result<TranscriptRequest, TranscriptError>` | Validates URL syntax, requires `http:`/`https:`, requires hostname in `ALLOWED_YOUTUBE_HOSTS` (`youtube.com`, `www.youtube.com`, `m.youtube.com`, `music.youtube.com`, `youtu.be`), validates `lang` (default `'en'`, matches `/^[a-zA-Z0-9][a-zA-Z0-9-]*$/`), validates `startIndex` (`0`) and `maxLength` (`defaultLimit ?? 5000`), and rejects CR/LF in header names or values (escaping rejected header names with `JSON.stringify`) (D4, D8, D9, D14, D18, D19, I1, I3). | `Invalid Target URL: "<url>"`<br>`Blocked Target URL: disallowed scheme "<protocol>" (only http: and https: are allowed)`<br>`Blocked Target URL: host "<host>" is not an allowlisted YouTube domain`<br>`Invalid language code "<lang>": only letters, digits, and hyphens are allowed`<br>`Invalid startIndex: must be a non-negative integer`<br>`Invalid maxLength: must be a non-negative integer`<br>`Invalid header <JSON.stringify(key)>: CR/LF control characters are not allowed` |
+| `prepareTranscriptRequest(input: RawTranscriptInput, defaultLimit?: number): Result<FetchRequest, TranscriptError>` | Validates URL syntax, requires `http:`/`https:`, requires hostname in `ALLOWED_YOUTUBE_HOSTS` (`youtube.com`, `www.youtube.com`, `m.youtube.com`, `music.youtube.com`, `youtu.be`), validates `lang` (default `'en'`, matches `/^[a-zA-Z0-9][a-zA-Z0-9-]*$/`), validates `startIndex` (`0`) and `maxLength` (`defaultLimit ?? 5000`), and rejects CR/LF in header names or values (escaping rejected header names with `JSON.stringify`) (D4, D8, D9, D14, D18, D19, I1, I3). | `Invalid Target URL: "<url>"`<br>`Blocked Target URL: disallowed scheme "<protocol>" (only http: and https: are allowed)`<br>`Blocked Target URL: host "<host>" is not an allowlisted YouTube domain`<br>`Invalid language code "<lang>": only letters, digits, and hyphens are allowed`<br>`Invalid startIndex: must be a non-negative integer`<br>`Invalid maxLength: must be a non-negative integer`<br>`Invalid header <JSON.stringify(key)>: CR/LF control characters are not allowed` |
 | `extractCaptionTracks(html: string): Result<readonly CaptionTrack[], TranscriptError>` | Extracts `ytInitialPlayerResponse` JSON from watch page HTML and reads `captions.playerCaptionsTracklistRenderer.captionTracks`; requires at least one valid track with `languageCode` and `baseUrl` (D14). | `Could not find ytInitialPlayerResponse in page HTML`<br>`No caption tracks found for this video` |
 | `selectCaptionTrack(tracks: readonly CaptionTrack[], lang: LanguageCode): Result<CaptionTrack, TranscriptError>` | Case-insensitive exact match on `languageCode` first, then case-insensitive regional prefix match (`track.languageCode.toLowerCase().startsWith(lang.toLowerCase() + '-')`); fails listing unique available language codes in order when absent (D14, D20). | `No captions available in language "<lang>" (available: <codes>)` |
 | `buildTranscript(xml: string, lang: string, langName: string): Result<Transcript, TranscriptError>` | Parses `srv1`/`srv3` XML via `parseCaptionXml`; requires at least one non-empty caption line (D22); formats `[Transcript language: <lang> — <langName>]\n\n<lines joined by \n>` (D4, D21, D22). | `No caption lines found in transcript XML` |
@@ -73,7 +73,7 @@ The derived nouns and pure checks this slice computes. Never stored, never refus
 | `isAllowedYouTubeHost(hostname: string): boolean` | Normalizes hostname (lowercased, trailing dots stripped) and checks membership in `ALLOWED_YOUTUBE_HOSTS` (`youtube.com`, `www.youtube.com`, `m.youtube.com`, `music.youtube.com`, `youtu.be`) (I3). |
 | `decodeHtmlEntities(text: string): string` | Decodes `&amp;` (enabling double-encoded YouTube entities like `&amp;#39;`), named entities (`&lt;`, `&gt;`, `&quot;`, `&apos;`, `&nbsp;`), decimal numeric entities (`&#39;`, `&#160;`), and hex numeric entities (`&#x27;`) (D21). |
 | `parseCaptionXml(xml: string): readonly string[]` | Parses `srv1` (`<text start="...">`) or `srv3` (`<p t="...">`) XML, strips inline HTML tags, decodes entities via `decodeHtmlEntities`, skips empty/whitespace-only entries, and formats each line as `[m:ss] <content>` (D21). |
-| `windowedTranscript(transcript: Transcript, window: Window): WindowedExcerpt` | Returns `""` if `startIndex >= transcript.length`; full remainder if `maxLength === 0`; otherwise `transcript.slice(startIndex, startIndex + maxLength)` with no appended footer (D9, D14, D15, D19). |
+| `windowedExcerpt(transcript: Transcript, window: Window): WindowedExcerpt` | Returns `""` if `startIndex >= transcript.length`; full remainder if `maxLength === 0`; otherwise `transcript.slice(startIndex, startIndex + maxLength)` with no appended footer (D9, D14, D15, D19). |
 
 ## Harness
 
@@ -87,5 +87,5 @@ The derived nouns and pure checks this slice computes. Never stored, never refus
 
 ## Tests
 
-- **Domain tests** (`src/transcript/transcript.test.ts`): pure given/when/then tests for `prepareTranscriptRequest` (allowlisted hosts, non-YouTube host blocked, disallowed scheme, invalid `lang` with shell/flag metacharacters, invalid Window bounds, CR/LF header rejection), `extractCaptionTracks` (valid player response, missing `ytInitialPlayerResponse`, empty/missing tracks), `selectCaptionTrack` (exact match, case-insensitive match, regional prefix `en` → `en-US`, missing language lists available codes), `decodeHtmlEntities` (named, decimal, hex, double-encoded `&amp;#39;`), `parseCaptionXml` (`srv1`, `srv3`, inline tags stripped, empty skipped), `buildTranscript` (header + timestamps, empty XML fails), and `windowedTranscript`.
+- **Domain tests** (`src/transcript/transcript.test.ts`): pure given/when/then tests for `prepareTranscriptRequest` (allowlisted hosts, non-YouTube host blocked, disallowed scheme, invalid `lang` with shell/flag metacharacters, invalid Window bounds, CR/LF header rejection), `extractCaptionTracks` (valid player response, missing `ytInitialPlayerResponse`, empty/missing tracks), `selectCaptionTrack` (exact match, case-insensitive match, regional prefix `en` → `en-US`, missing language lists available codes), `decodeHtmlEntities` (named, decimal, hex, double-encoded `&amp;#39;`), `parseCaptionXml` (`srv1`, `srv3`, inline tags stripped, empty skipped), `buildTranscript` (header + timestamps, empty XML fails), and `windowedExcerpt`.
 - **Scenario:** `scenarios/fetch-transcript/01-direct-transcript-extraction.txt`.

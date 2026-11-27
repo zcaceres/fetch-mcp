@@ -32,6 +32,17 @@ export const DEFAULT_USER_AGENT =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 const DEFAULT_ACCEPT_ENCODING = 'gzip, deflate, br';
 const CRLF_REGEX = /[\r\n]/;
+const HTTP_HEADER_NAME_REGEX = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
+
+const hasInvalidHeaderValueChar = (value: string): boolean => {
+  for (let i = 0; i < value.length; i++) {
+    const code = value.charCodeAt(i);
+    if ((code < 0x20 && code !== 0x09) || code === 0x7f || code > 0xff) {
+      return true;
+    }
+  }
+  return false;
+};
 
 const sanitizeAndDefaultHeaders = (rawHeaders: Headers | undefined): Result<Headers, FetchError> => {
   const deduped = new Map<string, readonly [string, string]>();
@@ -41,6 +52,18 @@ const sanitizeAndDefaultHeaders = (rawHeaders: Headers | undefined): Result<Head
       return err({
         kind: 'invalid_request',
         message: `Invalid header ${JSON.stringify(key)}: CR/LF control characters are not allowed`,
+      });
+    }
+    if (!HTTP_HEADER_NAME_REGEX.test(key)) {
+      return err({
+        kind: 'invalid_request',
+        message: `Invalid header ${JSON.stringify(key)}: header name must be a valid HTTP token`,
+      });
+    }
+    if (hasInvalidHeaderValueChar(value)) {
+      return err({
+        kind: 'invalid_request',
+        message: `Invalid header ${JSON.stringify(key)}: invalid character in header value`,
       });
     }
     deduped.set(key.toLowerCase(), [key, value]);

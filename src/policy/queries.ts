@@ -60,14 +60,20 @@ export const isNoProxyMatch = (targetUrl: URL, noProxy: string | undefined): boo
  * Removes username/password credentials from a proxy URL string so secrets never appear in errors or logs.
  */
 export const redactProxyUrl = (proxyUrl: string): string => {
-  try {
-    const parsed = new URL(proxyUrl);
-    if (parsed.username || parsed.password) {
-      parsed.username = '';
-      parsed.password = '';
+  if (/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(proxyUrl)) {
+    try {
+      const parsed = new URL(proxyUrl);
+      if (parsed.username || parsed.password) {
+        parsed.username = '';
+        parsed.password = '';
+      }
+      return parsed.href;
+    } catch {
+      // Fall through to regex redaction for malformed scheme-prefixed URLs
     }
-    return parsed.href;
-  } catch {
-    return proxyUrl.replace(/([a-zA-Z][a-zA-Z0-9+.-]*:\/\/)[^/@]*@/g, '$1<redacted>@');
   }
+  return proxyUrl.replace(
+    /^([a-zA-Z][a-zA-Z0-9+.-]*:\/\/)?[^/?#]*@/,
+    (_match, scheme: string | undefined) => `${scheme ?? ''}<redacted>@`,
+  );
 };

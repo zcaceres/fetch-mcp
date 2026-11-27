@@ -2,19 +2,30 @@ import { z } from 'zod';
 import { err, ok, type Result } from '../shared/result.ts';
 import {
   type CaptionTrack,
+  type FetchRequest,
   type Headers,
   LanguageCode,
   type RawTranscriptInput,
+  TargetUrl,
   Transcript,
   type TranscriptError,
-  type TranscriptRequest,
-  YouTubeUrl,
 } from './nouns.ts';
 import { isAllowedYouTubeHost, parseCaptionXml } from './queries.ts';
 
 export const DEFAULT_TRANSCRIPT_LIMIT = 5000;
 const SAFE_LANG_REGEX = /^[a-zA-Z0-9][a-zA-Z0-9-]*$/;
 const CRLF_REGEX = /[\r\n]/;
+const HTTP_HEADER_NAME_REGEX = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
+
+const hasInvalidHeaderValueChar = (value: string): boolean => {
+  for (let i = 0; i < value.length; i++) {
+    const code = value.charCodeAt(i);
+    if ((code < 0x20 && code !== 0x09) || code === 0x7f || code > 0xff) {
+      return true;
+    }
+  }
+  return false;
+};
 
 const normalizeHostDisplay = (hostname: string): string => {
   const bare = hostname.startsWith('[') && hostname.endsWith(']') ? hostname.slice(1, -1) : hostname;
@@ -30,6 +41,18 @@ const validateHeaders = (rawHeaders: Headers | undefined): Result<Headers, Trans
       return err({
         kind: 'invalid_request',
         message: `Invalid header ${JSON.stringify(key)}: CR/LF control characters are not allowed`,
+      });
+    }
+    if (!HTTP_HEADER_NAME_REGEX.test(key)) {
+      return err({
+        kind: 'invalid_request',
+        message: `Invalid header ${JSON.stringify(key)}: header name must be a valid HTTP token`,
+      });
+    }
+    if (hasInvalidHeaderValueChar(value)) {
+      return err({
+        kind: 'invalid_request',
+        message: `Invalid header ${JSON.stringify(key)}: invalid character in header value`,
       });
     }
     deduped.set(key.toLowerCase(), [key, value]);
@@ -48,7 +71,7 @@ const validateHeaders = (rawHeaders: Headers | undefined): Result<Headers, Trans
 export const prepareTranscriptRequest = (
   input: RawTranscriptInput,
   defaultLimit: number = DEFAULT_TRANSCRIPT_LIMIT,
-): Result<TranscriptRequest, TranscriptError> => {
+): Result<FetchRequest, TranscriptError> => {
   let parsed: URL;
   try {
     parsed = new URL(input.url);
@@ -93,7 +116,7 @@ export const prepareTranscriptRequest = (
   if (!headers.ok) return headers;
 
   return ok({
-    url: YouTubeUrl(parsed.href),
+    url: TargetUrl(parsed.href),
     lang: LanguageCode(lang),
     headers: headers.value,
     window: { startIndex, maxLength },

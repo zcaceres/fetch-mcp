@@ -41,16 +41,21 @@ noun marked *(derived)* is computed from others, never stored, and its entry say
 - **Format:** the requested output representation — one of the five web formats (`html`, `markdown`, `readable`, `text`, `json`, modeled as `WebFormat`) or `youtube-transcript` (D3, D4, D19).
 - **Window:** the non-negative integer character bounds (`startIndex`, `maxLength`) selecting a Windowed Excerpt from Rendered Output or Transcript (D4, D9, D19).
 - **Fetch Request:** an actor's request carrying a Target URL, desired Format, optional custom request headers, optional Window (`startIndex`, `maxLength`), and (for `youtube-transcript`) an optional caption language code (D4, D6, D19).
+- **Wire Response:** the undecoded HTTP response status, headers, final URL, and raw byte payload (`Uint8Array`) returned by the Remote Origin Server before decompression and UTF-8 decoding into a Raw Response (D9, D17, D30, I5).
 - **Raw Response:** the bounded HTTP response status, headers, final URL, and decoded UTF-8 body retrieved from an origin server (D4, D9).
+- **Operator Limits:** the process-level default Window length (`DEFAULT_LIMIT`) and Raw Response byte cap (`MAX_RESPONSE_BYTES`) parsed from Operator environment variables (D2, D9, D25, D29, D30).
 - **Proxy Policy:** the effective proxy routing rule (direct or HTTP/HTTPS/SOCKS proxy URL) resolved from Operator environment variables (`HTTPS_PROXY`, `HTTP_PROXY`, `ALL_PROXY`, `NO_PROXY`) or a CLI User's explicit `--proxy` override (D2, D4, D5, D6).
-- **Rendered Output** *(derived)*: the string produced by transforming a Raw Response into the requested Format (`html`, `markdown`, `readable`, `text`, or `json`); never stored (D4).
-- **Transcript** *(derived)*: formatted timestamped caption lines prefixed with a language header, extracted from a YouTube video via `yt-dlp` or direct page/caption-XML parsing; never stored (D4, D7).
-- **Windowed Excerpt** *(derived)*: the character substring of Rendered Output or Transcript selected by `startIndex` and `maxLength` (with `maxLength = 0` meaning no limit); never stored (D4, D9).
+- **Caption Track:** a YouTube video's timed-text track metadata (`languageCode`, display `name`, and `baseUrl`) extracted from a watch page and matched against the requested caption language code (D7, D20, D30).
+- **Rendered Output:** the unpersisted string produced by transforming a Raw Response into the requested Format (`html`, `markdown`, `readable`, `text`, or `json`) via a fallible verb (D3, D4, D14, D16, D17, D30).
+- **Transcript:** unpersisted formatted timestamped caption lines prefixed with a language header, produced by a fallible verb from a YouTube video via `yt-dlp` or direct page/caption-XML parsing (D3, D4, D7, D22, D30).
+- **Windowed Excerpt** *(derived)*: the character substring of Rendered Output or Transcript selected by `startIndex` and `maxLength` (with `maxLength = 0` meaning no limit); computed by an infallible query and never stored (D4, D9, D30).
 
 ### Verbs
 
 - **fetch:** retrieve a public web resource for a Fetch Request, transform its Raw Response into Rendered Output for the requested Format, and return a Windowed Excerpt (D4).
 - **fetch transcript:** retrieve a YouTube video's captions (trying `yt-dlp` first, then direct extraction), build a Transcript, and return a Windowed Excerpt (D4, D7).
+- **parse operator limits:** parse and validate Operator Limits (`DEFAULT_LIMIT`, `MAX_RESPONSE_BYTES`) from OS Environment, failing explicitly on invalid values (D9, D25, D29, D30).
+- **resolve proxy policy:** determine the effective Proxy Policy for a Target URL from explicit CLI `--proxy` or Operator proxy environment variables honoring `NO_PROXY`, failing explicitly on malformed or unsupported proxy URLs (D5, D23, D24, D25, D30).
 
 ## External Systems
 
@@ -138,7 +143,7 @@ for an undecided rule and will change with it.
 
 ### D4. Canonical domain vocabulary
 
-- **Decided (2026-11-25):** The domain speaks a unified vocabulary: Nouns are **Target URL**, **Format** (`html`, `markdown`, `readable`, `text`, `json`, `youtube-transcript`), **Fetch Request**, **Raw Response**, and **Proxy Policy**; Derived Nouns are **Rendered Output**, **Transcript**, and **Windowed Excerpt**; Verbs are **fetch** (general web content) and **fetch transcript** (YouTube transcripts).
+- **Decided (2026-11-26):** The domain speaks a unified vocabulary (extended by D19 and D30): Nouns are **Target URL**, **Format** (`html`, `markdown`, `readable`, `text`, `json`, `youtube-transcript`), **Window**, **Fetch Request**, **Wire Response**, **Raw Response**, **Operator Limits**, **Proxy Policy**, **Caption Track**, **Rendered Output**, and **Transcript**; Derived Noun is **Windowed Excerpt**; Verbs are **fetch**, **fetch transcript**, **parse operator limits**, and **resolve proxy policy**.
 
 ### D5. Supported proxy protocols
 
@@ -239,6 +244,10 @@ for an undecided rule and will change with it.
 ### D29. Fail-fast Operator limits at MCP server startup
 
 - **Decided (2026-11-26):** `mcp-fetch-server` parses Operator `DEFAULT_LIMIT` and `MAX_RESPONSE_BYTES` at startup via `parseOperatorLimits` (D25), writing the typed error to `stderr` and exiting `1` before advertising `tools/list` if either env var is invalid.
+
+### D30. Extended domain vocabulary and derived-noun boundary
+
+- **Decided (2026-11-26):** Formalize **Operator Limits**, **Wire Response**, and **Caption Track** as Terminology nouns and **parse operator limits** and **resolve proxy policy** as Terminology verbs for the `src/policy/` context (D4, D7, D9, D17, D20, D23–D25, D29). Reserve the *(derived)* marker strictly for **Windowed Excerpt** (computed by an infallible query in `queries.ts`); **Rendered Output** and **Transcript** remain unpersisted verb outputs because D14, D16, D17, and D22 require their construction to fail with typed `Result` errors.
 
 ## Undecided Questions
 

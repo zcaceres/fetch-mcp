@@ -44,7 +44,7 @@ plus stdio JSON-RPC integration tests in `src/index.test.ts`.
 
 The Terminology this slice uses.
 
-- **Agent**, **Operator**, **Target URL**, **Format**, **Window**, **Fetch Request**, **Proxy Policy**, **Rendered Output** *(derived)*, **Transcript** *(derived)*, **Windowed Excerpt** *(derived)*, **fetch**, **fetch transcript**.
+- **Agent**, **Operator**, **Target URL**, **Format**, **Window**, **Fetch Request**, **Operator Limits**, **Proxy Policy**, **Rendered Output**, **Transcript**, **Windowed Excerpt** *(derived)*, **parse operator limits**, **resolve proxy policy**, **fetch**, **fetch transcript**.
 
 ## What it reads and writes
 
