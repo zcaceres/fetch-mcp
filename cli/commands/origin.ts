@@ -3,7 +3,7 @@ import { err, ok } from '../../src/shared/result.ts';
 import type { Command } from '../command.ts';
 
 const USAGE =
-  'usage: origin serve|header|compress|repeat|corrupt|redirect|fail|timeout|last-headers|last-pinned|last-proxy|attempts <url> ...';
+  'usage: origin serve|header|compress|repeat|corrupt|redirect|fail|proxy-fail|timeout|last-headers|last-pinned|last-proxy|attempts <url> ...';
 
 export const originCommand: Command = {
   kind: 'world',
@@ -85,6 +85,14 @@ export const originCommand: Command = {
       }
       world.origin.fail(url, rest.join(' '));
       return ok([`origin: fail ${url}`]);
+    }
+
+    if (action === 'proxy-fail') {
+      if (!url || rest.length === 0) {
+        return err('usage: origin proxy-fail <url> <reason...>');
+      }
+      world.origin.proxyFail(url, rest.join(' '));
+      return ok([`origin: proxy-fail ${url}`]);
     }
 
     if (action === 'timeout') {
