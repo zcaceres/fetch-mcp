@@ -5,6 +5,7 @@
 - Site: https://fetch.zach.dev
 - Source: https://github.com/zcaceres/fetch-mcp
 - Package: https://www.npmjs.com/package/mcp-fetch-server
+- Author: https://zach.dev | X: https://x.com/zachcaceres | GitHub: https://github.com/zcaceres
 - Requirements & Invariants: https://github.com/zcaceres/fetch-mcp/blob/main/REQUIREMENTS.md
 - README: https://github.com/zcaceres/fetch-mcp/blob/main/README.md
 
