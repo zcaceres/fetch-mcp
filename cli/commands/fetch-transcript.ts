@@ -21,6 +21,18 @@ const parseNumberArg = (flag: string, raw: string | undefined): Result<number, s
 
 const unescapeControlChars = (value: string): string => value.replace(/\\r/g, '\r').replace(/\\n/g, '\n');
 
+const trimHttpOws = (raw: string): string => raw.replace(/^[ \t]+|[ \t]+$/g, '');
+
+const hasInvalidHeaderValue = (value: string): boolean => {
+  for (let i = 0; i < value.length; i++) {
+    const code = value.charCodeAt(i);
+    if ((code < 0x20 && code !== 0x09) || code === 0x7f || code > 0xff) {
+      return true;
+    }
+  }
+  return false;
+};
+
 const parseHeaderArg = (raw: string | undefined): Result<readonly [string, string], string> => {
   if (raw === undefined) {
     return err('Missing value for --header');
@@ -30,7 +42,7 @@ const parseHeaderArg = (raw: string | undefined): Result<readonly [string, strin
   if (idx <= 0) {
     return err(`Invalid header "${raw}": expected Key:Value`);
   }
-  return ok([decoded.slice(0, idx).trim(), decoded.slice(idx + 1).trim()]);
+  return ok([trimHttpOws(decoded.slice(0, idx)), trimHttpOws(decoded.slice(idx + 1))]);
 };
 
 export const fetchTranscriptCommand: Command = {
@@ -73,7 +85,7 @@ export const fetchTranscriptCommand: Command = {
         const parsed = parseHeaderArg(rest[i + 1]);
         if (!parsed.ok) return parsed;
         const [k, v] = parsed.value;
-        if (!(k in headers) || !/[\r\n]/.test(headers[k] ?? '')) {
+        if (!(k in headers) || !hasInvalidHeaderValue(headers[k] ?? '')) {
           headers[k] = v;
         }
         i++;

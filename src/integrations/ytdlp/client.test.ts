@@ -255,4 +255,37 @@ exit 0`,
       }
     }
   });
+
+  it('redacts proxy credentials from yt-dlp error messages and stderr (I7, D31)', async () => {
+    const silentFailStub = makeScript('ytdlp-silent-fail.sh', 'exit 1');
+    const stderrFailStub = makeScript(
+      'ytdlp-stderr-fail.sh',
+      'echo "ERROR: unable to connect via http://alice:topsecret@proxy.internal:8080/" >&2; exit 1',
+    );
+    const proxyUrl = 'http://alice:topsecret@proxy.internal:8080/';
+
+    const silentRes = await createRealYtDlp({ binary: silentFailStub }).downloadSubtitles(
+      TargetUrl('https://www.youtube.com/watch?v=cred1'),
+      LanguageCode('en'),
+      proxyUrl,
+    );
+    expect(silentRes.ok).toBe(false);
+    if (!silentRes.ok) {
+      expect(silentRes.error).not.toContain('topsecret');
+      expect(silentRes.error).not.toContain('alice');
+      expect(silentRes.error).toContain('http://proxy.internal:8080/');
+    }
+
+    const stderrRes = await createRealYtDlp({ binary: stderrFailStub }).downloadSubtitles(
+      TargetUrl('https://www.youtube.com/watch?v=cred2'),
+      LanguageCode('en'),
+      proxyUrl,
+    );
+    expect(stderrRes.ok).toBe(false);
+    if (!stderrRes.ok) {
+      expect(stderrRes.error).not.toContain('topsecret');
+      expect(stderrRes.error).not.toContain('alice');
+      expect(stderrRes.error).toContain('http://proxy.internal:8080/');
+    }
+  });
 });

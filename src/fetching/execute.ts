@@ -9,9 +9,9 @@ import {
   MAX_REDIRECTS,
   MAX_RESPONSE_BYTES,
   prepareFetch,
-  validateRawResponseSize,
   validateRedirectHop,
   validateResolvedIps,
+  validateWireResponseSize,
 } from './verbs.ts';
 
 const REDIRECT_STATUS_CODES = new Set([301, 302, 303, 307, 308]);
@@ -77,8 +77,8 @@ export const executeFetch = async (
     const wire = await ports.httpGet(currentUrl, currentHeaders, pinnedIps, proxyUrl);
     if (!wire.ok) return wire;
 
-    const rawSizeCheck = validateRawResponseSize(wire.value.headers, wire.value.rawBytes, maxResponseBytes);
-    if (!rawSizeCheck.ok) return rawSizeCheck;
+    const wireSizeCheck = validateWireResponseSize(wire.value.headers, wire.value.rawBytes, maxResponseBytes);
+    if (!wireSizeCheck.ok) return wireSizeCheck;
 
     const location = findHeaderCaseInsensitive(wire.value.headers, 'location')?.trim();
     if (REDIRECT_STATUS_CODES.has(wire.value.status) && location !== undefined && location.length > 0) {

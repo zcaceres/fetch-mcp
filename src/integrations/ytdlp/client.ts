@@ -2,6 +2,7 @@ import { type ExecFileException, execFile } from 'node:child_process';
 import { mkdtemp, readdir, readFile, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { redactProxyUrl } from '../../policy/queries.ts';
 import { err, ok, type Result } from '../../shared/result.ts';
 import type { LanguageCode, TargetUrl } from '../../transcript/nouns.ts';
 import type { YtDlpPort, YtDlpResult } from '../../transcript/ports.ts';
@@ -35,6 +36,17 @@ export type RealYtDlpOptions = {
   readonly timeoutMs?: number;
   readonly maxBytes?: number;
   readonly proxy?: string;
+};
+
+const redactProxyInText = (text: string, effectiveProxy: string | undefined): string => {
+  let sanitized = text;
+  if (effectiveProxy) {
+    const safeProxy = redactProxyUrl(effectiveProxy);
+    sanitized = sanitized.replaceAll(effectiveProxy, safeProxy);
+  }
+  return sanitized.replace(/(--proxy\s+)(\S+)/g, (_match, prefix: string, value: string) => {
+    return `${prefix}${redactProxyUrl(value)}`;
+  });
 };
 
 const isTimedOutError = (error: ExecFileException): boolean => error.killed === true || error.code === 'ETIMEDOUT';
@@ -120,10 +132,11 @@ export const createRealYtDlp = (options: RealYtDlpOptions = {}): YtDlpPort => {
 
     try {
       const outputTemplate = path.join(tmpDir, 'sub');
-      const args = buildYtDlpArgs(url, lang, outputTemplate, proxyUrl ?? options.proxy);
+      const effectiveProxy = proxyUrl ?? options.proxy;
+      const args = buildYtDlpArgs(url, lang, outputTemplate, effectiveProxy);
       const run = await runExecFile(binary, args, timeoutMs);
       if (!run.ok) {
-        return err(run.error.message);
+        return err(redactProxyInText(run.error.message, effectiveProxy));
       }
 
       const files = (await readdir(tmpDir)).filter((f) => f.endsWith('.srv1'));

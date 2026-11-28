@@ -28,7 +28,7 @@ Where this journey lives in the code. Each noun is a type in the context's `noun
 
 | Context | Nouns | Verbs | Queries | Harness commands |
 |---|---|---|---|---|
-| `src/fetching/` | `TargetUrl`, `WebFormat`, `Window`, `FetchRequest`, `WireResponse`, `RawResponse`, `RenderedOutput`, `WindowedExcerpt`, `FetchError` | `prepareFetch`, `validateResolvedIps`, `validateRedirectHop`, `decodeResponseBody`, `evaluateResponse` | `normalizeHostname`, `isIpLiteral`, `isReservedIp`, `isBinaryContentType`, `stripCrossOriginHeaders`, `windowedExcerpt` | `fetch <format> <url> [--start-index N] [--max-length N] [--header K:V]` |
+| `src/fetching/` | `TargetUrl`, `WebFormat`, `Window`, `FetchRequest`, `WireResponse`, `RawResponse`, `RenderedOutput`, `WindowedExcerpt`, `FetchError` | `prepareFetch`, `validateResolvedIps`, `validateRedirectHop`, `validateWireResponseSize`, `decodeResponseBody`, `evaluateResponse` | `normalizeHostname`, `isIpLiteral`, `isReservedIp`, `isBinaryContentType`, `stripCrossOriginHeaders`, `windowedExcerpt` | `fetch <format> <url> [--start-index N] [--max-length N] [--header K:V]` |
 
 ## External systems
 

@@ -286,25 +286,32 @@ export const createRealHttpGet = (options: RealHttpGetOptions = {}): HttpGetPort
         if (parsedProxy && !tunnelSocket) {
           // HTTP or HTTPS proxy forwarding an http: target via absolute-URI request
           const proxyAuth = buildProxyAuthHeader(parsedProxy);
+          const proxyHost = normalizeHostname(parsedProxy.hostname);
           const reqHeaders: Record<string, string> = {
             ...headers,
             Host: targetUrl.host,
             ...(proxyAuth ? { 'Proxy-Authorization': proxyAuth } : {}),
           };
-          const transport = parsedProxy.protocol === 'https:' ? https : http;
-          req = transport.request(
-            {
-              protocol: parsedProxy.protocol,
-              hostname: normalizeHostname(parsedProxy.hostname),
-              port: getEffectivePort(parsedProxy),
-              path: `${targetUrl.origin}${targetUrl.pathname}${targetUrl.search}`,
-              method: 'GET',
-              headers: reqHeaders,
-              agent: false,
-              timeout: remainingTimeoutMs,
-            },
-            onResponse,
-          );
+          const commonProxyOptions = {
+            protocol: parsedProxy.protocol,
+            hostname: proxyHost,
+            port: getEffectivePort(parsedProxy),
+            path: `${targetUrl.origin}${targetUrl.pathname}${targetUrl.search}`,
+            method: 'GET',
+            headers: reqHeaders,
+            agent: false as const,
+            timeout: remainingTimeoutMs,
+          };
+          req =
+            parsedProxy.protocol === 'https:'
+              ? https.request(
+                  {
+                    ...commonProxyOptions,
+                    servername: net.isIP(proxyHost) ? '' : proxyHost,
+                  },
+                  onResponse,
+                )
+              : http.request(commonProxyOptions, onResponse);
         } else if (tunnelSocket) {
           const established = tunnelSocket;
           const isHttps = targetUrl.protocol === 'https:';

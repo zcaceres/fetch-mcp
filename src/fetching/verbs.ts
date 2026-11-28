@@ -239,7 +239,7 @@ const isBufferTooLargeError = (error: unknown): boolean => {
 /**
  * Enforces MAX_RESPONSE_BYTES against declared Content-Length and raw wire bytes (D9, D17, I5).
  */
-export const validateRawResponseSize = (
+export const validateWireResponseSize = (
   headers: Headers,
   rawBytes: Uint8Array,
   maxBytes: number = MAX_RESPONSE_BYTES,
@@ -275,7 +275,7 @@ export const decodeResponseBody = (
   rawBytes: Uint8Array,
   maxBytes: number = MAX_RESPONSE_BYTES,
 ): Result<string, FetchError> => {
-  const sizeCheck = validateRawResponseSize(headers, rawBytes, maxBytes);
+  const sizeCheck = validateWireResponseSize(headers, rawBytes, maxBytes);
   if (!sizeCheck.ok) return sizeCheck;
 
   if (rawBytes.byteLength === 0) {
