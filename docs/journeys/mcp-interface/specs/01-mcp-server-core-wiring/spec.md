@@ -15,7 +15,7 @@ names per `D27`, `D28`), strictly reject unexpected arguments including smuggled
 the `mcp` harness command plus stdio JSON-RPC integration tests in `src/index.test.ts`.
 
 **Done when:** `bun run lint`, `bun run typecheck`, `bun run build`, `bun test` (including updated stdio MCP tests in
-`src/index.test.ts`), and `bun run harness run scenarios` (all four journeys) pass cleanly.
+`src/index.test.ts`), and `bun run harness run scenarios` (all journeys) pass cleanly.
 
 ## Scope
 

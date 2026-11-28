@@ -15,7 +15,7 @@ Preserve the real YouTube caption fixtures from `src/YouTubeTranscript.fixture.t
 (`D10`, `D12`, `D13`), and bump `package.json` to `2.0.0`.
 
 **Done when:** `bun run lint` (covering all of `src/**`), `bun run typecheck`, `bun run build`, `bun test` (including
-ported YouTube fixture tests), and `bun run harness run scenarios` (all 12 scenarios across all 4 journeys) pass
+ported YouTube fixture tests), and `bun run harness run scenarios` (all scenarios across all journeys) pass
 cleanly, and `node dist/cli.js --version` prints `2.0.0`.
 
 ## Scope

@@ -8,7 +8,7 @@ decisions (D#) and questions (U#) are in [`REQUIREMENTS.md`](../../../REQUIREMEN
 The designs, flows, tickets and documents behind this journey, from its design session.
 
 - [`REQUIREMENTS.md`](../../../REQUIREMENTS.md): system terminology, D1, D2, D6, D10–D14, D24–D29, I1–I6.
-- [src/index.ts](../../../src/index.ts) & [src/index.test.ts](../../../src/index.test.ts): v1.2.0 stdio MCP server and tests.
+- [src/index.ts](../../../src/index.ts) & [src/index.test.ts](../../../src/index.test.ts): v2.0.0 MCP server entrypoint (`stdio` and Streamable HTTP) and stdio conformance tests.
 - GitHub Issues `#49` & `#50`: MCP `2025-11-25` conformance findings (capabilities + `-32602` invalid cursor) and `2026-07-28` deferral.
 - [README.md](../../../README.md) & [package.json](../../../package.json): distribution metadata and public documentation.
 
@@ -23,9 +23,9 @@ breaking Terminology-aligned tools (`fetch_html`, `fetch_markdown`, `fetch_reada
 `fetch_transcript`) with zero `proxy` schema properties (`D6`, `D12`, `I6`), rejects unrecognized `tools/list` cursors
 and unknown `tools/call` tool names with JSON-RPC `-32602` (`D27`, `D28`), strictly rejects unexpected arguments
 (including any smuggled `proxy`) with `isError: true` (`D28`, `D33`, `I6`), and maps domain/validation errors to
-`CallToolResult` `{ isError: true }` (`D14`, `D28`). Once
-wired, legacy v1.2.0 modules (`Fetcher.ts`, `httpClient.ts`, `ssrf.ts`, `YouTubeTranscript.ts`, `types.ts`) are
-retired, Biome expands to all of `src/**`, `README.md` is updated, and `package.json` bumps to `2.0.0`.
+`CallToolResult` `{ isError: true }` (`D14`, `D28`). Legacy v1.2.0 modules (`Fetcher.ts`, `httpClient.ts`, `ssrf.ts`,
+`YouTubeTranscript.ts`, `types.ts`) are retired, Biome covers all of `src/**` and `cli/**`, `README.md` reflects
+v2.0.0, and `package.json` is at `2.0.0`.
 
 ## Contexts, verbs and queries
 

@@ -29,7 +29,7 @@ cleanly.
   - Tests for `runCli` Operator limits (`DEFAULT_LIMIT`, `DEFAULT_LIMIT=0`, `MAX_RESPONSE_BYTES`, and fail-fast invalid env values on both web and transcript subcommands).
   - Tests for `runCli` web subcommands with env proxies (`HTTP_PROXY`/`HTTPS_PROXY`/`ALL_PROXY`), `NO_PROXY`, explicit `--proxy` overriding `NO_PROXY`, unsupported proxy refusal, delegated DNS, and local SSRF blocking.
   - Tests for `runCli transcript` with env proxy / `--proxy` (skipping local DNS `checkHost`, passing `--proxy` to `ytDlp`, and proxied direct fallback).
-- `scenarios/proxy-and-limits/03-cli-proxy-and-limits-wiring.txt`: scripts `DEFAULT_LIMIT` & `MAX_RESPONSE_BYTES` on `fetch-transcript`, `NO_PROXY` host/port matching, and explicit `--proxy` overriding `NO_PROXY` on `fetch-transcript` (IPv6 `NO_PROXY` matching is covered by `src/policy/policy.test.ts`).
+- `scenarios/proxy-and-limits/03-cli-proxy-and-limits-wiring.txt`: scripts `DEFAULT_LIMIT` & `MAX_RESPONSE_BYTES` on `fetch-transcript`, `NO_PROXY` host/port/canonical-IPv6 matching, per-hop redirect proxy-switch and proxied-to-direct SSRF refusal, and explicit `--proxy` overriding `NO_PROXY` on `fetch-transcript`.
 
 **Out:**
 - MCP server (`src/index.ts`) Operator env proxy/limit wiring, tool renames, and legacy retirement (covered in `mcp-interface`, `D27`–`D29`).
