@@ -8,8 +8,8 @@ decisions (D#) and questions (U#) are in [`REQUIREMENTS.md`](../../../REQUIREMEN
 The designs, flows, tickets and documents behind this journey, from its design session.
 
 - [`REQUIREMENTS.md`](../../../REQUIREMENTS.md): system terminology, D3, D4, D7–D9, D12, D14, D15, D18–D22, I1–I3, I5.
-- [src/YouTubeTranscript.ts](../../../src/YouTubeTranscript.ts), [src/Fetcher.ts](../../../src/Fetcher.ts), [src/YouTubeTranscript.fixture.test.ts](../../../src/YouTubeTranscript.fixture.test.ts): v1.2.0 reference implementation and real caption XML fixtures.
-- [PR #48](../../github/pull-requests/048-fix-fetcher-prevent-argv-injection-into-yt-dlp-via-videourl.md): `yt-dlp` `--` end-of-options sentinel defense-in-depth context.
+- [src/transcript/](../../../src/transcript/), [src/integrations/ytdlp/](../../../src/integrations/ytdlp/), [src/transcript/fixtures.test.ts](../../../src/transcript/fixtures.test.ts): Functional DDD transcript implementation, real `yt-dlp` client, and real caption XML fixtures.
+- GitHub PR `#48`: `yt-dlp` `--` end-of-options sentinel defense-in-depth context.
 
 ## Shape
 
@@ -31,7 +31,7 @@ Where this journey lives in the code. Contexts never import each other; callers 
 
 | Context | Nouns | Verbs | Queries | Harness commands |
 |---|---|---|---|---|
-| `src/transcript/` | `YouTubeUrl`, `LanguageCode`, `Window`, `CaptionTrack`, `TranscriptRequest`, `Transcript`, `WindowedExcerpt`, `TranscriptError` | `prepareTranscriptRequest`, `extractCaptionTracks`, `selectCaptionTrack`, `buildTranscript` | `isAllowedYouTubeHost`, `decodeHtmlEntities`, `parseCaptionXml`, `buildYtDlpArgs`, `windowedTranscript` | `fetch-transcript <url> [--lang <code>] [--start-index N] [--max-length N] [--header K:V]` |
+| `src/transcript/` | `TargetUrl`, `LanguageCode`, `Window`, `CaptionTrack`, `FetchRequest`, `Transcript`, `WindowedExcerpt`, `TranscriptError` | `prepareFetchTranscript`, `extractCaptionTracks`, `selectCaptionTrack`, `buildTranscript` | `isAllowedYouTubeHost`, `decodeHtmlEntities`, `parseCaptionXml`, `buildYtDlpArgs`, `stripCrossOriginHeaders`, `windowedExcerpt` | `fetch-transcript <url> [--lang <code>] [--start-index N] [--max-length N] [--header K:V]` |
 
 ## External systems
 
@@ -50,16 +50,17 @@ a scenario that runs it.
 
 ### Done
 
-1. **01 — Direct Transcript Extraction (Tracer Bullet).** Adds `src/transcript/` core (`prepareTranscriptRequest`, `extractCaptionTracks`, `selectCaptionTrack`, `buildTranscript`, `parseCaptionXml`, `decodeHtmlEntities`, `windowedTranscript`, `executeFetchTranscript`) and `fetch-transcript` harness command linked to `executeFetch` over existing `origin`/`dns` mocks. Covers FT-1, FT-2, FT-5, FT-6, FT-7, FT-8, FT-9.
+1. **01 — Direct Transcript Extraction (Tracer Bullet).** Adds `src/transcript/` core (`prepareFetchTranscript`, `extractCaptionTracks`, `selectCaptionTrack`, `buildTranscript`, `parseCaptionXml`, `decodeHtmlEntities`, `windowedExcerpt`, `executeFetchTranscript`) and `fetch-transcript` harness command linked to `executeFetch` over existing `origin`/`dns` mocks. Covers FT-1, FT-2, FT-5, FT-6, FT-7, FT-8, FT-9.
    ([spec](specs/01-direct-transcript-extraction/spec.md), `scenarios/fetch-transcript/01-direct-transcript-extraction.txt`)
 2. **02 — yt-dlp Primary & Fallback.** Adds `src/integrations/ytdlp/mock.ts`, `ytdlp` world commands (`available`, `serve`, `empty`, `fail`, `last-args`), `buildYtDlpArgs`, `CheckHostPort`, and `yt-dlp`-primary with direct fallback in `executeFetchTranscript`, proving validation/SSRF errors are never swallowed (`I2`, `I3`) and `--write-sub`/`--write-auto-sub`/`--` flags are enforced (`D7`, `D21`). Covers FT-3 (core/mock), FT-4.
    ([spec](specs/02-ytdlp-primary-and-fallback/spec.md), `scenarios/fetch-transcript/02-ytdlp-primary-and-fallback.txt`)
 3. **03 — Real yt-dlp Client & CLI Wiring.** Implements async `src/integrations/ytdlp/client.ts` (`execFile`, `--` sentinel, `D20` `.srv1` language selection, temp dir cleanup, `30s` timeout enforcing D9/FT-3, `MAX_RESPONSE_BYTES` file cap enforcing I5), rewires `mcp-fetch transcript` in `src/cli.ts` off legacy `Fetcher.youtubeTranscript` onto `executeFetchTranscript`, and adds `ytdlp timeout` + `FT-2` `dns fail`/`dns empty` scenario coverage. Covers FT-2, FT-3, FT-6, FT-10.
    ([spec](specs/03-real-ytdlp-and-cli-wiring/spec.md), `scenarios/fetch-transcript/03-real-ytdlp-and-cli-wiring.txt`)
+4. **04 — Scenario Coverage & Doc Polish.** Added negative `maxLength` and `maxLength: 0` coverage in `scenarios/fetch-transcript/02-ytdlp-primary-and-fallback.txt`, `yt-dlp` credential redaction in `src/integrations/ytdlp/client.ts` (`I7`), and aligned `plan.md`, `specs/01`, and `runbook.md` (quoting URLs for `zsh`). Covers FT-1, FT-4, FT-5, FT-9, I5.
 
 ### Next
 
-*(None — all slices for `fetch-transcript` are complete and verified.)*
+*(All planned slices for `fetch-transcript` are complete.)*
 
 ## Deferred
 

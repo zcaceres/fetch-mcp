@@ -1,12 +1,11 @@
 import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
 import http from 'node:http';
-import type { AddressInfo } from 'node:net';
 import zlib from 'node:zlib';
 import { executeFetch } from '../../fetching/execute.ts';
 import { ResolvedIp, TargetUrl } from '../../fetching/nouns.ts';
 import type { DnsLookupPort } from '../../fetching/ports.ts';
 import { ok } from '../../shared/result.ts';
-import { createRealHttpGet } from './client.ts';
+import { createPinnedLookup, createRealHttpGet } from './client.ts';
 
 describe('real HTTP transport (Slice 05)', () => {
   let server: http.Server;
@@ -75,7 +74,10 @@ describe('real HTTP transport (Slice 05)', () => {
     });
 
     await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
-    const addr = server.address() as AddressInfo;
+    const addr = server.address();
+    if (typeof addr !== 'object' || addr === null) {
+      throw new Error('Expected TCP AddressInfo from local test server');
+    }
     port = addr.port;
   });
 
@@ -98,6 +100,31 @@ describe('real HTTP transport (Slice 05)', () => {
       expect(new TextDecoder().decode(result.value.rawBytes)).toBe('<h3>Hello</h3> <p>From real server</p>');
     }
     expect(recordedHeaders.get('/html')?.['user-agent']).toBe('TestAgent/1.0');
+  });
+
+  it('invokes pinned lookup callbacks asynchronously across all lookup modes (D13, D14, FW-4, FW-5)', async () => {
+    const withIp = createPinnedLookup([ResolvedIp('93.184.216.34')]);
+    const empty = createPinnedLookup([]);
+    const cases = [
+      [withIp, { all: true }],
+      [withIp, {}],
+      [withIp, { family: 6 }],
+      [empty, { all: true }],
+      [empty, {}],
+    ] as const;
+
+    for (const [lookup, opts] of cases) {
+      let calledSync = false;
+      let called = false;
+      await new Promise<void>((resolve) => {
+        lookup('example.com', opts, () => {
+          called = true;
+          resolve();
+        });
+        calledSync = called;
+      });
+      expect(calledSync).toBe(false);
+    }
   });
 
   it('aborts streaming reads when raw bytes exceed maxBytes (I5)', async () => {
@@ -175,5 +202,19 @@ describe('real HTTP transport (Slice 05)', () => {
         message: 'Blocked Target URL: private address "127.0.0.1"',
       },
     });
+  });
+
+  it('returns a typed Result error instead of rejecting when transport.request throws on invalid headers (D14, D28)', async () => {
+    const httpGet = createRealHttpGet({ maxBytes: 1024, timeoutMs: 2000 });
+    const cases: readonly Record<string, string>[] = [{ '': 'v' }, { 'Bad Header': 'v' }, { 'X-Test': 'bad\u0000val' }];
+    for (const badHeaders of cases) {
+      const result = await httpGet(TargetUrl(`http://unresolvable.invalid:${port}/html`), badHeaders, [
+        ResolvedIp('127.0.0.1'),
+      ]);
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.kind).toBe('invalid_request');
+      }
+    }
   });
 });

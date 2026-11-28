@@ -2,8 +2,9 @@ import { type ExecFileException, execFile } from 'node:child_process';
 import { mkdtemp, readdir, readFile, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { redactProxyUrl } from '../../policy/queries.ts';
 import { err, ok, type Result } from '../../shared/result.ts';
-import type { LanguageCode, YouTubeUrl } from '../../transcript/nouns.ts';
+import type { LanguageCode, TargetUrl } from '../../transcript/nouns.ts';
 import type { YtDlpPort, YtDlpResult } from '../../transcript/ports.ts';
 import { buildYtDlpArgs } from '../../transcript/queries.ts';
 
@@ -11,11 +12,41 @@ export const DEFAULT_YTDLP_TIMEOUT_MS = 30_000;
 export const DEFAULT_YTDLP_MAX_BYTES = 10 * 1024 * 1024;
 const PROBE_TIMEOUT_MS = 5_000;
 
+const PROXY_ENV_KEYS = [
+  'HTTP_PROXY',
+  'HTTPS_PROXY',
+  'ALL_PROXY',
+  'NO_PROXY',
+  'http_proxy',
+  'https_proxy',
+  'all_proxy',
+  'no_proxy',
+] as const;
+
+const buildSanitizedChildEnv = (): NodeJS.ProcessEnv => {
+  const env: NodeJS.ProcessEnv = { ...process.env };
+  for (const key of PROXY_ENV_KEYS) {
+    delete env[key];
+  }
+  return env;
+};
+
 export type RealYtDlpOptions = {
   readonly binary?: string;
   readonly timeoutMs?: number;
   readonly maxBytes?: number;
   readonly proxy?: string;
+};
+
+const redactProxyInText = (text: string, effectiveProxy: string | undefined): string => {
+  let sanitized = text;
+  if (effectiveProxy) {
+    const safeProxy = redactProxyUrl(effectiveProxy);
+    sanitized = sanitized.replaceAll(effectiveProxy, safeProxy);
+  }
+  return sanitized.replace(/(--proxy\s+)(\S+)/g, (_match, prefix: string, value: string) => {
+    return `${prefix}${redactProxyUrl(value)}`;
+  });
 };
 
 const isTimedOutError = (error: ExecFileException): boolean => error.killed === true || error.code === 'ETIMEDOUT';
@@ -26,18 +57,23 @@ const runExecFile = (
   timeoutMs: number,
 ): Promise<Result<void, { readonly timedOut: boolean; readonly message: string }>> =>
   new Promise((resolve) => {
-    execFile(binary, [...args], { timeout: timeoutMs, maxBuffer: 1024 * 1024 }, (error, _stdout, stderr) => {
-      if (!error) {
-        resolve(ok(undefined));
-        return;
-      }
-      if (isTimedOutError(error)) {
-        resolve(err({ timedOut: true, message: `yt-dlp timed out after ${timeoutMs}ms` }));
-        return;
-      }
-      const detail = stderr.trim() || error.message;
-      resolve(err({ timedOut: false, message: `yt-dlp failed: ${detail}` }));
-    });
+    execFile(
+      binary,
+      [...args],
+      { timeout: timeoutMs, maxBuffer: 1024 * 1024, env: buildSanitizedChildEnv() },
+      (error, _stdout, stderr) => {
+        if (!error) {
+          resolve(ok(undefined));
+          return;
+        }
+        if (isTimedOutError(error)) {
+          resolve(err({ timedOut: true, message: `yt-dlp timed out after ${timeoutMs}ms` }));
+          return;
+        }
+        const detail = stderr.trim() || error.message;
+        resolve(err({ timedOut: false, message: `yt-dlp failed: ${detail}` }));
+      },
+    );
   });
 
 const extractFileLang = (filename: string): string | undefined => /\.([^.]+)\.srv1$/.exec(filename)?.[1];
@@ -82,7 +118,7 @@ export const createRealYtDlp = (options: RealYtDlpOptions = {}): YtDlpPort => {
   };
 
   const downloadSubtitles = async (
-    url: YouTubeUrl,
+    url: TargetUrl,
     lang: LanguageCode,
     proxyUrl?: string,
   ): Promise<Result<YtDlpResult, string>> => {
@@ -96,10 +132,11 @@ export const createRealYtDlp = (options: RealYtDlpOptions = {}): YtDlpPort => {
 
     try {
       const outputTemplate = path.join(tmpDir, 'sub');
-      const args = buildYtDlpArgs(url, lang, outputTemplate, proxyUrl ?? options.proxy);
+      const effectiveProxy = proxyUrl ?? options.proxy;
+      const args = buildYtDlpArgs(url, lang, outputTemplate, effectiveProxy);
       const run = await runExecFile(binary, args, timeoutMs);
       if (!run.ok) {
-        return err(run.error.message);
+        return err(redactProxyInText(run.error.message, effectiveProxy));
       }
 
       const files = (await readdir(tmpDir)).filter((f) => f.endsWith('.srv1'));

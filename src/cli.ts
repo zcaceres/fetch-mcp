@@ -77,6 +77,18 @@ const parseNonNegativeInt = (flag: string, value: string | undefined): Result<nu
   return ok(Number.parseInt(value, 10));
 };
 
+const trimHttpOws = (raw: string): string => raw.replace(/^[ \t]+|[ \t]+$/g, '');
+
+const hasInvalidHeaderValue = (value: string): boolean => {
+  for (let i = 0; i < value.length; i++) {
+    const code = value.charCodeAt(i);
+    if ((code < 0x20 && code !== 0x09) || code === 0x7f || code > 0xff) {
+      return true;
+    }
+  }
+  return false;
+};
+
 const parseHeaderFlag = (value: string | undefined): Result<readonly [string, string], string> => {
   if (value === undefined || value.startsWith('--')) {
     return err('--header requires a Key:Value argument');
@@ -85,7 +97,11 @@ const parseHeaderFlag = (value: string | undefined): Result<readonly [string, st
   if (idx <= 0) {
     return err(`Invalid --header "${value}": expected Key:Value`);
   }
-  return ok([value.slice(0, idx).trim(), value.slice(idx + 1).trim()]);
+  const key = trimHttpOws(value.slice(0, idx));
+  if (key.length === 0) {
+    return err(`Invalid --header "${value}": expected Key:Value`);
+  }
+  return ok([key, trimHttpOws(value.slice(idx + 1))]);
 };
 
 export const parseCliArgs = (argv: readonly string[]): Result<CliAction, string> => {
@@ -120,7 +136,9 @@ export const parseCliArgs = (argv: readonly string[]): Result<CliAction, string>
         const parsed = parseHeaderFlag(value);
         if (!parsed.ok) return parsed;
         const [k, v] = parsed.value;
-        headers[k] = v;
+        if (!(k in headers) || !hasInvalidHeaderValue(headers[k] ?? '')) {
+          headers[k] = v;
+        }
         i++;
         break;
       }
@@ -146,6 +164,9 @@ export const parseCliArgs = (argv: readonly string[]): Result<CliAction, string>
         i++;
         break;
       case '--lang':
+        if (subcommand !== 'transcript') {
+          return err('--lang is only valid with the "transcript" command');
+        }
         if (value === undefined || value.startsWith('--')) {
           return err('--lang requires a value');
         }

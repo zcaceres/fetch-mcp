@@ -1,6 +1,6 @@
 {
   "name": "mcp-fetch-server",
-  "version": "1.2.0",
+  "version": "2.0.0",
   "description": "MCP server and CLI for fetching web content as HTML, Markdown, plain text, JSON, or YouTube transcripts",
   "type": "module",
   "main": "dist/index.js",
@@ -32,6 +32,8 @@
     "typecheck": "tsc --noEmit",
     "lint": "biome ci .",
     "lint:fix": "biome check --write .",
+    "verify:replay": "bun run build && bun run src/integrations/replay/runner.ts --replay",
+    "verify:live": "bun run build && bun run src/integrations/replay/runner.ts --live",
     "publish:npm": "bun run build && bun test && npm publish"
   },
   "bin": {
@@ -39,7 +41,7 @@
     "mcp-fetch": "dist/cli.js"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "keywords": [
     "mcp",

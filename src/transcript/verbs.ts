@@ -2,19 +2,30 @@ import { z } from 'zod';
 import { err, ok, type Result } from '../shared/result.ts';
 import {
   type CaptionTrack,
+  type FetchRequest,
   type Headers,
   LanguageCode,
   type RawTranscriptInput,
+  TargetUrl,
   Transcript,
   type TranscriptError,
-  type TranscriptRequest,
-  YouTubeUrl,
 } from './nouns.ts';
 import { isAllowedYouTubeHost, parseCaptionXml } from './queries.ts';
 
 export const DEFAULT_TRANSCRIPT_LIMIT = 5000;
 const SAFE_LANG_REGEX = /^[a-zA-Z0-9][a-zA-Z0-9-]*$/;
 const CRLF_REGEX = /[\r\n]/;
+const HTTP_HEADER_NAME_REGEX = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
+
+const hasInvalidHeaderValueChar = (value: string): boolean => {
+  for (let i = 0; i < value.length; i++) {
+    const code = value.charCodeAt(i);
+    if ((code < 0x20 && code !== 0x09) || code === 0x7f || code > 0xff) {
+      return true;
+    }
+  }
+  return false;
+};
 
 const normalizeHostDisplay = (hostname: string): string => {
   const bare = hostname.startsWith('[') && hostname.endsWith(']') ? hostname.slice(1, -1) : hostname;
@@ -32,6 +43,18 @@ const validateHeaders = (rawHeaders: Headers | undefined): Result<Headers, Trans
         message: `Invalid header ${JSON.stringify(key)}: CR/LF control characters are not allowed`,
       });
     }
+    if (!HTTP_HEADER_NAME_REGEX.test(key)) {
+      return err({
+        kind: 'invalid_request',
+        message: `Invalid header ${JSON.stringify(key)}: header name must be a valid HTTP token`,
+      });
+    }
+    if (hasInvalidHeaderValueChar(value)) {
+      return err({
+        kind: 'invalid_request',
+        message: `Invalid header ${JSON.stringify(key)}: invalid character in header value`,
+      });
+    }
     deduped.set(key.toLowerCase(), [key, value]);
   }
   const result: Record<string, string> = {};
@@ -45,10 +68,10 @@ const validateHeaders = (rawHeaders: Headers | undefined): Result<Headers, Trans
  * Validates a YouTube transcript Fetch Request against URL allowlist, lang code, Window bounds,
  * and CR/LF header rules before any subprocess or network I/O (D4, D8, D9, D14, D18, D19, I1, I3).
  */
-export const prepareTranscriptRequest = (
+export const prepareFetchTranscript = (
   input: RawTranscriptInput,
   defaultLimit: number = DEFAULT_TRANSCRIPT_LIMIT,
-): Result<TranscriptRequest, TranscriptError> => {
+): Result<FetchRequest, TranscriptError> => {
   let parsed: URL;
   try {
     parsed = new URL(input.url);
@@ -93,7 +116,7 @@ export const prepareTranscriptRequest = (
   if (!headers.ok) return headers;
 
   return ok({
-    url: YouTubeUrl(parsed.href),
+    url: TargetUrl(parsed.href),
     lang: LanguageCode(lang),
     headers: headers.value,
     window: { startIndex, maxLength },
@@ -148,7 +171,7 @@ const PlayerResponseSchema = z.object({
     .object({
       playerCaptionsTracklistRenderer: z
         .object({
-          captionTracks: z.array(CaptionTrackSchema).optional(),
+          captionTracks: z.array(z.unknown()).optional(),
         })
         .optional(),
     })
@@ -156,38 +179,56 @@ const PlayerResponseSchema = z.object({
 });
 
 /**
- * Extracts CaptionTrack records from YouTube watch page HTML (`ytInitialPlayerResponse`) (D14).
+ * Extracts CaptionTrack records from YouTube watch page HTML (`ytInitialPlayerResponse`) (D14, D21).
+ * Scans subsequent marker matches if an earlier match is not valid JSON and skips malformed individual track entries.
  */
 export const extractCaptionTracks = (html: string): Result<readonly CaptionTrack[], TranscriptError> => {
-  const marker = /ytInitialPlayerResponse\s*=\s*\{/.exec(html);
-  if (!marker) {
+  const markerRegex = /ytInitialPlayerResponse\s*=\s*\{/g;
+  let parsedPlayerResponse: z.infer<typeof PlayerResponseSchema> | undefined;
+
+  for (let match = markerRegex.exec(html); match !== null; match = markerRegex.exec(html)) {
+    const braceStart = match.index + match[0].length - 1;
+    const jsonText = extractJsonObjectStartingAt(html, braceStart);
+    if (jsonText === null) continue;
+
+    let rawJson: unknown;
+    try {
+      rawJson = JSON.parse(jsonText);
+    } catch {
+      continue;
+    }
+
+    const parsed = PlayerResponseSchema.safeParse(rawJson);
+    if (parsed.success) {
+      parsedPlayerResponse = parsed.data;
+      break;
+    }
+  }
+
+  if (parsedPlayerResponse === undefined) {
     return err({ kind: 'not_found', message: 'Could not find ytInitialPlayerResponse in page HTML' });
   }
 
-  const braceStart = marker.index + marker[0].length - 1;
-  const jsonText = extractJsonObjectStartingAt(html, braceStart);
-  if (jsonText === null) {
-    return err({ kind: 'not_found', message: 'Could not find ytInitialPlayerResponse in page HTML' });
-  }
-
-  let rawJson: unknown;
-  try {
-    rawJson = JSON.parse(jsonText);
-  } catch {
-    return err({ kind: 'not_found', message: 'Could not find ytInitialPlayerResponse in page HTML' });
-  }
-
-  const parsed = PlayerResponseSchema.safeParse(rawJson);
-  const rawTracks = parsed.success ? parsed.data.captions?.playerCaptionsTracklistRenderer?.captionTracks : undefined;
+  const rawTracks = parsedPlayerResponse.captions?.playerCaptionsTracklistRenderer?.captionTracks;
   if (!rawTracks || rawTracks.length === 0) {
     return err({ kind: 'not_found', message: 'No caption tracks found for this video' });
   }
 
-  const tracks: CaptionTrack[] = rawTracks.map((track) => ({
-    languageCode: track.languageCode,
-    baseUrl: track.baseUrl,
-    name: track.name?.simpleText ?? track.name?.runs?.map((r) => r.text).join('') ?? track.languageCode,
-  }));
+  const tracks: CaptionTrack[] = [];
+  for (const item of rawTracks) {
+    const parsedTrack = CaptionTrackSchema.safeParse(item);
+    if (!parsedTrack.success) continue;
+    const track = parsedTrack.data;
+    tracks.push({
+      languageCode: track.languageCode,
+      baseUrl: track.baseUrl,
+      name: track.name?.simpleText ?? track.name?.runs?.map((r) => r.text).join('') ?? track.languageCode,
+    });
+  }
+
+  if (tracks.length === 0) {
+    return err({ kind: 'not_found', message: 'No caption tracks found for this video' });
+  }
 
   return ok(tracks);
 };

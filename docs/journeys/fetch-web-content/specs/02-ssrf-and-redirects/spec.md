@@ -35,7 +35,7 @@ resolution, per-hop SSRF + DNS validation, cross-origin sensitive header strippi
 
 The Terminology this slice uses.
 
-- **Target URL**, **Format** (`WebFormat`: `html`), **Window**, **Fetch Request**, **Raw Response**, **Rendered Output** *(derived)*, **Windowed Excerpt** *(derived)*, **fetch**.
+- **Target URL**, **Format** (`WebFormat`: `html`), **Window**, **Fetch Request**, **Raw Response**, **Rendered Output**, **Windowed Excerpt** *(derived)*, **fetch**.
 
 ## What it reads and writes
 

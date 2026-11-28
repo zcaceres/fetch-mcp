@@ -1,7 +1,7 @@
 import type { Brand } from '../shared/brand.ts';
 
-export type YouTubeUrl = Brand<string, 'YouTubeUrl'>;
-export const YouTubeUrl = (value: string): YouTubeUrl => value as YouTubeUrl;
+export type TargetUrl = Brand<string, 'TargetUrl'>;
+export const TargetUrl = (value: string): TargetUrl => value as TargetUrl;
 
 export type LanguageCode = Brand<string, 'LanguageCode'>;
 export const LanguageCode = (value: string): LanguageCode => value as LanguageCode;
@@ -27,8 +27,8 @@ export type RawTranscriptInput = {
   readonly maxLength?: number;
 };
 
-export type TranscriptRequest = {
-  readonly url: YouTubeUrl;
+export type FetchRequest = {
+  readonly url: TargetUrl;
   readonly lang: LanguageCode;
   readonly headers: Headers;
   readonly window: Window;

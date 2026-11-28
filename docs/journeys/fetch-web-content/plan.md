@@ -8,7 +8,7 @@ decisions (D#) and questions (U#) are in [`REQUIREMENTS.md`](../../../REQUIREMEN
 The designs, flows, tickets and documents behind this journey, from its design session.
 
 - [`REQUIREMENTS.md`](../../../REQUIREMENTS.md): system terminology, D1–D18, I1–I6.
-- [src/Fetcher.ts](../../../src/Fetcher.ts), [src/httpClient.ts](../../../src/httpClient.ts), [src/ssrf.ts](../../../src/ssrf.ts), [src/cli.ts](../../../src/cli.ts): v1.2.0 reference implementation being redesigned around Functional DDD.
+- [src/fetching/](../../../src/fetching/), [src/integrations/origin/](../../../src/integrations/origin/), [src/integrations/dns/](../../../src/integrations/dns/), [src/cli.ts](../../../src/cli.ts): Functional DDD web-fetching implementation and real CLI wiring.
 
 ## Shape
 
@@ -28,7 +28,7 @@ Where this journey lives in the code. Each noun is a type in the context's `noun
 
 | Context | Nouns | Verbs | Queries | Harness commands |
 |---|---|---|---|---|
-| `src/fetching/` | `TargetUrl`, `WebFormat`, `Window`, `FetchRequest`, `WireResponse`, `RawResponse`, `RenderedOutput`, `WindowedExcerpt`, `FetchError` | `prepareFetch`, `validateResolvedIps`, `validateRedirectHop`, `decodeResponseBody`, `evaluateResponse` | `normalizeHostname`, `isIpLiteral`, `isReservedIp`, `isBinaryContentType`, `stripCrossOriginHeaders`, `windowedExcerpt` | `fetch <format> <url> [--start-index N] [--max-length N] [--header K:V]` |
+| `src/fetching/` | `TargetUrl`, `WebFormat`, `Window`, `FetchRequest`, `WireResponse`, `RawResponse`, `RenderedOutput`, `WindowedExcerpt`, `FetchError` | `prepareFetch`, `validateResolvedIps`, `validateRedirectHop`, `validateWireResponseSize`, `decodeResponseBody`, `evaluateResponse` | `normalizeHostname`, `isIpLiteral`, `isReservedIp`, `isBinaryContentType`, `stripCrossOriginHeaders`, `windowedExcerpt` | `fetch <format> <url> [--start-index N] [--max-length N] [--header K:V]` |
 
 ## External systems
 
@@ -58,10 +58,11 @@ turned up. Each has a [spec](specs/) and a scenario in `scenarios/fetch-web-cont
    ([spec](specs/04-limits-compression-and-timeouts/spec.md), `scenarios/fetch-web-content/04-limits-compression-and-timeouts.txt`)
 5. **05 — Real Transport & CLI Wiring.** Implements the real IP-pinned HTTP(S) client in `src/integrations/origin/client.ts` (wiring validated `ResolvedIp` records directly to sockets to complete FW-4 pinning) + real DNS port in `src/integrations/dns/client.ts`, shared `executeFetch`, and rewires `mcp-fetch` CLI (`html`, `markdown`, `readable`, `text`, `json`, `transcript`, `--header`, `--max-length`, `--start-index`). Covers FW-4, FW-15.
    ([spec](specs/05-real-transport-and-cli-wiring/spec.md), `scenarios/fetch-web-content/05-real-transport-and-cli-wiring.txt`)
+6. **06 — Scenario Coverage & Doc Polish.** Added `attempts: 1` assertions on HTTP 200/500 in `scenarios/fetch-web-content/04-limits-compression-and-timeouts.txt`, default `5000`-char Windowed Excerpt truncation test in `src/fetching/fetching.test.ts`, `validateWireResponseSize` enforcement before non-2xx checks (`D17`, `I5`), and aligned `plan.md` + `specs/04`–`05`. Covers FW-5, FW-14.
 
 ### Next
 
-*(All planned slices for `fetch-web-content` are done.)*
+*(All planned slices for `fetch-web-content` are complete.)*
 
 ## Deferred
 

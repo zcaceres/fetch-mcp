@@ -77,3 +77,22 @@ error: Blocked Target URL: hostname "www.youtube.com" resolved to private IP "10
 
 > ytdlp last-args
 (not invoked)
+
+# Window bounds: negative maxLength fails explicitly before invoking yt-dlp; maxLength 0 returns unlimited transcript (FT-1, FT-9, D9, D15)
+> fetch-transcript https://www.youtube.com/watch?v=yt1 --max-length -1
+error: Invalid maxLength: must be a non-negative integer
+
+> ytdlp last-args
+(not invoked)
+
+> dns set www.youtube.com 142.250.190.78
+dns: www.youtube.com -> 142.250.190.78
+
+> ytdlp serve https://www.youtube.com/watch?v=unlim en <transcript><text start="0" dur="1">Full line one</text><text start="5" dur="1">Full line two</text></transcript>
+ytdlp: serve en https://www.youtube.com/watch?v=unlim
+
+> fetch-transcript https://www.youtube.com/watch?v=unlim --max-length 0
+| [Transcript language: en — en]
+|
+| [0:00] Full line one
+| [0:05] Full line two

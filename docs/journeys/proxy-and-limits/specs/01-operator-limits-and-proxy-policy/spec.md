@@ -31,7 +31,7 @@ scenarios) pass cleanly.
   - `src/fetching/ports.ts`: add `ResolveProxyPort`, optional `resolveProxy` on `FetchPorts`, and optional `proxyUrl?: string` on `HttpGetPort`.
   - `src/fetching/execute.ts`: resolve Proxy Policy per hop (`D24`); when proxied, skip local `dnsLookup` (`D8`, `D23`) and pass `pinnedIps = []` + `proxyUrl` to `httpGet`; when direct, preserve `I2` DNS validation & pinning.
   - `src/transcript/ports.ts`: add `ResolveTranscriptProxyPort`, optional `resolveProxy` on `TranscriptPorts`, and optional `proxyUrl?: string` on `YtDlpPort.downloadSubtitles`.
-  - `src/transcript/execute.ts`: resolve Proxy Policy after `prepareTranscriptRequest`; skip `checkHost` when proxied (`D8`, `D26`); pass `proxyUrl` into `ytDlp.downloadSubtitles`.
+  - `src/transcript/execute.ts`: resolve Proxy Policy after `prepareFetchTranscript`; skip `checkHost` when proxied (`D8`, `D26`); pass `proxyUrl` into `ytDlp.downloadSubtitles`.
 - Mocks & harness:
   - `src/integrations/origin/mock.ts`: record `lastProxy(url)` (`string | null | undefined` — `null` = direct, `string` = proxy URL, `undefined` = not requested).
   - `src/integrations/ytdlp/mock.ts`: forward `proxyUrl` to `buildYtDlpArgs(url, lang, '<tmp>/sub', proxyUrl)`.
@@ -50,7 +50,7 @@ scenarios) pass cleanly.
 
 The Terminology this slice uses.
 
-- **Operator**, **CLI User**, **Target URL**, **Window**, **Fetch Request**, **Raw Response**, **Proxy Policy**, **Windowed Excerpt** *(derived)*, **fetch**, **fetch transcript**.
+- **Operator**, **CLI User**, **Target URL**, **Window**, **Fetch Request**, **Raw Response**, **Operator Limits**, **Proxy Policy**, **Windowed Excerpt** *(derived)*, **parse operator limits**, **resolve proxy policy**, **fetch**, **fetch transcript**.
 
 ## What it reads and writes
 
@@ -68,7 +68,7 @@ The Terminology this slice uses.
 | Function | Rule | Error |
 |---|---|---|
 | `parseOperatorLimits(env: EnvMap): Result<OperatorLimits, PolicyError>` | Reads `DEFAULT_LIMIT` (unset/blank → `5000`; must match `/^\d+$/`, `0` allowed for unlimited) and `MAX_RESPONSE_BYTES` (unset/blank → `10485760`; must match `/^\d+$/` and `> 0`) (D9, D25, I5). | `Invalid DEFAULT_LIMIT "<raw>": must be a non-negative integer`<br>`Invalid MAX_RESPONSE_BYTES "<raw>": must be a positive integer` |
-| `resolveProxyPolicy(targetUrl: string, env: EnvMap, explicitProxy?: string): Result<ProxyPolicy, PolicyError>` | Uses trimmed `explicitProxy` first (bypassing `NO_PROXY`); otherwise checks `NO_PROXY`/`no_proxy` via `isNoProxyMatch`, then env precedence (`https:` → `HTTPS_PROXY`/`https_proxy`/`HTTP_PROXY`/`http_proxy`/`ALL_PROXY`/`all_proxy`; `http:` → `HTTP_PROXY`/`http_proxy`/`ALL_PROXY`/`all_proxy`). Normalizes bare `host:port` to `http://<raw>`; requires scheme in `ProxyProtocol` and non-empty hostname (D5, D23, D24, D25). | `Invalid proxy URL: "<redacted>"`<br>`Unsupported proxy protocol "<protocol>" (supported: http, https, socks4, socks4a, socks5, socks5h)` |
+| `resolveProxyPolicy(targetUrl: string, env: EnvMap, explicitProxy?: string): Result<ProxyPolicy, PolicyError>` | Uses `explicitProxy` first when defined (rejecting empty/blank values per D25 and bypassing `NO_PROXY`); otherwise checks `NO_PROXY`/`no_proxy` via `isNoProxyMatch` (non-empty `NO_PROXY` shadows `no_proxy`), then env precedence (`https:` → `HTTPS_PROXY`/`https_proxy`/`HTTP_PROXY`/`http_proxy`/`ALL_PROXY`/`all_proxy`; `http:` → `HTTP_PROXY`/`http_proxy`/`ALL_PROXY`/`all_proxy`). Normalizes bare `host:port` (or `[ipv6]:port`) with explicit `:<port>` to `http://<raw>`; requires scheme in `ProxyProtocol` and non-empty hostname (D5, D23, D24, D25, D31, I7). | `Invalid proxy URL: "<redacted>"`<br>`Unsupported proxy protocol "<protocol>" (supported: http, https, socks4, socks4a, socks5, socks5h)` |
 
 ## Queries (`src/policy/queries.ts`)
 
@@ -76,8 +76,8 @@ The derived checks this slice computes. Never stored, never refused.
 
 | Function | Definition |
 |---|---|
-| `isNoProxyMatch(targetUrl: URL, noProxy: string | undefined): boolean` | Splits `noProxy` on `,`; matches `*`, exact hostname, `.domain`/subdomain suffix, optional `:port`, and `[ipv6]:port` against normalized target hostname and effective port (`443` for `https:`, `80` for `http:`) (D24). |
-| `redactProxyUrl(proxyUrl: string): string` | Strips username/password credentials from a proxy URL (keeping scheme, host, port, and path) so secrets never leak into logs or error messages; redacts `user:pass@` prefixes in unparseable strings too. |
+| `isNoProxyMatch(targetUrl: URL, noProxy: string | undefined): boolean` | Splits `noProxy` on `,`; matches `*`, exact hostname, `.domain`/subdomain suffix, optional `:port`, and `[ipv6]:port` (canonicalizing IPv6 literals and rejecting malformed port/bracket syntax) against normalized target hostname and effective port (`443` for `https:`, `80` for `http:`) (D24). |
+| `redactProxyUrl(proxyUrl: string): string` | Strips username/password credentials from valid and malformed proxy URLs (including passwords containing `@`, `/`, `?`, `#`, or `%`) so secrets never leak into logs or error messages (D31, I7). |
 
 ## Harness
 

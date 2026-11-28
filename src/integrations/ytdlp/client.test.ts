@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
 import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { LanguageCode, YouTubeUrl } from '../../transcript/nouns.ts';
+import { LanguageCode, TargetUrl } from '../../transcript/nouns.ts';
 import { createRealYtDlp } from './client.ts';
 
 describe('real yt-dlp client (Slice 03)', () => {
@@ -62,7 +62,7 @@ exit 0`,
 
     const client = createRealYtDlp({ binary: stub });
     const result = await client.downloadSubtitles(
-      YouTubeUrl('https://www.youtube.com/watch?v=demo1'),
+      TargetUrl('https://www.youtube.com/watch?v=demo1'),
       LanguageCode('en'),
     );
 
@@ -109,7 +109,7 @@ exit 1`,
 
     const failClient = createRealYtDlp({ binary: failStub });
     const failRes = await failClient.downloadSubtitles(
-      YouTubeUrl('https://www.youtube.com/watch?v=bad'),
+      TargetUrl('https://www.youtube.com/watch?v=bad'),
       LanguageCode('en'),
     );
     expect(failRes.ok).toBe(false);
@@ -132,7 +132,7 @@ exit 0`,
 
     const emptyClient = createRealYtDlp({ binary: emptyStub });
     const emptyRes = await emptyClient.downloadSubtitles(
-      YouTubeUrl('https://www.youtube.com/watch?v=nosub'),
+      TargetUrl('https://www.youtube.com/watch?v=nosub'),
       LanguageCode('en'),
     );
     expect(emptyRes).toEqual({ ok: false, error: 'yt-dlp did not produce subtitle files' });
@@ -153,7 +153,7 @@ sleep 5`,
     );
 
     const client = createRealYtDlp({ binary: slowStub, timeoutMs: 350 });
-    const res = await client.downloadSubtitles(YouTubeUrl('https://www.youtube.com/watch?v=slow'), LanguageCode('en'));
+    const res = await client.downloadSubtitles(TargetUrl('https://www.youtube.com/watch?v=slow'), LanguageCode('en'));
 
     expect(res).toEqual({ ok: false, error: 'yt-dlp timed out after 350ms' });
     expect(existsSync(readFileSync(slowTmpFile, 'utf-8').trim())).toBe(false);
@@ -174,7 +174,7 @@ exit 0`,
     );
 
     const client = createRealYtDlp({ binary: bigStub, maxBytes: 50 });
-    const res = await client.downloadSubtitles(YouTubeUrl('https://www.youtube.com/watch?v=big'), LanguageCode('en'));
+    const res = await client.downloadSubtitles(TargetUrl('https://www.youtube.com/watch?v=big'), LanguageCode('en'));
 
     expect(res).toEqual({ ok: false, error: 'yt-dlp subtitle file exceeded 50 byte limit' });
     expect(existsSync(readFileSync(bigTmpFile, 'utf-8').trim())).toBe(false);
@@ -196,7 +196,7 @@ exit 0`,
 
     const client = createRealYtDlp({ binary: stub });
     const exactRes = await client.downloadSubtitles(
-      YouTubeUrl('https://www.youtube.com/watch?v=multi'),
+      TargetUrl('https://www.youtube.com/watch?v=multi'),
       LanguageCode('EN'),
     );
     expect(exactRes).toEqual({
@@ -207,5 +207,85 @@ exit 0`,
         langName: 'en',
       },
     });
+  });
+
+  it('strips ambient proxy env vars from yt-dlp subprocess when Proxy Policy resolves direct (PL-4, PL-8, D24, D26)', async () => {
+    const envFile = path.join(fixtureDir, 'captured-env.txt');
+    const stub = makeScript(
+      'ytdlp-env.sh',
+      `printf 'HTTPS_PROXY=%s\\nHTTP_PROXY=%s\\nALL_PROXY=%s\\nNO_PROXY=%s\\n' "$HTTPS_PROXY" "$HTTP_PROXY" "$ALL_PROXY" "$NO_PROXY" > "${envFile}"
+OUT=""
+while [ "$#" -gt 0 ]; do
+  if [ "$1" = "-o" ]; then OUT="$2"; shift 2; continue; fi
+  shift
+done
+printf '<transcript><text start="0">direct</text></transcript>' > "\${OUT}.en.srv1"
+exit 0`,
+    );
+
+    const saved = {
+      HTTPS_PROXY: process.env.HTTPS_PROXY,
+      HTTP_PROXY: process.env.HTTP_PROXY,
+      ALL_PROXY: process.env.ALL_PROXY,
+      NO_PROXY: process.env.NO_PROXY,
+    };
+
+    try {
+      process.env.HTTPS_PROXY = 'http://proxy.internal:8080';
+      process.env.HTTP_PROXY = 'http://proxy.internal:8080';
+      process.env.ALL_PROXY = 'socks5://proxy.internal:1080';
+      process.env.NO_PROXY = 'www.youtube.com:443';
+
+      const client = createRealYtDlp({ binary: stub });
+      const res = await client.downloadSubtitles(
+        TargetUrl('https://www.youtube.com/watch?v=direct1'),
+        LanguageCode('en'),
+        undefined,
+      );
+
+      expect(res.ok).toBe(true);
+      expect(readFileSync(envFile, 'utf-8')).toBe('HTTPS_PROXY=\nHTTP_PROXY=\nALL_PROXY=\nNO_PROXY=\n');
+    } finally {
+      for (const [key, val] of Object.entries(saved)) {
+        if (val === undefined) {
+          delete process.env[key];
+        } else {
+          process.env[key] = val;
+        }
+      }
+    }
+  });
+
+  it('redacts proxy credentials from yt-dlp error messages and stderr (I7, D31)', async () => {
+    const silentFailStub = makeScript('ytdlp-silent-fail.sh', 'exit 1');
+    const stderrFailStub = makeScript(
+      'ytdlp-stderr-fail.sh',
+      'echo "ERROR: unable to connect via http://alice:topsecret@proxy.internal:8080/" >&2; exit 1',
+    );
+    const proxyUrl = 'http://alice:topsecret@proxy.internal:8080/';
+
+    const silentRes = await createRealYtDlp({ binary: silentFailStub }).downloadSubtitles(
+      TargetUrl('https://www.youtube.com/watch?v=cred1'),
+      LanguageCode('en'),
+      proxyUrl,
+    );
+    expect(silentRes.ok).toBe(false);
+    if (!silentRes.ok) {
+      expect(silentRes.error).not.toContain('topsecret');
+      expect(silentRes.error).not.toContain('alice');
+      expect(silentRes.error).toContain('http://proxy.internal:8080/');
+    }
+
+    const stderrRes = await createRealYtDlp({ binary: stderrFailStub }).downloadSubtitles(
+      TargetUrl('https://www.youtube.com/watch?v=cred2'),
+      LanguageCode('en'),
+      proxyUrl,
+    );
+    expect(stderrRes.ok).toBe(false);
+    if (!stderrRes.ok) {
+      expect(stderrRes.error).not.toContain('topsecret');
+      expect(stderrRes.error).not.toContain('alice');
+      expect(stderrRes.error).toContain('http://proxy.internal:8080/');
+    }
   });
 });

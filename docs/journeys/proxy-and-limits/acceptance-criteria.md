@@ -53,11 +53,11 @@ Scenario: NO_PROXY bypasses Operator env proxies, while explicit CLI --proxy ove
   When a CLI User fetches the same Target URL with explicit --proxy
   Then the request routes through the explicit CLI proxy, bypassing NO_PROXY (D6, D24)
 
-@PL-5 @D5 @D14 @D23 @D25
-Scenario: Malformed or unsupported proxy URLs fail explicitly without falling back to direct
-  Given an Operator env var or CLI --proxy contains a malformed URL or unsupported scheme (such as ftp://)
+@PL-5 @D5 @D14 @D23 @D24 @D25 @D31 @I7
+Scenario: Malformed, empty, bare-without-port, or unsupported proxy URLs fail explicitly without falling back or leaking credentials
+  Given an Operator env var or CLI --proxy contains a malformed URL, bare host without :port, blank CLI --proxy, or unsupported scheme (such as ftp://)
   When an actor runs fetch or fetch transcript
-  Then the request fails explicitly with a typed proxy configuration error and never contacts the origin directly (D14, D23, D25)
+  Then the request fails explicitly with a typed proxy configuration error with any credentials redacted and never contacts the origin directly (D14, D23, D24, D25, D31, I7)
 
 @PL-6 @D8 @D24 @I1 @I4
 Scenario: Proxy Policy is re-evaluated on every HTTP redirect hop
@@ -89,11 +89,11 @@ Scenario: Proxied fetch transcript validates YouTube host locally, skips local D
 ## 4. Forward Through Proxy Server
 
 ```gherkin
-@PL-9 @D5 @D9 @D14 @D23 @I5
+@PL-9 @D5 @D9 @D14 @D23 @D31 @I5 @I7
 Scenario: Real HTTP, HTTPS CONNECT, and SOCKS4/4a/5/5h proxies forward traffic with auth, timeout, byte caps, and credential redaction
   Given a reachable HTTP, HTTPS, SOCKS4/4a, or SOCKS5/5h Proxy Server (with or without credentials)
   When the real HTTP transport fetches a public HTTP or HTTPS Target URL through that proxy
-  Then HTTP requests use absolute-URI with Proxy-Authorization, HTTPS requests use CONNECT tunneling, SOCKS proxies connect with remote hostname resolution, MAX_RESPONSE_BYTES and 30s timeout are enforced, and proxy errors redact credentials (D5, D9, D14, D23, I5)
+  Then HTTP requests use absolute-URI with Proxy-Authorization, HTTPS requests use CONNECT tunneling, SOCKS proxies connect with remote hostname resolution, MAX_RESPONSE_BYTES and 30s timeout are enforced, and proxy errors redact credentials (D5, D9, D14, D23, D31, I5, I7)
 ```
 
 ## 5. Deliver Result or Typed Error

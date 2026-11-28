@@ -1,7 +1,7 @@
 # Fetch MCP
 
 A lightweight, SSRF-hardened web fetcher exposing public HTTP(S) content and YouTube transcripts in agent-ready text
-formats over an MCP stdio server (`mcp-fetch-server`) and a local CLI (`mcp-fetch`).
+formats over an MCP server (`mcp-fetch-server`, supporting `stdio` and Streamable HTTP) and a local CLI (`mcp-fetch`).
 
 What the system must do lives in `REQUIREMENTS.md` and the journeys' acceptance criteria, not here. Don't change
 either unilaterally: propose and ask. This file is how we work.
@@ -69,6 +69,8 @@ bun test                          # unit, integration, and scenario tests
 bun run typecheck                 # tsc --noEmit
 bun run lint                      # biome ci .  (bun run lint:fix to fix)
 bun run build                     # build dist/index.js and dist/cli.js
+bun run verify:replay             # offline 3-form-factor cassette replay (CLI, stdio, Streamable HTTP)
+bun run verify:live               # on-demand live-internet verification (add -- --record to refresh cassettes)
 ```
 
 Run `bun run lint`, `bun run typecheck`, `bun test`, and `bun run harness run scenarios` before calling a change done.

@@ -34,14 +34,14 @@ before invoking `yt-dlp`, and prove that validation and SSRF errors are never sw
 
 The Terminology this slice uses.
 
-- **Target URL**, **Format** (`youtube-transcript`), **Window**, **Fetch Request**, **Transcript** *(derived)*, **Windowed Excerpt** *(derived)*, **fetch transcript**.
+- **Target URL**, **Format** (`youtube-transcript`), **Window**, **Fetch Request**, **Caption Track**, **Transcript**, **Windowed Excerpt** *(derived)*, **fetch transcript**.
 
 ## What it reads and writes
 
 | Payload | Shape |
 |---|---|
 | `YtDlpResult` | `{ readonly xml: string; readonly lang: string; readonly langName: string }` |
-| `YtDlpPort` | `{ readonly isAvailable: () => Promise<boolean>; readonly downloadSubtitles: (url: YouTubeUrl, lang: LanguageCode) => Promise<Result<YtDlpResult, string>> }` |
+| `YtDlpPort` | `{ readonly isAvailable: () => Promise<boolean>; readonly downloadSubtitles: (url: TargetUrl, lang: LanguageCode) => Promise<Result<YtDlpResult, string>> }` |
 | `CheckHostPort` | `(hostname: string) => Promise<Result<void, TranscriptError>>` |
 | `TranscriptPorts` | `{ readonly fetchPage: FetchPagePort; readonly checkHost?: CheckHostPort; readonly ytDlp?: YtDlpPort }` |
 
@@ -49,14 +49,14 @@ The Terminology this slice uses.
 
 | Function | Rule | Error |
 |---|---|---|
-| `executeFetchTranscript(input, ports, options?)` | Runs `prepareTranscriptRequest` first (`I3`), then `ports.checkHost(hostname)` if provided (`I2`, `I3`). Never invokes `ytDlp` or falls back if either fails. When `ports.ytDlp` is provided and `isAvailable()` is true, tries `downloadSubtitles(url, lang)` -> `buildTranscript(...)`; if `downloadSubtitles` or `buildTranscript` fails, falls back to direct watch-page extraction (D7, D21, D22). | Validation/SSRF errors from `prepareTranscriptRequest` / `checkHost`, or direct-extraction error if `yt-dlp` fails/falls back |
+| `executeFetchTranscript(input, ports, options?)` | Runs `prepareFetchTranscript` first (`I3`), then `ports.checkHost(hostname)` if provided (`I2`, `I3`). Never invokes `ytDlp` or falls back if either fails. When `ports.ytDlp` is provided and `isAvailable()` is true, tries `downloadSubtitles(url, lang)` -> `buildTranscript(...)`; if `downloadSubtitles` or `buildTranscript` fails, falls back to direct watch-page extraction (D7, D21, D22). | Validation/SSRF errors from `prepareFetchTranscript` / `checkHost`, or direct-extraction error if `yt-dlp` fails/falls back |
 
 ## Queries (`src/transcript/queries.ts`)
 
 | Function | Definition |
 |---|---|
-| `buildYtDlpArgs(url: YouTubeUrl, lang: LanguageCode, outputTemplate: string, proxy?: string): readonly string[]` | Builds `['--write-sub', '--write-auto-sub', '--sub-lang', lang, '--sub-format', 'srv1', '--skip-download', '-o', outputTemplate, ...(proxy ? ['--proxy', proxy] : []), '--', url]` (D21). |
-| `isAllowedYouTubeHost`, `decodeHtmlEntities`, `parseCaptionXml`, `windowedTranscript` | Unchanged from Slice 01. |
+| `buildYtDlpArgs(url: TargetUrl, lang: LanguageCode, outputTemplate: string, proxy?: string): readonly string[]` | Builds `['--write-sub', '--write-auto-sub', '--sub-lang', lang, '--sub-format', 'srv1', '--skip-download', '-o', outputTemplate, ...(proxy ? ['--proxy', proxy] : []), '--', url]` (D21). |
+| `isAllowedYouTubeHost`, `decodeHtmlEntities`, `parseCaptionXml`, `windowedExcerpt` | Unchanged from Slice 01. |
 
 ## Harness
 

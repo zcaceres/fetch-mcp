@@ -1,15 +1,15 @@
 import { describe, expect, it } from 'bun:test';
 import { err, ok } from '../shared/result.ts';
 import { executeFetchTranscript } from './execute.ts';
-import { LanguageCode, Transcript, YouTubeUrl } from './nouns.ts';
+import { LanguageCode, TargetUrl, Transcript } from './nouns.ts';
 import {
   buildYtDlpArgs,
   decodeHtmlEntities,
   isAllowedYouTubeHost,
   parseCaptionXml,
-  windowedTranscript,
+  windowedExcerpt,
 } from './queries.ts';
-import { buildTranscript, extractCaptionTracks, prepareTranscriptRequest, selectCaptionTrack } from './verbs.ts';
+import { buildTranscript, extractCaptionTracks, prepareFetchTranscript, selectCaptionTrack } from './verbs.ts';
 
 describe('transcript domain (Slice 01)', () => {
   describe('isAllowedYouTubeHost', () => {
@@ -33,13 +33,13 @@ describe('transcript domain (Slice 01)', () => {
     });
   });
 
-  describe('prepareTranscriptRequest', () => {
+  describe('prepareFetchTranscript', () => {
     it('accepts a valid YouTube URL with defaults (D4, D9, I3)', () => {
-      const result = prepareTranscriptRequest({ url: 'https://www.youtube.com/watch?v=abc123' });
+      const result = prepareFetchTranscript({ url: 'https://www.youtube.com/watch?v=abc123' });
       expect(result).toEqual({
         ok: true,
         value: {
-          url: YouTubeUrl('https://www.youtube.com/watch?v=abc123'),
+          url: TargetUrl('https://www.youtube.com/watch?v=abc123'),
           lang: LanguageCode('en'),
           headers: {},
           window: { startIndex: 0, maxLength: 5000 },
@@ -48,18 +48,18 @@ describe('transcript domain (Slice 01)', () => {
     });
 
     it('rejects malformed URLs, disallowed schemes, and non-YouTube hosts (I1, I3)', () => {
-      expect(prepareTranscriptRequest({ url: 'not-a-url' })).toEqual({
+      expect(prepareFetchTranscript({ url: 'not-a-url' })).toEqual({
         ok: false,
         error: { kind: 'invalid_request', message: 'Invalid Target URL: "not-a-url"' },
       });
-      expect(prepareTranscriptRequest({ url: 'file:///tmp/video' })).toEqual({
+      expect(prepareFetchTranscript({ url: 'file:///tmp/video' })).toEqual({
         ok: false,
         error: {
           kind: 'blocked_url',
           message: 'Blocked Target URL: disallowed scheme "file:" (only http: and https: are allowed)',
         },
       });
-      expect(prepareTranscriptRequest({ url: 'https://example.com/watch?v=123' })).toEqual({
+      expect(prepareFetchTranscript({ url: 'https://example.com/watch?v=123' })).toEqual({
         ok: false,
         error: {
           kind: 'blocked_url',
@@ -69,50 +69,50 @@ describe('transcript domain (Slice 01)', () => {
     });
 
     it('rejects unsafe lang codes and invalid Window bounds (I3, D14)', () => {
-      expect(prepareTranscriptRequest({ url: 'https://youtu.be/abc', lang: 'en;rm' })).toEqual({
+      expect(prepareFetchTranscript({ url: 'https://youtu.be/abc', lang: 'en;rm' })).toEqual({
         ok: false,
         error: {
           kind: 'invalid_request',
           message: 'Invalid language code "en;rm": only letters, digits, and hyphens are allowed',
         },
       });
-      expect(prepareTranscriptRequest({ url: 'https://youtu.be/abc', lang: '--exec' })).toEqual({
+      expect(prepareFetchTranscript({ url: 'https://youtu.be/abc', lang: '--exec' })).toEqual({
         ok: false,
         error: {
           kind: 'invalid_request',
           message: 'Invalid language code "--exec": only letters, digits, and hyphens are allowed',
         },
       });
-      expect(prepareTranscriptRequest({ url: 'https://youtu.be/abc', lang: '-o' })).toEqual({
+      expect(prepareFetchTranscript({ url: 'https://youtu.be/abc', lang: '-o' })).toEqual({
         ok: false,
         error: {
           kind: 'invalid_request',
           message: 'Invalid language code "-o": only letters, digits, and hyphens are allowed',
         },
       });
-      expect(prepareTranscriptRequest({ url: 'https://youtu.be/abc', lang: '' })).toEqual({
+      expect(prepareFetchTranscript({ url: 'https://youtu.be/abc', lang: '' })).toEqual({
         ok: false,
         error: {
           kind: 'invalid_request',
           message: 'Invalid language code "": only letters, digits, and hyphens are allowed',
         },
       });
-      expect(prepareTranscriptRequest({ url: 'https://youtu.be/abc', startIndex: -1 })).toEqual({
+      expect(prepareFetchTranscript({ url: 'https://youtu.be/abc', startIndex: -1 })).toEqual({
         ok: false,
         error: { kind: 'invalid_request', message: 'Invalid startIndex: must be a non-negative integer' },
       });
-      expect(prepareTranscriptRequest({ url: 'https://youtu.be/abc', maxLength: -5 })).toEqual({
+      expect(prepareFetchTranscript({ url: 'https://youtu.be/abc', maxLength: -5 })).toEqual({
         ok: false,
         error: { kind: 'invalid_request', message: 'Invalid maxLength: must be a non-negative integer' },
       });
     });
 
     it('accepts regional language codes with digits and rejects CR/LF headers (D18)', () => {
-      const valid = prepareTranscriptRequest({ url: 'https://youtu.be/abc', lang: 'es-419' });
+      const valid = prepareFetchTranscript({ url: 'https://youtu.be/abc', lang: 'es-419' });
       expect(valid.ok).toBe(true);
 
       expect(
-        prepareTranscriptRequest({
+        prepareFetchTranscript({
           url: 'https://youtu.be/abc',
           headers: { 'X-Bad': 'ok\r\nEvil: 1' },
         }),
@@ -124,7 +124,7 @@ describe('transcript domain (Slice 01)', () => {
         },
       });
       expect(
-        prepareTranscriptRequest({
+        prepareFetchTranscript({
           url: 'https://youtu.be/abc',
           headers: { 'X-Bad\nName': 'ok' },
         }),
@@ -135,6 +135,18 @@ describe('transcript domain (Slice 01)', () => {
           message: 'Invalid header "X-Bad\\nName": CR/LF control characters are not allowed',
         },
       });
+      const cases: readonly Record<string, string>[] = [
+        { '': 'v' },
+        { 'Bad Header': 'v' },
+        { 'X-Test': 'bad\u0000val' },
+      ];
+      for (const headers of cases) {
+        const res = prepareFetchTranscript({ url: 'https://youtu.be/abc', headers });
+        expect(res.ok).toBe(false);
+        if (!res.ok) {
+          expect(res.error.kind).toBe('invalid_request');
+        }
+      }
     });
   });
 
@@ -145,6 +157,15 @@ describe('transcript domain (Slice 01)', () => {
       expect(extractCaptionTracks(html)).toEqual({
         ok: true,
         value: [{ languageCode: 'en', name: 'English', baseUrl: 'https://www.youtube.com/api/timedtext?v=1&lang=en' }],
+      });
+    });
+
+    it('scans subsequent ytInitialPlayerResponse matches and skips malformed individual tracks (D21)', () => {
+      const html =
+        '<html><script>// ytInitialPlayerResponse = {not json};</script><script>var ytInitialPlayerResponse = {"captions":{"playerCaptionsTracklistRenderer":{"captionTracks":[{"languageCode":"","baseUrl":""},{"baseUrl":"https://www.youtube.com/api/timedtext?v=2&lang=en","name":{"simpleText":"English"},"languageCode":"en"}]}}};</script></html>';
+      expect(extractCaptionTracks(html)).toEqual({
+        ok: true,
+        value: [{ languageCode: 'en', name: 'English', baseUrl: 'https://www.youtube.com/api/timedtext?v=2&lang=en' }],
       });
     });
 
@@ -191,7 +212,7 @@ describe('transcript domain (Slice 01)', () => {
       expect(decodeHtmlEntities('Tom &amp; Jerry &lt;3 &quot;hi&quot; &apos;a&apos;')).toBe(
         'Tom & Jerry <3 "hi" \'a\'',
       );
-      expect(decodeHtmlEntities('that&amp;#39;s &#160;cool &#x26; &#x27;ok&#x27;')).toBe("that's \u00a0cool & 'ok'");
+      expect(decodeHtmlEntities('that&amp;#39;s &#160;cool &#x26; &#X27;ok&#x27;')).toBe("that's \u00a0cool & 'ok'");
     });
 
     it('parses srv1 and srv3 XML, strips inline tags, and skips empty lines (D21)', () => {
@@ -205,7 +226,7 @@ describe('transcript domain (Slice 01)', () => {
     });
   });
 
-  describe('buildTranscript & windowedTranscript', () => {
+  describe('buildTranscript & windowedExcerpt', () => {
     it('formats Transcript with language header and timestamps (D4, D21)', () => {
       const res = buildTranscript('<transcript><text start="0" dur="2">Hi</text></transcript>', 'en', 'English');
       expect(res).toEqual({
@@ -227,37 +248,33 @@ describe('transcript domain (Slice 01)', () => {
 
     it('slices Transcript into a Windowed Excerpt cleanly (D9, D15)', () => {
       const t = Transcript('[Transcript language: de — German]\n\n[0:00] Hallo');
-      expect(String(windowedTranscript(t, { startIndex: 0, maxLength: 34 }))).toBe(
-        '[Transcript language: de — German]',
-      );
-      expect(String(windowedTranscript(t, { startIndex: 0, maxLength: 0 }))).toBe(String(t));
-      expect(String(windowedTranscript(t, { startIndex: 500, maxLength: 10 }))).toBe('');
+      expect(String(windowedExcerpt(t, { startIndex: 0, maxLength: 34 }))).toBe('[Transcript language: de — German]');
+      expect(String(windowedExcerpt(t, { startIndex: 0, maxLength: 0 }))).toBe(String(t));
+      expect(String(windowedExcerpt(t, { startIndex: 500, maxLength: 10 }))).toBe('');
     });
   });
 
   describe('buildYtDlpArgs (D21)', () => {
     it('builds safe argv with --write-sub, --write-auto-sub, and -- end-of-options sentinel', () => {
-      expect(buildYtDlpArgs(YouTubeUrl('https://www.youtube.com/watch?v=abc'), LanguageCode('en'), '/tmp/sub')).toEqual(
-        [
-          '--write-sub',
-          '--write-auto-sub',
-          '--sub-lang',
-          'en',
-          '--sub-format',
-          'srv1',
-          '--skip-download',
-          '-o',
-          '/tmp/sub',
-          '--',
-          'https://www.youtube.com/watch?v=abc',
-        ],
-      );
+      expect(buildYtDlpArgs(TargetUrl('https://www.youtube.com/watch?v=abc'), LanguageCode('en'), '/tmp/sub')).toEqual([
+        '--write-sub',
+        '--write-auto-sub',
+        '--sub-lang',
+        'en',
+        '--sub-format',
+        'srv1',
+        '--skip-download',
+        '-o',
+        '/tmp/sub',
+        '--',
+        'https://www.youtube.com/watch?v=abc',
+      ]);
     });
 
     it('includes --proxy before the -- sentinel when provided', () => {
       expect(
         buildYtDlpArgs(
-          YouTubeUrl('https://www.youtube.com/watch?v=abc'),
+          TargetUrl('https://www.youtube.com/watch?v=abc'),
           LanguageCode('es'),
           '/tmp/sub',
           'http://proxy:8080',
@@ -389,6 +406,31 @@ describe('transcript domain (Slice 01)', () => {
 
       expect(ytDlpCalls).toBe(0);
       expect(fetchPageCalls).toBe(0);
+    });
+
+    it('strips cross-origin sensitive headers and inspects fmt query param properly on captionTrack.baseUrl (D7, I4, FT-5)', async () => {
+      const watchHtml =
+        '<html><script>var ytInitialPlayerResponse = {"captions":{"playerCaptionsTracklistRenderer":{"captionTracks":[{"baseUrl":"https://captions.example.com/track?v=1&myfmt=1","name":{"simpleText":"English"},"languageCode":"en"}]}}};</script></html>';
+      const seen: Array<{ url: string; headers: Record<string, string> }> = [];
+      const result = await executeFetchTranscript(
+        {
+          url: 'https://www.youtube.com/watch?v=1',
+          headers: { Authorization: 'Bearer secret', Cookie: 'sid=1', 'Proxy-Authorization': 'Basic x', 'X-Keep': '1' },
+        },
+        {
+          fetchPage: async (url, headers) => {
+            seen.push({ url, headers: { ...headers } });
+            if (url.includes('captions.example.com')) {
+              return ok('<transcript><text start="0">ok</text></transcript>');
+            }
+            return ok(watchHtml);
+          },
+        },
+      );
+
+      expect(result.ok).toBe(true);
+      expect(seen[1]?.url).toBe('https://captions.example.com/track?v=1&myfmt=1&fmt=srv1');
+      expect(seen[1]?.headers).toEqual({ 'X-Keep': '1' });
     });
   });
 });

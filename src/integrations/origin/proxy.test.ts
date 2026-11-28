@@ -1,6 +1,11 @@
 import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
+import { execFile, execFileSync } from 'node:child_process';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import http from 'node:http';
+import https from 'node:https';
 import net from 'node:net';
+import os from 'node:os';
+import path from 'node:path';
 import { executeFetch } from '../../fetching/execute.ts';
 import { TargetUrl } from '../../fetching/nouns.ts';
 import { err, ok } from '../../shared/result.ts';
@@ -98,14 +103,14 @@ describe('real proxy transport (Slice 02, PL-9)', () => {
 
     const httpGet = createRealHttpGet({ maxBytes: 100, timeoutMs: 2000 });
     const proxyUrl = `http://alice:s3cr3t@127.0.0.1:${proxy.port}/`;
-    const okRes = await httpGet(TargetUrl('http://unresolvable.invalid/page'), {}, [], proxyUrl);
+    const okRes = await httpGet(TargetUrl('http://user:pass@unresolvable.invalid/page?a=1#frag'), {}, [], proxyUrl);
 
     expect(okRes.ok).toBe(true);
     if (okRes.ok) {
       expect(okRes.value.status).toBe(200);
       expect(new TextDecoder().decode(okRes.value.rawBytes)).toBe('{"via":"http-proxy"}');
     }
-    expect(seenUrl).toBe('http://unresolvable.invalid/page');
+    expect(seenUrl).toBe('http://unresolvable.invalid/page?a=1');
     expect(seenHost).toBe('unresolvable.invalid');
     expect(seenAuth).toBe(`Basic ${Buffer.from('alice:s3cr3t').toString('base64')}`);
 
@@ -400,5 +405,128 @@ describe('real proxy transport (Slice 02, PL-9)', () => {
   it('handles unencoded literal % in proxy credentials without throwing URIError (PL-9, D14)', () => {
     const auth = buildProxyAuthHeader(new URL('http://user:100%pass@127.0.0.1:8080'));
     expect(auth).toBe(`Basic ${Buffer.from('user:100%pass').toString('base64')}`);
+  });
+
+  it('enforces a single shared timeoutMs deadline across proxy tunnel setup and TLS/HTTP stages (PL-9, D9, D23)', async () => {
+    const slowConnectThenStallTls = await listenTcp((socket) => {
+      let buf = Buffer.alloc(0);
+      const onData = (chunk: Buffer) => {
+        buf = Buffer.concat([buf, chunk]);
+        if (buf.indexOf('\r\n\r\n') === -1) return;
+        socket.off('data', onData);
+        setTimeout(() => {
+          if (!socket.destroyed) {
+            socket.write('HTTP/1.1 200 Connection Established\r\n\r\n');
+          }
+        }, 80);
+      };
+      socket.on('data', onData);
+    });
+    servers.push(slowConnectThenStallTls.server);
+
+    const httpGet = createRealHttpGet({ timeoutMs: 120 });
+    const started = performance.now();
+    const timedOut = await httpGet(
+      TargetUrl('https://slow.invalid/hang'),
+      {},
+      [],
+      `http://127.0.0.1:${slowConnectThenStallTls.port}`,
+    );
+    const elapsedMs = performance.now() - started;
+
+    expect(timedOut).toEqual({
+      ok: false,
+      error: { kind: 'timeout', message: 'Request timed out after 120ms fetching https://slow.invalid/hang' },
+    });
+    expect(elapsedMs).toBeLessThan(180);
+  });
+
+  it('forwards http: targets through an https: proxy verifying the proxy TLS certificate rather than target Host (D5, PL-9)', async () => {
+    const certDir = mkdtempSync(path.join(os.tmpdir(), 'fetch-mcp-https-proxy-test-'));
+    const keyPath = path.join(certDir, 'proxy.key');
+    const certPath = path.join(certDir, 'proxy.pem');
+    const cnfPath = path.join(certDir, 'proxy.cnf');
+    writeFileSync(
+      cnfPath,
+      [
+        '[req]',
+        'distinguished_name = dn',
+        'x509_extensions = v3',
+        'prompt = no',
+        '[dn]',
+        'CN = 127.0.0.1',
+        '[v3]',
+        'subjectAltName = IP:127.0.0.1',
+      ].join('\n'),
+    );
+    execFileSync(
+      'openssl',
+      [
+        'req',
+        '-x509',
+        '-newkey',
+        'rsa:2048',
+        '-nodes',
+        '-keyout',
+        keyPath,
+        '-out',
+        certPath,
+        '-days',
+        '1',
+        '-config',
+        cnfPath,
+      ],
+      { stdio: 'ignore' },
+    );
+
+    let seenHost: string | undefined;
+    let seenUrl: string | undefined;
+    const httpsProxy = https.createServer({ key: readFileSync(keyPath), cert: readFileSync(certPath) }, (req, res) => {
+      seenHost = req.headers.host;
+      seenUrl = req.url;
+      res.writeHead(200, { 'Content-Type': 'text/plain' });
+      res.end('via-https-proxy');
+    });
+    await new Promise<void>((resolve) => httpsProxy.listen(0, '127.0.0.1', resolve));
+    const addr = httpsProxy.address();
+    if (!addr || typeof addr === 'string') {
+      throw new Error('Expected TCP address for HTTPS proxy');
+    }
+
+    try {
+      const script = [
+        'import { createRealHttpGet } from "./src/integrations/origin/client.ts";',
+        'import { TargetUrl } from "./src/fetching/nouns.ts";',
+        'const httpGet = createRealHttpGet({ maxBytes: 1024, timeoutMs: 2000 });',
+        `const res = await httpGet(TargetUrl("http://unresolvable.invalid/tls-proxy?x=1#frag"), {}, [], "https://127.0.0.1:${addr.port}");`,
+        'if (!res.ok) throw new Error(res.error.message);',
+        'process.stdout.write(new TextDecoder().decode(res.value.rawBytes));',
+      ].join('\n');
+
+      const out = await new Promise<string>((resolve, reject) => {
+        execFile(
+          process.execPath,
+          ['-e', script],
+          {
+            cwd: path.resolve(import.meta.dir, '../../..'),
+            env: { ...process.env, NODE_EXTRA_CA_CERTS: certPath },
+            encoding: 'utf-8',
+          },
+          (error, stdout, stderr) => {
+            if (error) {
+              reject(new Error(`HTTPS proxy child failed: ${stderr || error.message}`));
+              return;
+            }
+            resolve(stdout);
+          },
+        );
+      });
+      expect(out).toBe('via-https-proxy');
+      expect(seenHost).toBe('unresolvable.invalid');
+      expect(seenUrl).toBe('http://unresolvable.invalid/tls-proxy?x=1');
+    } finally {
+      await closeServer(httpsProxy);
+      rmSync(certDir, { recursive: true, force: true });
+    }
   });
 });

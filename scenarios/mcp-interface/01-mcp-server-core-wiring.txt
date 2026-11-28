@@ -1,0 +1,135 @@
+# Slice 01: MCP Server Core Wiring & Conformance (Tracer Bullet)
+# Covers MI-1, MI-3, MI-4, MI-5, MI-6
+
+# tools/list returns the six Terminology-aligned tools with no proxy property (MI-3, D6, D12, I6)
+> mcp list-tools
+tool: fetch_html (url, headers, max_length, start_index)
+tool: fetch_markdown (url, headers, max_length, start_index)
+tool: fetch_readable (url, headers, max_length, start_index)
+tool: fetch_text (url, headers, max_length, start_index)
+tool: fetch_json (url, headers, max_length, start_index)
+tool: fetch_transcript (url, headers, max_length, start_index, lang)
+
+# Unrecognized pagination cursor is rejected with JSON-RPC -32602 (MI-4, D27)
+> mcp list-tools --cursor page2
+error (-32602): Invalid pagination cursor
+
+# Invalid Operator startup limits fail explicitly before serving MCP requests (MI-1, D25, D29)
+> env set DEFAULT_LIMIT -1
+env: DEFAULT_LIMIT=-1
+
+> mcp list-tools
+error: Invalid DEFAULT_LIMIT "-1": must be a non-negative integer
+
+> env clear
+env: cleared
+
+# Unknown and removed legacy tool names return JSON-RPC -32602 (MI-6, D12, D28)
+> mcp call fetch_txt {"url":"https://example.com"}
+error (-32602): Unknown tool: fetch_txt
+
+> mcp call fetch_youtube_transcript {"url":"https://www.youtube.com/watch?v=demo"}
+error (-32602): Unknown tool: fetch_youtube_transcript
+
+# tools/call routes web tools through the shared domain core and rejects smuggled proxy arguments (MI-5, D1, D28, I6)
+> origin serve https://example.com/article 200 <html><head><title>News</title></head><body><script>bad()</script><h1>Hello</h1> <p>World</p></body></html>
+origin: 200 https://example.com/article
+
+> mcp call fetch_text {"url":"https://example.com/article","proxy":"http://169.254.169.254:80","max_length":11}
+isError: true
+| Invalid arguments: Unrecognized key: "proxy"
+
+> origin last-proxy https://example.com/article
+(not requested)
+
+> mcp call fetch_text {"url":"https://example.com/article","max_length":11}
+isError: false
+| Hello World
+
+> origin last-proxy https://example.com/article
+proxy: direct
+
+# Operator env proxy IS honored for MCP calls (MI-5, D6, D24, I6)
+> env set HTTPS_PROXY socks5://127.0.0.1:1080
+env: HTTPS_PROXY=socks5://127.0.0.1:1080
+
+> dns fail remote.invalid ENOTFOUND
+dns: fail remote.invalid
+
+> origin serve https://remote.invalid/data 200 {"ok": true}
+origin: 200 https://remote.invalid/data
+
+> mcp call fetch_json {"url":"https://remote.invalid/data"}
+isError: false
+| {"ok":true}
+
+> origin last-proxy https://remote.invalid/data
+proxy: socks5://127.0.0.1:1080
+
+# fetch_transcript works over MCP with Operator env proxy and rejects smuggled proxy (MI-5, D12, D26, D28, I6)
+> ytdlp available true
+ytdlp: available true
+
+> dns fail www.youtube.com ENOTFOUND
+dns: fail www.youtube.com
+
+> ytdlp serve https://www.youtube.com/watch?v=mcp1 en <transcript><text start="2.0" dur="1.0">From MCP</text></transcript>
+ytdlp: serve en https://www.youtube.com/watch?v=mcp1
+
+> mcp call fetch_transcript {"url":"https://www.youtube.com/watch?v=mcp1","lang":"en","proxy":"http://evil:80"}
+isError: true
+| Invalid arguments: Unrecognized key: "proxy"
+
+> mcp call fetch_transcript {"url":"https://www.youtube.com/watch?v=mcp1","lang":"en"}
+isError: false
+| [Transcript language: en — en]
+|
+| [0:02] From MCP
+
+> ytdlp last-args
+args: --write-sub --write-auto-sub --sub-lang en --sub-format srv1 --skip-download -o <tmp>/sub --proxy socks5://127.0.0.1:1080 -- https://www.youtube.com/watch?v=mcp1
+
+# Argument validation and SSRF/domain errors return CallToolResult with isError: true (MI-6, D14, D28)
+> env clear
+env: cleared
+
+> mcp call fetch_html {"url":123}
+isError: true
+| Invalid arguments: url: expected string, received number
+
+> mcp call fetch_html {"url":"http://127.0.0.1/secret"}
+isError: true
+| Blocked Target URL: private address "127.0.0.1"
+
+# Valid custom headers, start_index windowing, and failing origin/transcript return expected MCP results (MI-5, MI-6, D14, D15, D20)
+> origin serve https://example.com/windowed 200 <p>0123456789abcdef</p>
+origin: 200 https://example.com/windowed
+
+> mcp call fetch_text {"url":"https://example.com/windowed","headers":{"X-Custom":"mcp-val"},"start_index":4,"max_length":6}
+isError: false
+| 456789
+
+> origin last-headers https://example.com/windowed
+header: Accept-Encoding: gzip, deflate, br
+header: User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36
+header: X-Custom: mcp-val
+
+> origin serve https://example.com/fail500 500 Boom
+origin: 500 https://example.com/fail500
+
+> mcp call fetch_html {"url":"https://example.com/fail500"}
+isError: true
+| HTTP error 500 fetching https://example.com/fail500
+
+> ytdlp available false
+ytdlp: available false
+
+> dns set www.youtube.com 142.250.190.78
+dns: www.youtube.com -> 142.250.190.78
+
+> origin serve https://www.youtube.com/watch?v=nolang 200 <html><script>var ytInitialPlayerResponse = {"captions":{"playerCaptionsTracklistRenderer":{"captionTracks":[{"baseUrl":"https://www.youtube.com/api/timedtext?v=nolang&lang=en","name":{"simpleText":"English"},"languageCode":"en"}]}}};</script></html>
+origin: 200 https://www.youtube.com/watch?v=nolang
+
+> mcp call fetch_transcript {"url":"https://www.youtube.com/watch?v=nolang","lang":"fr"}
+isError: true
+| No captions available in language "fr" (available: en)

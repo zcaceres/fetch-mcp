@@ -63,11 +63,11 @@ Scenario: Unavailable or failing yt-dlp falls back cleanly to direct extraction 
   Then the system falls back to direct watch-page and caption-XML extraction (D7)
   And input validation or SSRF errors are never swallowed into fallback (I3)
 
-@FT-5 @D7 @D8 @D9 @D14 @I1 @I2 @I5
-Scenario: Direct extraction fetches watch page and caption track under full SSRF and byte-cap guards
+@FT-5 @D7 @D8 @D9 @D14 @I1 @I2 @I4 @I5
+Scenario: Direct extraction fetches watch page and caption track under full SSRF, cross-origin header stripping, and byte-cap guards
   Given yt-dlp is unavailable and YouTube serves a watch page containing ytInitialPlayerResponse and a public caption track baseUrl
   When the actor runs fetch transcript
-  Then both the watch page and caption track URL (with fmt=srv1 appended if missing) are fetched through full SSRF, DNS pinning, and MAX_RESPONSE_BYTES enforcement (D8, D9, I1, I2, I5)
+  Then both the watch page and caption track URL (with fmt=srv1 appended if missing) are fetched through full SSRF, DNS pinning, cross-origin sensitive header stripping, and MAX_RESPONSE_BYTES enforcement (D7, D8, D9, I1, I2, I4, I5)
 
 @FT-5 @D14
 Scenario: Missing ytInitialPlayerResponse or missing caption tracks fails explicitly

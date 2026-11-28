@@ -1,3 +1,4 @@
+import { redactProxyUrl } from '../../src/policy/queries.ts';
 import { err, ok } from '../../src/shared/result.ts';
 import type { Command } from '../command.ts';
 
@@ -61,7 +62,8 @@ export const ytdlpCommand: Command = {
       if (!recorded) {
         return ok(['(not invoked)']);
       }
-      return ok([`args: ${recorded.join(' ')}`]);
+      const redacted = recorded.map((arg, index) => (recorded[index - 1] === '--proxy' ? redactProxyUrl(arg) : arg));
+      return ok([`args: ${redacted.join(' ')}`]);
     }
 
     return err(USAGE);

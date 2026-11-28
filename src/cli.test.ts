@@ -77,9 +77,54 @@ describe('parseCliArgs (D12)', () => {
     expect(parseCliArgs(['html', 'https://example.com', '--start-index', '-5']).ok).toBe(false);
     expect(parseCliArgs(['html', 'https://example.com', '--header']).ok).toBe(false);
     expect(parseCliArgs(['html', 'https://example.com', '--header', 'no-colon']).ok).toBe(false);
+    expect(parseCliArgs(['html', 'https://example.com', '--header', ' : v']).ok).toBe(false);
     expect(parseCliArgs(['html', 'https://example.com', '--proxy']).ok).toBe(false);
     expect(parseCliArgs(['html', 'https://example.com', '--proxy', '--max-length', '10']).ok).toBe(false);
     expect(parseCliArgs(['html', 'https://example.com', '--lang']).ok).toBe(false);
+    expect(parseCliArgs(['html', 'https://example.com', '--lang', 'fr'])).toEqual({
+      ok: false,
+      error: '--lang is only valid with the "transcript" command',
+    });
+  });
+
+  it('preserves CR/LF, control, and non-Latin-1 header violations across trimming and duplicate exact-case flags (D18)', () => {
+    const trailingCrlf = parseCliArgs(['html', 'https://example.com', '--header', 'X-Bad: val\r\n']);
+    expect(trailingCrlf.ok).toBe(true);
+    if (trailingCrlf.ok && trailingCrlf.value.kind === 'fetch') {
+      expect(trailingCrlf.value.headers['X-Bad']).toBe('val\r\n');
+    }
+
+    const leadingCrlf = parseCliArgs(['html', 'https://example.com', '--header', '\r\nX-Bad: val']);
+    expect(leadingCrlf.ok).toBe(true);
+    if (leadingCrlf.ok && leadingCrlf.value.kind === 'fetch') {
+      expect(Object.keys(leadingCrlf.value.headers)).toEqual(['\r\nX-Bad']);
+    }
+
+    const dupCrlf = parseCliArgs([
+      'html',
+      'https://example.com',
+      '--header',
+      'X-A: bad\r\nEvil: 1',
+      '--header',
+      'X-A: good',
+    ]);
+    expect(dupCrlf.ok).toBe(true);
+    if (dupCrlf.ok && dupCrlf.value.kind === 'fetch') {
+      expect(dupCrlf.value.headers['X-A']).toContain('\r\n');
+    }
+
+    const dupNul = parseCliArgs([
+      'html',
+      'https://example.com',
+      '--header',
+      'X-A: bad\u0000val',
+      '--header',
+      'X-A: good',
+    ]);
+    expect(dupNul.ok).toBe(true);
+    if (dupNul.ok && dupNul.value.kind === 'fetch') {
+      expect(dupNul.value.headers['X-A']).toBe('bad\u0000val');
+    }
   });
 });
 

@@ -23,10 +23,10 @@ SOCKS4a, and SOCKS5 proxy integration tests), and `bun run harness run scenarios
 **In:**
 - `src/integrations/origin/proxy.ts`: zero-dependency proxy tunnel & auth helpers:
   - `buildProxyAuthHeader(proxyUrl: URL): string | undefined`
-  - `openHttpConnectTunnel(proxyUrl: URL, targetUrl: URL, timeoutMs: number): Promise<Result<net.Socket, string>>`
-  - `openSocks4Tunnel(proxyUrl: URL, targetUrl: URL, timeoutMs: number): Promise<Result<net.Socket, string>>` (SOCKS4 IPv4 + SOCKS4a domain extension per `D23`)
-  - `openSocks5Tunnel(proxyUrl: URL, targetUrl: URL, timeoutMs: number): Promise<Result<net.Socket, string>>` (RFC 1928 + RFC 1929 username/password auth, ATYP `0x03` domain name per `D23`)
-  - `wrapTlsOverTunnel(socket: net.Socket, targetUrl: URL, timeoutMs: number): Promise<Result<tls.TLSSocket, string>>`
+  - `openHttpConnectTunnel(proxyUrl: URL, targetUrl: URL, timeoutMs: number): Promise<Result<net.Socket, TunnelError>>`
+  - `openSocks4Tunnel(proxyUrl: URL, targetUrl: URL, timeoutMs: number): Promise<Result<net.Socket, TunnelError>>` (SOCKS4 IPv4 + SOCKS4a domain extension per `D23`)
+  - `openSocks5Tunnel(proxyUrl: URL, targetUrl: URL, timeoutMs: number): Promise<Result<net.Socket, TunnelError>>` (RFC 1928 + RFC 1929 username/password auth, ATYP `0x03` domain name per `D23`)
+  - `wrapTlsOverTunnel(socket: net.Socket, targetUrl: URL, timeoutMs: number): Promise<Result<tls.TLSSocket, TunnelError>>` (`TunnelError = { readonly kind: 'timeout' | 'proxy_error'; readonly message: string }`)
 - `src/integrations/origin/client.ts`: route `createRealHttpGet` through direct IP-pinned sockets (`proxyUrl === undefined`), HTTP absolute-URI forwarding (`http:` target via `http:`/`https:` proxy), HTTPS `CONNECT` tunnel (`https:` target via `http:`/`https:` proxy), or SOCKS4/4a/5/5h tunnel (`http:` or `https:` target), preserving streaming `maxBytes`, `timeoutMs`, single-attempt delivery, and credential-redacted error messages.
 - `src/integrations/origin/proxy.test.ts`: real local TCP/HTTP/CONNECT/SOCKS4a/SOCKS5 server integration tests proving auth, remote hostname delegation (`ATYP 0x03` / SOCKS4a), non-200 CONNECT / SOCKS refusal + credential redaction, `maxBytes` streaming cap, timeout abortion, and `executeFetch` end-to-end SSRF blocking when proxied.
 - `src/integrations/origin/mock.ts` & `cli/commands/origin.ts`: add `proxyFail(url, reason)` mock control and `origin proxy-fail <url> <reason...>` world command returning `Network error fetching <url> via proxy <redactedProxyUrl>: <reason>` when a request to `<url>` uses a proxy.
@@ -39,7 +39,7 @@ SOCKS4a, and SOCKS5 proxy integration tests), and `bun run harness run scenarios
 
 The Terminology this slice uses.
 
-- **Target URL**, **Proxy Policy**, **Raw Response**, **fetch**.
+- **Target URL**, **Proxy Policy**, **Wire Response**, **Raw Response**, **fetch**.
 
 ## What it reads and writes
 

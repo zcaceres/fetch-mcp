@@ -3,8 +3,7 @@
 Part of the [Fetch Web Content plan](../../plan.md). Decisions referenced as D# / U# / I# are in
 [`REQUIREMENTS.md`](../../../../../REQUIREMENTS.md). Builds on [slice 04](../04-limits-compression-and-timeouts/spec.md).
 
-Covers [acceptance criteria](../../acceptance-criteria.md) FW-4 (socket IP pinning) and FW-15 (CLI wiring), closing
-Gap #1 from [2026-11-25-fetch-web-content-verify.md](../../../../../notes/2026-11-25-fetch-web-content-verify.md).
+Covers [acceptance criteria](../../acceptance-criteria.md) FW-4 (socket IP pinning) and FW-15 (CLI wiring).
 
 ## Goal
 
@@ -27,18 +26,18 @@ integration tests), and `bun run harness run scenarios/fetch-web-content` (Slice
 - `src/integrations/origin/client.ts`: real IP-pinned HTTP(S) `HttpGetPort` implementation using `node:http`/`node:https` with a custom `lookup` pinned strictly to `pinnedIps`, streaming raw byte cap enforcement (`MAX_RESPONSE_BYTES`), and `30s` single-attempt timeout (`D8`, `D9`, `D18`, `I2`, `I5`).
 - `src/integrations/dns/client.ts`: real `DnsLookupPort` implementation wrapping `node:dns` (`dns.promises.lookup(hostname, { all: true })`), returning typed `Result` errors on failure (`I2`).
 - `src/cli.ts` & `src/cli.test.ts`: breaking CLI redesign (`html`, `markdown`, `readable`, `text`, `json`, `transcript`), repeatable `--header <Key:Value>`, `--max-length`, `--start-index`, routing web subcommands through `executeFetch` + real ports (printing Windowed Excerpt to `stdout` / exit `0`, or typed error message to `stderr` / exit `1`).
-- `package.json` & `biome.json`: update `engines.node` to `>=20` (`D13`) and include `src/cli.ts` and `src/cli.test.ts` in Biome linting.
+- `package.json` & `biome.json`: update `engines.node` to `>=22` (`D13`) and include `src/cli.ts` and `src/cli.test.ts` in Biome linting.
 
 **Out:**
-- Operator proxy routing (`HTTP_PROXY`/`HTTPS_PROXY`/`ALL_PROXY`/`NO_PROXY`, SOCKS, `--proxy`) and Operator env limit scenarios (waits on `proxy-and-limits` journey; `--proxy` continues to be parsed in `src/cli.ts` and falls back cleanly until `proxy-and-limits` replaces legacy transport).
-- `transcript` YouTube redesign (`yt-dlp` / direct scrape ports & domain core; waits on `fetch-transcript` journey — `src/cli.ts` delegates `transcript` to existing `Fetcher.youtubeTranscript` meanwhile).
-- MCP stdio server (`src/index.ts`) tool renames and wiring (waits on `mcp-interface` journey).
+- Operator proxy routing and Operator env limit configuration (covered in `proxy-and-limits`).
+- YouTube transcript domain core and `yt-dlp` client (covered in `fetch-transcript`).
+- MCP stdio server tool renames and wiring (covered in `mcp-interface`).
 
 ## Vocabulary
 
 The Terminology this slice uses.
 
-- **CLI User**, **Target URL**, **Format** (`WebFormat`: `html`, `markdown`, `readable`, `text`, `json`), **Window**, **Fetch Request**, **WireResponse**, **Raw Response**, **Rendered Output** *(derived)*, **Windowed Excerpt** *(derived)*, **fetch**.
+- **CLI User**, **Target URL**, **Format** (`WebFormat`: `html`, `markdown`, `readable`, `text`, `json`), **Window**, **Fetch Request**, **Wire Response**, **Raw Response**, **Rendered Output**, **Windowed Excerpt** *(derived)*, **fetch**.
 
 ## What it reads and writes
 

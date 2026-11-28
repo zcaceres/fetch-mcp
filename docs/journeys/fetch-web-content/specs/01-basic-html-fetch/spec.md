@@ -37,7 +37,7 @@ and network errors explicitly, and slicing Rendered Output into a Windowed Excer
 
 The Terminology this slice uses.
 
-- **Target URL**, **Format** (`html`), **Fetch Request**, **Raw Response**, **Rendered Output** *(derived)*, **Windowed Excerpt** *(derived)*, **fetch**.
+- **Target URL**, **Format** (`html`), **Fetch Request**, **Raw Response**, **Rendered Output**, **Windowed Excerpt** *(derived)*, **fetch**.
 
 ## What it reads and writes
 

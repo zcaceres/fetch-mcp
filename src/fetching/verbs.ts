@@ -32,6 +32,17 @@ export const DEFAULT_USER_AGENT =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 const DEFAULT_ACCEPT_ENCODING = 'gzip, deflate, br';
 const CRLF_REGEX = /[\r\n]/;
+const HTTP_HEADER_NAME_REGEX = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
+
+const hasInvalidHeaderValueChar = (value: string): boolean => {
+  for (let i = 0; i < value.length; i++) {
+    const code = value.charCodeAt(i);
+    if ((code < 0x20 && code !== 0x09) || code === 0x7f || code > 0xff) {
+      return true;
+    }
+  }
+  return false;
+};
 
 const sanitizeAndDefaultHeaders = (rawHeaders: Headers | undefined): Result<Headers, FetchError> => {
   const deduped = new Map<string, readonly [string, string]>();
@@ -41,6 +52,18 @@ const sanitizeAndDefaultHeaders = (rawHeaders: Headers | undefined): Result<Head
       return err({
         kind: 'invalid_request',
         message: `Invalid header ${JSON.stringify(key)}: CR/LF control characters are not allowed`,
+      });
+    }
+    if (!HTTP_HEADER_NAME_REGEX.test(key)) {
+      return err({
+        kind: 'invalid_request',
+        message: `Invalid header ${JSON.stringify(key)}: header name must be a valid HTTP token`,
+      });
+    }
+    if (hasInvalidHeaderValueChar(value)) {
+      return err({
+        kind: 'invalid_request',
+        message: `Invalid header ${JSON.stringify(key)}: invalid character in header value`,
       });
     }
     deduped.set(key.toLowerCase(), [key, value]);
@@ -192,10 +215,11 @@ export const validateRedirectHop = (
 
 const findHeaderCaseInsensitive = (headers: Headers, name: string): string | undefined => {
   const lower = name.toLowerCase();
+  let found: string | undefined;
   for (const [key, value] of Object.entries(headers)) {
-    if (key.toLowerCase() === lower) return value;
+    if (key.toLowerCase() === lower) found = value;
   }
-  return undefined;
+  return found;
 };
 
 const stripScriptAndStyle = (document: Document): void => {
@@ -213,15 +237,13 @@ const isBufferTooLargeError = (error: unknown): boolean => {
 };
 
 /**
- * Enforces MAX_RESPONSE_BYTES on declared Content-Length, raw wire bytes, and decompressed output,
- * decompressing gzip/x-gzip/deflate/br and passing unknown encodings through unchanged (D9, D14, D17, I5).
+ * Enforces MAX_RESPONSE_BYTES against declared Content-Length and raw wire bytes (D9, D17, I5).
  */
-export const decodeResponseBody = (
-  url: TargetUrl,
+export const validateWireResponseSize = (
   headers: Headers,
   rawBytes: Uint8Array,
   maxBytes: number = MAX_RESPONSE_BYTES,
-): Result<string, FetchError> => {
+): Result<void, FetchError> => {
   const contentLength = findHeaderCaseInsensitive(headers, 'content-length');
   if (contentLength !== undefined) {
     const declared = Number.parseInt(contentLength, 10);
@@ -238,6 +260,26 @@ export const decodeResponseBody = (
       kind: 'response_too_large',
       message: `Response too large: exceeded ${maxBytes} byte limit`,
     });
+  }
+
+  return ok(undefined);
+};
+
+/**
+ * Enforces MAX_RESPONSE_BYTES on declared Content-Length, raw wire bytes, and decompressed output,
+ * decompressing gzip/x-gzip/deflate/br and passing unknown encodings through unchanged (D9, D14, D17, I5).
+ */
+export const decodeResponseBody = (
+  url: TargetUrl,
+  headers: Headers,
+  rawBytes: Uint8Array,
+  maxBytes: number = MAX_RESPONSE_BYTES,
+): Result<string, FetchError> => {
+  const sizeCheck = validateWireResponseSize(headers, rawBytes, maxBytes);
+  if (!sizeCheck.ok) return sizeCheck;
+
+  if (rawBytes.byteLength === 0) {
+    return ok('');
   }
 
   const encoding = (findHeaderCaseInsensitive(headers, 'content-encoding') ?? '').trim().toLowerCase();
