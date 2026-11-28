@@ -9,7 +9,7 @@ The designs, flows, tickets and documents behind this journey, from its design s
 
 - [`REQUIREMENTS.md`](../../../REQUIREMENTS.md): system terminology, D2, D5, D6, D8, D9, D14, D15, D21, D23–D26, I1–I6.
 - [src/policy/](../../../src/policy/), [src/integrations/origin/proxy.ts](../../../src/integrations/origin/proxy.ts), [src/integrations/origin/client.ts](../../../src/integrations/origin/client.ts): Functional DDD proxy policy, real HTTP/CONNECT/SOCKS transport, and Operator limits.
-- [PR #44](../../github/pull-requests/044-fix-remove-user-controlled-proxy-parameter-to-prevent-ssrf-bypass-cwe-918.md) & [PR #46](../../github/pull-requests/046-add-support-for-environment-proxies-http-https-socks-and-improve-node-js-pr.md): proxy trust boundary (`I6`) and HTTP/HTTPS/SOCKS + bare `host:port` requirements.
+- GitHub PRs `#44` & `#46`: proxy trust boundary (`I6`) and HTTP/HTTPS/SOCKS + bare `host:port` requirements.
 
 ## Shape
 
@@ -56,11 +56,11 @@ a scenario that runs it.
    ([spec](specs/02-real-proxy-transport/spec.md), `scenarios/proxy-and-limits/02-real-proxy-transport.txt`)
 3. **03 — CLI Proxy & Limits Wiring.** Wires `src/cli.ts` (`fetch` and `transcript`) to `src/policy/` + real proxied `createRealHttpGet` and `createRealYtDlp`, enforces fail-fast Operator limits (`D25`), and removes the legacy `Fetcher` import and proxy fallback from `src/cli.ts`. Covers PL-10.
    ([spec](specs/03-cli-proxy-and-limits-wiring/spec.md), `scenarios/proxy-and-limits/03-cli-proxy-and-limits-wiring.txt`)
+4. **04 — Proxy Coverage & Doc Polish.** Added IPv6 `NO_PROXY` and per-hop redirect proxy-switch / SSRF-refusal scenarios in `scenarios/proxy-and-limits/03-cli-proxy-and-limits-wiring.txt`, end-to-end `https://` proxy TLS transport test in `src/integrations/origin/proxy.test.ts` (`D5`, `PL-9`), and aligned `plan.md` + `specs/02`–`03`. Covers PL-4, PL-9.
 
 ### Next
 
-1. **04 — Proxy Coverage & Doc Polish** *(from `notes/2026-11-27-proxy-and-limits-verify.md`; D24, D25, D31, I7 settled and Bugs #1–#3 fixed)*:
-   - Close Gaps #1–#4: add scenario/test coverage for direct→proxied & proxied→direct-SSRF redirects, `http:`→`https:` proxy switches, IPv6 `NO_PROXY`, end-to-end `https://` target & `https://` proxy TLS transport tests in `proxy.test.ts`, and `plan.md`/`specs/01`–`03`/`runbook.md` drift fixes.
+*(All planned slices for `proxy-and-limits` are complete.)*
 
 ## Deferred
 

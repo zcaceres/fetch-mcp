@@ -725,5 +725,26 @@ describe('fetching domain', () => {
       expect(String(windowedExcerpt(output, { startIndex: 20, maxLength: 10 }))).toBe('');
       expect(String(windowedExcerpt(output, { startIndex: 99, maxLength: 10 }))).toBe('');
     });
+
+    it('truncates executeFetch output to default 5000 characters when maxLength is omitted (FW-14, D9, D15)', async () => {
+      const longBody = 'a'.repeat(6000);
+      const res = await executeFetch(
+        { url: 'https://example.com/long-default', format: 'html' },
+        {
+          dnsLookup: async () => ok([ResolvedIp('93.184.216.34')]),
+          httpGet: async (reqUrl) =>
+            ok({
+              status: 200,
+              url: reqUrl,
+              headers: { 'content-type': 'text/html' },
+              rawBytes: new TextEncoder().encode(longBody),
+            }),
+        },
+      );
+      expect(res.ok).toBe(true);
+      if (res.ok) {
+        expect(String(res.value)).toHaveLength(5000);
+      }
+    });
   });
 });

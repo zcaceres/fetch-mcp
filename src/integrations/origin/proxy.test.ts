@@ -1,6 +1,11 @@
 import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
+import { execFile, execFileSync } from 'node:child_process';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import http from 'node:http';
+import https from 'node:https';
 import net from 'node:net';
+import os from 'node:os';
+import path from 'node:path';
 import { executeFetch } from '../../fetching/execute.ts';
 import { TargetUrl } from '../../fetching/nouns.ts';
 import { err, ok } from '../../shared/result.ts';
@@ -434,5 +439,94 @@ describe('real proxy transport (Slice 02, PL-9)', () => {
       error: { kind: 'timeout', message: 'Request timed out after 120ms fetching https://slow.invalid/hang' },
     });
     expect(elapsedMs).toBeLessThan(180);
+  });
+
+  it('forwards http: targets through an https: proxy verifying the proxy TLS certificate rather than target Host (D5, PL-9)', async () => {
+    const certDir = mkdtempSync(path.join(os.tmpdir(), 'fetch-mcp-https-proxy-test-'));
+    const keyPath = path.join(certDir, 'proxy.key');
+    const certPath = path.join(certDir, 'proxy.pem');
+    const cnfPath = path.join(certDir, 'proxy.cnf');
+    writeFileSync(
+      cnfPath,
+      [
+        '[req]',
+        'distinguished_name = dn',
+        'x509_extensions = v3',
+        'prompt = no',
+        '[dn]',
+        'CN = 127.0.0.1',
+        '[v3]',
+        'subjectAltName = IP:127.0.0.1',
+      ].join('\n'),
+    );
+    execFileSync(
+      'openssl',
+      [
+        'req',
+        '-x509',
+        '-newkey',
+        'rsa:2048',
+        '-nodes',
+        '-keyout',
+        keyPath,
+        '-out',
+        certPath,
+        '-days',
+        '1',
+        '-config',
+        cnfPath,
+      ],
+      { stdio: 'ignore' },
+    );
+
+    let seenHost: string | undefined;
+    let seenUrl: string | undefined;
+    const httpsProxy = https.createServer({ key: readFileSync(keyPath), cert: readFileSync(certPath) }, (req, res) => {
+      seenHost = req.headers.host;
+      seenUrl = req.url;
+      res.writeHead(200, { 'Content-Type': 'text/plain' });
+      res.end('via-https-proxy');
+    });
+    await new Promise<void>((resolve) => httpsProxy.listen(0, '127.0.0.1', resolve));
+    const addr = httpsProxy.address();
+    if (!addr || typeof addr === 'string') {
+      throw new Error('Expected TCP address for HTTPS proxy');
+    }
+
+    try {
+      const script = [
+        'import { createRealHttpGet } from "./src/integrations/origin/client.ts";',
+        'import { TargetUrl } from "./src/fetching/nouns.ts";',
+        'const httpGet = createRealHttpGet({ maxBytes: 1024, timeoutMs: 2000 });',
+        `const res = await httpGet(TargetUrl("http://unresolvable.invalid/tls-proxy?x=1#frag"), {}, [], "https://127.0.0.1:${addr.port}");`,
+        'if (!res.ok) throw new Error(res.error.message);',
+        'process.stdout.write(new TextDecoder().decode(res.value.rawBytes));',
+      ].join('\n');
+
+      const out = await new Promise<string>((resolve, reject) => {
+        execFile(
+          process.execPath,
+          ['-e', script],
+          {
+            cwd: path.resolve(import.meta.dir, '../../..'),
+            env: { ...process.env, NODE_EXTRA_CA_CERTS: certPath },
+            encoding: 'utf-8',
+          },
+          (error, stdout, stderr) => {
+            if (error) {
+              reject(new Error(`HTTPS proxy child failed: ${stderr || error.message}`));
+              return;
+            }
+            resolve(stdout);
+          },
+        );
+      });
+      expect(out).toBe('via-https-proxy');
+      expect(seenHost).toBe('unresolvable.invalid');
+      expect(seenUrl).toBe('http://unresolvable.invalid/tls-proxy?x=1');
+    } finally {
+      await closeServer(httpsProxy);
+      rmSync(certDir, { recursive: true, force: true });
+    }
   });
 });

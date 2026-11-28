@@ -100,3 +100,22 @@ error: Request timed out after 30000ms fetching https://example.com/slow
 
 > origin attempts https://example.com/slow
 attempts: 1
+
+# Single-attempt delivery also holds on HTTP 200 and HTTP 500 without retrying (FW-5, D18)
+> origin serve https://example.com/once-ok 200 <p>once</p>
+origin: 200 https://example.com/once-ok
+
+> fetch html https://example.com/once-ok
+| <p>once</p>
+
+> origin attempts https://example.com/once-ok
+attempts: 1
+
+> origin serve https://example.com/once-500 500 Internal Error
+origin: 500 https://example.com/once-500
+
+> fetch html https://example.com/once-500
+error: HTTP error 500 fetching https://example.com/once-500
+
+> origin attempts https://example.com/once-500
+attempts: 1

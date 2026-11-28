@@ -27,9 +27,9 @@ bun run harness run scenarios/fetch-transcript
 
 ## By hand
 
-### 1. Live YouTube CLI smoke check (after Slice 03)
+### 1. Live YouTube CLI smoke check
 
-1. Run `bun run build && node dist/cli.js transcript https://www.youtube.com/watch?v=jNQXAC9IVRw --max-length 300`.
+1. Run `bun run build && node dist/cli.js transcript 'https://www.youtube.com/watch?v=jNQXAC9IVRw' --max-length 300`.
    - Prints `[Transcript language: en — ...]` followed by timestamped lines to `stdout` and exits `0`. [FT-3, FT-7, FT-9, FT-10]
-2. Run `node dist/cli.js transcript https://example.com/not-youtube`.
+2. Run `node dist/cli.js transcript 'https://example.com/not-youtube'`.
    - Writes `Blocked Target URL: host "example.com" is not an allowlisted YouTube domain` to `stderr` and exits `1`. [FT-2, FT-10]

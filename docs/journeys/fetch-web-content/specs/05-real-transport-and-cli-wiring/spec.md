@@ -26,7 +26,7 @@ integration tests), and `bun run harness run scenarios/fetch-web-content` (Slice
 - `src/integrations/origin/client.ts`: real IP-pinned HTTP(S) `HttpGetPort` implementation using `node:http`/`node:https` with a custom `lookup` pinned strictly to `pinnedIps`, streaming raw byte cap enforcement (`MAX_RESPONSE_BYTES`), and `30s` single-attempt timeout (`D8`, `D9`, `D18`, `I2`, `I5`).
 - `src/integrations/dns/client.ts`: real `DnsLookupPort` implementation wrapping `node:dns` (`dns.promises.lookup(hostname, { all: true })`), returning typed `Result` errors on failure (`I2`).
 - `src/cli.ts` & `src/cli.test.ts`: breaking CLI redesign (`html`, `markdown`, `readable`, `text`, `json`, `transcript`), repeatable `--header <Key:Value>`, `--max-length`, `--start-index`, routing web subcommands through `executeFetch` + real ports (printing Windowed Excerpt to `stdout` / exit `0`, or typed error message to `stderr` / exit `1`).
-- `package.json` & `biome.json`: update `engines.node` to `>=20` (`D13`) and include `src/cli.ts` and `src/cli.test.ts` in Biome linting.
+- `package.json` & `biome.json`: update `engines.node` to `>=22` (`D13`) and include `src/cli.ts` and `src/cli.test.ts` in Biome linting.
 
 **Out:**
 - Operator proxy routing and Operator env limit configuration (covered in `proxy-and-limits`).

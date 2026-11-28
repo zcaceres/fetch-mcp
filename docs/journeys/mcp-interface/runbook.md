@@ -32,3 +32,4 @@ bun run harness run scenarios/mcp-interface
 2. Pipe an `initialize` + `tools/list` JSON-RPC session into `node dist/index.js`.
    - Advertises only `tools` capability (no `resources` or `prompts`), lists `fetch_html`, `fetch_markdown`, `fetch_readable`, `fetch_text`, `fetch_json`, `fetch_transcript`, and rejects `{ "cursor": "bad" }` with `-32602`. [MI-2, MI-3, MI-4]
 3. Run `bun test src/index.test.ts` to verify end-to-end interop with the stock `@modelcontextprotocol/sdk` `Client` over `StdioClientTransport` (and `node dist/cli.js --version` → `2.0.0`). [MI-1, MI-2, MI-3, MI-4, MI-5, MI-6, MI-7]
+4. Optional real host spot-check: configure Claude Code / Claude Desktop / Gemini CLI to launch `node dist/index.js` and verify `tools/list` annotations and live `fetch_readable` + `fetch_transcript` calls. [MI-2, MI-3, MI-5]

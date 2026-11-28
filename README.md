@@ -4,7 +4,7 @@
 
 [![npm version](https://img.shields.io/npm/v/mcp-fetch-server.svg)](https://www.npmjs.com/package/mcp-fetch-server)
 
-A lightweight, SSRF-hardened MCP server (`mcp-fetch-server`, supporting both `stdio` and `2025-11-25` Streamable HTTP) and local CLI (`mcp-fetch`) for fetching public web content as HTML, Markdown, readable article Markdown, plain text, JSON, or YouTube transcripts. Supports Node.js `>= 20` LTS and Bun.
+A lightweight, SSRF-hardened MCP server (`mcp-fetch-server`, supporting both `stdio` and `2025-11-25` Streamable HTTP) and local CLI (`mcp-fetch`) for fetching public web content as HTML, Markdown, readable article Markdown, plain text, JSON, or YouTube transcripts. Supports Node.js `>= 22` LTS and Bun.
 
 <a href="https://glama.ai/mcp/servers/nu09wf23ao">
   <img width="380" height="200" src="https://glama.ai/mcp/servers/nu09wf23ao/badge" alt="Fetch Server MCP server" />
@@ -16,7 +16,7 @@ A lightweight, SSRF-hardened MCP server (`mcp-fetch-server`, supporting both `st
 - **Aligned CLI subcommands:** `txt` → `text`, `youtube` → `transcript`, plus repeatable `--header <Key:Value>`.
 - **Fail-fast configuration:** invalid `DEFAULT_LIMIT`, `MAX_RESPONSE_BYTES`, or proxy URLs now fail explicitly instead of silently falling back to defaults or direct connections.
 - **Explicit missing caption language:** requesting an unavailable YouTube transcript language now fails explicitly and lists the available language codes.
-- **Runtime floor:** requires Node.js `>= 20` LTS or Bun.
+- **Runtime floor:** requires Node.js `>= 22` LTS or Bun.
 
 ## MCP Tools
 

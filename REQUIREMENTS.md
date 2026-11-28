@@ -23,7 +23,7 @@ something they cover.
 - [README.md](README.md): project overview, MCP tools, CLI usage, environment variables, and security features (v2.0.0).
 - [package.json](package.json): package metadata (`mcp-fetch-server` v2.0.0), binaries, scripts, and runtime dependencies.
 - [src/](src/): Functional DDD implementation (`shared/`, `policy/`, `fetching/`, `transcript/`, `mcp/`, `verification/`, `integrations/`, `index.ts`, `cli.ts`).
-- [docs/github/README.md](docs/github/README.md): exported GitHub issues and pull requests (as of 2026-09-27).
+- GitHub issues & pull requests (`zcaceres/fetch-mcp` issues `#47`, `#49`, `#50`; PRs `#44`, `#46`, `#48`).
 - Anthropic / MCP `2025-11-25` server specification & `@modelcontextprotocol/inspector` docs (reviewed 2026-11-27): `stdio` stdout hygiene, Streamable HTTP transport, `2025-11-25` tool annotations, and cross-client testing.
 - Google Gemini CLI MCP server documentation (reviewed 2026-11-27): `mcpServers` stdio/Streamable HTTP configuration and Gemini API tool schema validation rules.
 - OpenAI Responses API & Agents SDK MCP documentation (reviewed 2026-11-27): `MCPServerStdio` / `MCPServerStreamableHttp` / hosted MCP expectations, root `additionalProperties: false` strict schema rules, and tool safety annotations.
@@ -109,7 +109,7 @@ system computes a value for us, its rule for it is recorded here, as that system
 
 - **Security (SSRF & Isolation):** Every Target URL and redirect hop is restricted to `http:`/`https:` and blocked from `localhost`, `*.localhost`, and all IANA-reserved IPv4/IPv6 ranges (including IPv4-mapped IPv6 and multicast), failing closed on malformed IPs or DNS failures; direct connections pin validated DNS records to sockets while proxied connections delegate hostname DNS resolution to the proxy across both `fetch` and `fetch transcript` (D8, D23, D26, I1, I2, I3, I4, I6).
 - **Resource Safety:** Raw Response bodies are capped at `MAX_RESPONSE_BYTES` (default `10 MB`) across both raw wire bytes and decompressed streams, and network requests and `yt-dlp` subprocesses time out after `30s` (D9, I5).
-- **Runtime & Distribution:** Supports Node.js `>= 20` LTS and Bun, uses Bun (`bun test`, `bun build`, committed `bun.lock`) with `tsc --noEmit`, Biome linting, and a Bun-runnable DD harness + `scenarios/` runner, and upgrades dependencies to latest stable versions for the breaking major release (D10, D11, D13).
+- **Runtime & Distribution:** Supports Node.js `>= 22` LTS and Bun, uses Bun (`bun test`, `bun build`, committed `bun.lock`) with `tsc --noEmit`, Biome linting, and a Bun-runnable DD harness + `scenarios/` runner, and upgrades dependencies to latest stable versions for the breaking major release (D10, D11, D13).
 - **Protocol Conformance:** Conforms to the latest MCP specification supported by `@modelcontextprotocol/sdk` (`2025-11-25`), advertising only implemented capabilities and rejecting unrecognized `tools/list` pagination cursors with `-32602` (D13, D27).
 - **Privacy & Statelessness:** No fetched content, credentials, or request history is persisted across calls (D3).
 
@@ -136,7 +136,7 @@ for an undecided rule and will change with it.
 
 - Headless browser / JavaScript-rendered SPA execution (D3).
 - Non-GET HTTP methods (POST, PUT, DELETE, etc.) and persistent cookie jars or sessions (D3).
-- Multi-tenant authentication and per-user access scoping (D3; see [issue #47](docs/github/issues/047-question-about-auth-approach.md)).
+- Multi-tenant authentication and per-user access scoping (D3; see GitHub issue #47).
 - Persistent caching or local storage of fetched pages (D3).
 - Legacy HTTP+SSE MCP transport (replaced by Streamable HTTP per MCP `2025-11-25`, D3, D32).
 
@@ -192,7 +192,7 @@ for an undecided rule and will change with it.
 
 ### D13. Runtime floor and MCP conformance target
 
-- **Decided (2026-11-25):** Support Node.js `>= 20` LTS and Bun, upgrade runtime dependencies to latest stable versions with a committed `bun.lock`, and conform to the latest MCP specification supported by `@modelcontextprotocol/sdk` (`2025-11-25`, deferring `2026-07-28` `server/discover` until SDK support lands).
+- **Decided (2026-11-27):** Support Node.js `>= 22` LTS and Bun (Node.js 20 reached EOL on 2026-04-30), upgrade runtime dependencies to latest stable versions with a committed `bun.lock`, and conform to the latest MCP specification supported by `@modelcontextprotocol/sdk` (`2025-11-25`, deferring `2026-07-28` `server/discover` until SDK support lands).
 
 ### D14. Explicit failure semantics and typed domain errors
 

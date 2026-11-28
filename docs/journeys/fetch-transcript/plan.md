@@ -9,7 +9,7 @@ The designs, flows, tickets and documents behind this journey, from its design s
 
 - [`REQUIREMENTS.md`](../../../REQUIREMENTS.md): system terminology, D3, D4, D7–D9, D12, D14, D15, D18–D22, I1–I3, I5.
 - [src/transcript/](../../../src/transcript/), [src/integrations/ytdlp/](../../../src/integrations/ytdlp/), [src/transcript/fixtures.test.ts](../../../src/transcript/fixtures.test.ts): Functional DDD transcript implementation, real `yt-dlp` client, and real caption XML fixtures.
-- [PR #48](../../github/pull-requests/048-fix-fetcher-prevent-argv-injection-into-yt-dlp-via-videourl.md): `yt-dlp` `--` end-of-options sentinel defense-in-depth context.
+- GitHub PR `#48`: `yt-dlp` `--` end-of-options sentinel defense-in-depth context.
 
 ## Shape
 
@@ -56,12 +56,11 @@ a scenario that runs it.
    ([spec](specs/02-ytdlp-primary-and-fallback/spec.md), `scenarios/fetch-transcript/02-ytdlp-primary-and-fallback.txt`)
 3. **03 — Real yt-dlp Client & CLI Wiring.** Implements async `src/integrations/ytdlp/client.ts` (`execFile`, `--` sentinel, `D20` `.srv1` language selection, temp dir cleanup, `30s` timeout enforcing D9/FT-3, `MAX_RESPONSE_BYTES` file cap enforcing I5), rewires `mcp-fetch transcript` in `src/cli.ts` off legacy `Fetcher.youtubeTranscript` onto `executeFetchTranscript`, and adds `ytdlp timeout` + `FT-2` `dns fail`/`dns empty` scenario coverage. Covers FT-2, FT-3, FT-6, FT-10.
    ([spec](specs/03-real-ytdlp-and-cli-wiring/spec.md), `scenarios/fetch-transcript/03-real-ytdlp-and-cli-wiring.txt`)
+4. **04 — Scenario Coverage & Doc Polish.** Added negative `maxLength` and `maxLength: 0` coverage in `scenarios/fetch-transcript/02-ytdlp-primary-and-fallback.txt`, `yt-dlp` credential redaction in `src/integrations/ytdlp/client.ts` (`I7`), and aligned `plan.md`, `specs/01`, and `runbook.md` (quoting URLs for `zsh`). Covers FT-1, FT-4, FT-5, FT-9, I5.
 
 ### Next
 
-1. **04 — Scenario Coverage & Doc Polish** *(from `notes/2026-11-27-fetch-transcript-verify.md`; D7, D21, I4 settled and Bug #1 fixed)*:
-   - Add direct-extraction `MAX_RESPONSE_BYTES` test/scenario coverage plus scenario coverage for `yt-dlp` empty-XML fallback, negative `maxLength`, and `maxLength: 0` (Gaps #1–#2; FT-1, FT-4, FT-5, FT-9, I5).
-   - Clean up `plan.md`, `specs/02`–`03`, and `runbook.md` drift (quote YouTube URL for `zsh`, add `--proxy` to harness table, remove historical wording).
+*(All planned slices for `fetch-transcript` are complete.)*
 
 ## Deferred
 

@@ -100,3 +100,36 @@ isError: true
 > mcp call fetch_html {"url":"http://127.0.0.1/secret"}
 isError: true
 | Blocked Target URL: private address "127.0.0.1"
+
+# Valid custom headers, start_index windowing, and failing origin/transcript return expected MCP results (MI-5, MI-6, D14, D15, D20)
+> origin serve https://example.com/windowed 200 <p>0123456789abcdef</p>
+origin: 200 https://example.com/windowed
+
+> mcp call fetch_text {"url":"https://example.com/windowed","headers":{"X-Custom":"mcp-val"},"start_index":4,"max_length":6}
+isError: false
+| 456789
+
+> origin last-headers https://example.com/windowed
+header: Accept-Encoding: gzip, deflate, br
+header: User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36
+header: X-Custom: mcp-val
+
+> origin serve https://example.com/fail500 500 Boom
+origin: 500 https://example.com/fail500
+
+> mcp call fetch_html {"url":"https://example.com/fail500"}
+isError: true
+| HTTP error 500 fetching https://example.com/fail500
+
+> ytdlp available false
+ytdlp: available false
+
+> dns set www.youtube.com 142.250.190.78
+dns: www.youtube.com -> 142.250.190.78
+
+> origin serve https://www.youtube.com/watch?v=nolang 200 <html><script>var ytInitialPlayerResponse = {"captions":{"playerCaptionsTracklistRenderer":{"captionTracks":[{"baseUrl":"https://www.youtube.com/api/timedtext?v=nolang&lang=en","name":{"simpleText":"English"},"languageCode":"en"}]}}};</script></html>
+origin: 200 https://www.youtube.com/watch?v=nolang
+
+> mcp call fetch_transcript {"url":"https://www.youtube.com/watch?v=nolang","lang":"fr"}
+isError: true
+| No captions available in language "fr" (available: en)

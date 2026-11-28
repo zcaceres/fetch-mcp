@@ -9,7 +9,7 @@ The designs, flows, tickets and documents behind this journey, from its design s
 
 - [`REQUIREMENTS.md`](../../../REQUIREMENTS.md): system terminology, D1, D2, D6, D10–D14, D24–D29, I1–I6.
 - [src/index.ts](../../../src/index.ts) & [src/index.test.ts](../../../src/index.test.ts): v1.2.0 stdio MCP server and tests.
-- [Issue #49](../../github/issues/049-mcp-spec-conformance-2-requirements-violated-via-hasmcp-mcp-spec-test-spec.md) & [Issue #50](../../github/issues/050-mcp-spec-conformance-6-requirements-violated-via-hasmcp-mcp-spec-test-spec.md): MCP `2025-11-25` conformance findings (capabilities + `-32602` invalid cursor) and `2026-07-28` deferral.
+- GitHub Issues `#49` & `#50`: MCP `2025-11-25` conformance findings (capabilities + `-32602` invalid cursor) and `2026-07-28` deferral.
 - [README.md](../../../README.md) & [package.json](../../../package.json): distribution metadata and public documentation.
 
 ## Shape
@@ -52,12 +52,11 @@ scenario that runs it.
    ([spec](specs/01-mcp-server-core-wiring/spec.md), `scenarios/mcp-interface/01-mcp-server-core-wiring.txt`)
 2. **02 — Legacy Retirement, Lint Expansion & v2.0.0 Docs.** Ports unique real-caption fixture tests from `src/YouTubeTranscript.fixture.test.ts` into `src/transcript/fixtures.test.ts`, removes retired legacy files (`Fetcher.ts`, `httpClient.ts`, `ssrf.ts`, `YouTubeTranscript.ts`, `types.ts` and their legacy tests), expands `biome.json` to `src/**`, updates `README.md` for v2.0.0 (`D10`, `D12`), and bumps `package.json` to `2.0.0`. Covers MI-7.
    ([spec](specs/02-legacy-retirement-and-v2-docs/spec.md))
+3. **03 — MCP Coverage & Doc Polish.** Added `headers` & `start_index` forwarding (`MI-5`), failing origin/transcript `isError: true` coverage (`MI-6`), and explicit `protocolVersion === '2025-11-25'` assertions (`MI-2`) in `src/index.test.ts` and `scenarios/mcp-interface/01-mcp-server-core-wiring.txt`, and aligned `plan.md`, `specs/01`–`02`, and `runbook.md`. Covers MI-2, MI-5, MI-6.
 
 ### Next
 
-1. **03 — MCP Coverage & Doc Polish** *(from `notes/2026-11-27-mcp-interface-verify.md`; D27, D28 settled)*:
-   - Add scenario and `src/index.test.ts` coverage for valid `headers` & `start_index` forwarding (`MI-5`), failing origin/transcript `isError: true` results (`MI-6`), and explicit `protocolVersion === '2025-11-25'` assertion (`MI-2`) (Gaps #1–#3).
-   - Clean up `plan.md`, `specs/01`–`02`, and `runbook.md` drift (remove historical v1.2.0 wording, add real external MCP host checklist to `runbook.md`, align **Operator Limits** / **Proxy Policy** casing).
+*(All planned slices for `mcp-interface` are complete.)*
 
 ## Deferred
 

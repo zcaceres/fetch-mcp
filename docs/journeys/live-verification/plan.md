@@ -9,7 +9,7 @@ The designs, flows, tickets and documents behind this journey, from its design s
 
 - [`REQUIREMENTS.md`](../../../REQUIREMENTS.md): system terminology, D1, D3, D12–D14, D27, D28, D30–D35, I1–I7.
 - Anthropic / MCP `2025-11-25` server specification & `@modelcontextprotocol/inspector` docs, Google Gemini CLI MCP docs, and OpenAI Responses API / Agents SDK MCP docs (reviewed 2026-11-27).
-- [docs/github/README.md](../../github/README.md): real-world user failure reports (international pages, Readability/Markdown edge cases, live YouTube transcripts, Node/jsdom bundling, MCP client capability probing).
+- GitHub repository issues & PRs (`zcaceres/fetch-mcp`): real-world user failure reports (international pages, Readability/Markdown edge cases, live YouTube transcripts, Node/jsdom bundling, MCP client capability probing).
 - [src/transcript/fixtures.test.ts](../../../src/transcript/fixtures.test.ts): existing real YouTube `jNQXAC9IVRw` caption fixtures.
 
 ## Shape

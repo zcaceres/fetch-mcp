@@ -11,7 +11,7 @@ all of `src/**`, updating `README.md`, and bumping `package.json` to `2.0.0`).
 Preserve the real YouTube caption fixtures from `src/YouTubeTranscript.fixture.test.ts` by porting them onto
 `src/transcript/` (`src/transcript/fixtures.test.ts`), remove all retired v1.2.0 legacy modules and legacy tests
 (`Fetcher`, `httpClient`, `ssrf`, `YouTubeTranscript`, `types`), expand `biome.json` to lint all of `src/**`, update
-`README.md` for the breaking v2.0.0 MCP tool names, CLI subcommands, proxy/limit rules, and Node.js `>=20` floor
+`README.md` for the breaking v2.0.0 MCP tool names, CLI subcommands, proxy/limit rules, and Node.js `>=22` floor
 (`D10`, `D12`, `D13`), and bump `package.json` to `2.0.0`.
 
 **Done when:** `bun run lint` (covering all of `src/**`), `bun run typecheck`, `bun run build`, `bun test` (including
@@ -29,11 +29,11 @@ cleanly, and `node dist/cli.js --version` prints `2.0.0`.
   - `src/YouTubeTranscript.ts`, `src/YouTubeTranscript.test.ts`, `src/YouTubeTranscript.fixture.test.ts`
   - `src/types.ts`
 - `biome.json`: simplify `files.includes` to `["src/**", "cli/**", "biome.json"]`.
-- `README.md`: update MCP tool names (`fetch_text`, `fetch_transcript`), CLI subcommands (`text`, `transcript`, `--header`), HTTP/HTTPS/SOCKS4/4a/5/5h proxy & fail-fast Operator limit docs, MCP `2025-11-25` conformance, Node.js `>=20` / Bun support, and v2.0.0 breaking changes note.
+- `README.md`: update MCP tool names (`fetch_text`, `fetch_transcript`), CLI subcommands (`text`, `transcript`, `--header`), HTTP/HTTPS/SOCKS4/4a/5/5h proxy & fail-fast Operator limit docs, MCP `2025-11-25` conformance, Node.js `>=22` / Bun support, and v2.0.0 breaking changes note.
 - `package.json`: bump `version` to `2.0.0` (`D10`).
 
 **Out:**
-- `docs/github/` (untracked historical issue/PR export — remains untouched and unstaged).
+- Local archive snapshots (none tracked in git).
 - MCP `2026-07-28` `server/discover` (deferred per `D13`, `D27`).
 
 ## Vocabulary

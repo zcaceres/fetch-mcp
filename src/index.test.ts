@@ -13,6 +13,7 @@ import { dispatchToolCall, listTools } from './mcp/server.ts';
 type JsonRpcResponse = {
   readonly id?: number;
   readonly result?: {
+    readonly protocolVersion?: string;
     readonly capabilities?: Record<string, unknown>;
     readonly tools?: readonly {
       readonly name: string;
@@ -144,6 +145,7 @@ describe('MCP stdio server conformance (MI-1, MI-2, MI-3, MI-4, MI-6)', () => {
 
     const initResp = responses.find((r) => r.id === 1);
     expect(initResp?.error).toBeUndefined();
+    expect(initResp?.result?.protocolVersion).toBe('2025-11-25');
     expect(initResp?.result?.capabilities?.tools).toBeDefined();
     expect(initResp?.result?.capabilities?.resources).toBeUndefined();
     expect(initResp?.result?.capabilities?.prompts).toBeUndefined();
@@ -314,11 +316,16 @@ describe('MCP dispatchToolCall & listTools (MI-3, MI-4, MI-5, MI-6)', () => {
       true,
     );
 
-    const textRes = await dispatchToolCall('fetch_text', { url: 'https://remote.invalid/page', max_length: 13 }, deps);
+    const textRes = await dispatchToolCall(
+      'fetch_text',
+      { url: 'https://remote.invalid/page', headers: { 'X-Mcp-Test': 'forwarded' }, start_index: 8, max_length: 5 },
+      deps,
+    );
     expect(textRes).toEqual({
       ok: true,
-      value: { content: [{ type: 'text', text: 'Article Title' }], isError: false },
+      value: { content: [{ type: 'text', text: 'Title' }], isError: false },
     });
+    expect(origin.lastHeaders('https://remote.invalid/page')).toMatchObject({ 'X-Mcp-Test': 'forwarded' });
 
     const jsonRes = await dispatchToolCall('fetch_json', { url: 'https://remote.invalid/data' }, deps);
     expect(jsonRes).toEqual({
@@ -370,5 +377,30 @@ describe('MCP dispatchToolCall & listTools (MI-3, MI-4, MI-5, MI-6)', () => {
       expect(badArg.value.isError).toBe(true);
       expect(badArg.value.content[0].text).toContain('Invalid arguments:');
     }
+
+    const origin500 = createOriginMock();
+    const dnsOk = createDnsMock();
+    dnsOk.set('example.com', ['93.184.216.34']);
+    origin500.serve('https://example.com/boom', 500, 'fail');
+    const failOriginRes = await dispatchToolCall(
+      'fetch_html',
+      { url: 'https://example.com/boom' },
+      { ...deps, fetchPorts: { httpGet: origin500.get, dnsLookup: dnsOk.lookup } },
+    );
+    expect(failOriginRes).toEqual({
+      ok: true,
+      value: { content: [{ type: 'text', text: 'HTTP error 500 fetching https://example.com/boom' }], isError: true },
+    });
+
+    const failTrRes = await dispatchToolCall('fetch_transcript', { url: 'https://example.com/not-youtube' }, deps);
+    expect(failTrRes).toEqual({
+      ok: true,
+      value: {
+        content: [
+          { type: 'text', text: 'Blocked Target URL: host "example.com" is not an allowlisted YouTube domain' },
+        ],
+        isError: true,
+      },
+    });
   });
 });

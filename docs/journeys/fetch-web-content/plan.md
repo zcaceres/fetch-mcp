@@ -58,12 +58,11 @@ turned up. Each has a [spec](specs/) and a scenario in `scenarios/fetch-web-cont
    ([spec](specs/04-limits-compression-and-timeouts/spec.md), `scenarios/fetch-web-content/04-limits-compression-and-timeouts.txt`)
 5. **05 — Real Transport & CLI Wiring.** Implements the real IP-pinned HTTP(S) client in `src/integrations/origin/client.ts` (wiring validated `ResolvedIp` records directly to sockets to complete FW-4 pinning) + real DNS port in `src/integrations/dns/client.ts`, shared `executeFetch`, and rewires `mcp-fetch` CLI (`html`, `markdown`, `readable`, `text`, `json`, `transcript`, `--header`, `--max-length`, `--start-index`). Covers FW-4, FW-15.
    ([spec](specs/05-real-transport-and-cli-wiring/spec.md), `scenarios/fetch-web-content/05-real-transport-and-cli-wiring.txt`)
+6. **06 — Scenario Coverage & Doc Polish.** Added `attempts: 1` assertions on HTTP 200/500 in `scenarios/fetch-web-content/04-limits-compression-and-timeouts.txt`, default `5000`-char Windowed Excerpt truncation test in `src/fetching/fetching.test.ts`, `validateWireResponseSize` enforcement before non-2xx checks (`D17`, `I5`), and aligned `plan.md` + `specs/04`–`05`. Covers FW-5, FW-14.
 
 ### Next
 
-1. **06 — Scenario Coverage & Doc Polish** *(from `notes/2026-11-27-fetch-web-content-verify.md`; D12, D17, D18 settled and bugs #1–#4 fixed)*:
-   - Add scenario/test coverage for `attempts: 1` on HTTP 200/500 and default `5000`-char Windowed Excerpt truncation (Gaps #1–#2; FW-5, FW-14).
-   - Clean up remaining doc/spec drift in `plan.md` and `specs/04`–`05`.
+*(All planned slices for `fetch-web-content` are complete.)*
 
 ## Deferred
 
