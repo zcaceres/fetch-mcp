@@ -413,6 +413,7 @@ export const wrapTlsOverTunnel = (
     const targetHost = normalizeHostname(targetUrl.hostname);
     const tlsSocket = tls.connect({
       socket,
+      host: targetHost,
       servername: net.isIP(targetHost) ? undefined : targetHost,
     });
 

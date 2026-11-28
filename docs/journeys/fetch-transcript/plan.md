@@ -31,7 +31,7 @@ Where this journey lives in the code. Contexts never import each other; callers 
 
 | Context | Nouns | Verbs | Queries | Harness commands |
 |---|---|---|---|---|
-| `src/transcript/` | `TargetUrl`, `LanguageCode`, `Window`, `CaptionTrack`, `FetchRequest`, `Transcript`, `WindowedExcerpt`, `TranscriptError` | `prepareFetchTranscript`, `extractCaptionTracks`, `selectCaptionTrack`, `buildTranscript` | `isAllowedYouTubeHost`, `decodeHtmlEntities`, `parseCaptionXml`, `buildYtDlpArgs`, `windowedExcerpt` | `fetch-transcript <url> [--lang <code>] [--start-index N] [--max-length N] [--header K:V]` |
+| `src/transcript/` | `TargetUrl`, `LanguageCode`, `Window`, `CaptionTrack`, `FetchRequest`, `Transcript`, `WindowedExcerpt`, `TranscriptError` | `prepareFetchTranscript`, `extractCaptionTracks`, `selectCaptionTrack`, `buildTranscript` | `isAllowedYouTubeHost`, `decodeHtmlEntities`, `parseCaptionXml`, `buildYtDlpArgs`, `stripCrossOriginHeaders`, `windowedExcerpt` | `fetch-transcript <url> [--lang <code>] [--start-index N] [--max-length N] [--header K:V]` |
 
 ## External systems
 

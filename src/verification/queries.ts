@@ -30,7 +30,7 @@ const redactUrlCredentials = (rawUrl: string): string => {
       }
       return parsed.href;
     } catch {
-      return rawUrl.replace(/^([a-zA-Z][a-zA-Z0-9+.-]*:\/\/).*@/, '$1<redacted>@');
+      return rawUrl.replace(/^([a-zA-Z][a-zA-Z0-9+.-]*:\/\/)[\s\S]*@/, '$1<redacted>@');
     }
   }
   if (rawUrl.startsWith('//')) {
@@ -43,7 +43,7 @@ const redactUrlCredentials = (rawUrl: string): string => {
       }
       return rawUrl;
     } catch {
-      return rawUrl.replace(/^(\/\/).*@/, '$1<redacted>@');
+      return rawUrl.replace(/^(\/\/)[\s\S]*@/, '$1<redacted>@');
     }
   }
   return rawUrl;

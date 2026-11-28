@@ -1,5 +1,5 @@
 # Slice 03: CLI Proxy & Limits Wiring
-# Covers PL-1, PL-2, PL-4, PL-8 (Operator limits on fetch-transcript, NO_PROXY port/IPv6 matching, and --proxy overriding NO_PROXY on fetch-transcript)
+# Covers PL-1, PL-2, PL-4, PL-8 (Operator limits on fetch-transcript, NO_PROXY host/port matching, and --proxy overriding NO_PROXY on fetch-transcript)
 
 # Operator DEFAULT_LIMIT and MAX_RESPONSE_BYTES apply to fetch-transcript too (PL-1, PL-2, D9, D25, I5)
 > dns set www.youtube.com 142.250.190.78

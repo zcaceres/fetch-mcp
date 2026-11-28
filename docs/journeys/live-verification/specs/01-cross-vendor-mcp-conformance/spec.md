@@ -19,7 +19,7 @@ strict runtime unknown-key refusal per `D28`), create the pure `src/verification
   - Add `additionalProperties: { type: 'string' }` to `headers` property schema (for Gemini/OpenAI strict object typing).
   - Add MCP `2025-11-25` `annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true }` to every tool definition (`D33`).
   - Switch `WebToolArgsSchema` and `TranscriptToolArgsSchema` to `z.strictObject(...)` so unexpected keys — including a smuggled `proxy` — return `CallToolResult` `{ isError: true }` with `Invalid arguments: Unrecognized key: "<key>"` before touching the network (`D28`, `I6`).
-- Propagate `D28` to `docs/journeys/mcp-interface/acceptance-criteria.md` (`MI-5`, `MI-6`), `scenarios/mcp-interface/01-mcp-server-core-wiring.txt`, and `src/index.test.ts` (including `stdout` pure-JSON-RPC hygiene assertions on `dist/index.js`).
+- Propagate `D28` to `docs/journeys/mcp-interface/acceptance-criteria.md` (`MI-5`, `MI-6`), `scenarios/mcp-interface/01-mcp-server-core-wiring.txt`, and `src/index.test.ts` (stdio JSON-RPC framing & strict unknown-key refusal; built `dist/index.js` interop and full cross-vendor schema checks run in `src/integrations/replay/replay.test.ts` and `.github/workflows/ci.yml`).
 - New bounded context `src/verification/`:
   - `nouns.ts`: `VendorName` (`'anthropic' | 'gemini' | 'openai'`), `VendorToolSchemaInput`, `VendorCheckIssue`.
   - `queries.ts`: `validateVendorSchemas(tools: readonly VendorToolSchemaInput[]): readonly VendorCheckIssue[]`.
@@ -57,7 +57,7 @@ Pure checks; never stored, never refused.
 ## Tests
 
 - **Domain tests** (`src/verification/verification.test.ts`): pure given/when/then tests proving `validateVendorSchemas` passes on valid schemas and catches missing `additionalProperties: false`, untyped `headers`, missing `annotations`, `oneOf`/`anyOf`, and forbidden `proxy` property.
-- **MCP server tests** (`src/index.test.ts`): asserts `annotations`, `additionalProperties: false`, typed `headers`, strict `isError: true` refusal of smuggled `proxy` / unknown keys (`D28`), and clean `stdout` JSON-RPC framing (`D33`).
+- **MCP server & replay tests:** `src/index.test.ts` asserts `annotations`, `additionalProperties: false`, strict `isError: true` refusal of smuggled `proxy` / unknown keys (`D28`), and clean `stdout` JSON-RPC framing (`D33`); `src/integrations/replay/replay.test.ts` and `.github/workflows/ci.yml` verify built `dist/index.js` interop and full `validateVendorSchemas` checks (including typed `headers.additionalProperties`).
 - **Scenario:** `scenarios/live-verification/01-cross-vendor-mcp-conformance.txt`.
 
 ## Done when

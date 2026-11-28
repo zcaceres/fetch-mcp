@@ -297,7 +297,7 @@ export const createRealHttpGet = (options: RealHttpGetOptions = {}): HttpGetPort
               protocol: parsedProxy.protocol,
               hostname: normalizeHostname(parsedProxy.hostname),
               port: getEffectivePort(parsedProxy),
-              path: targetUrl.href,
+              path: `${targetUrl.origin}${targetUrl.pathname}${targetUrl.search}`,
               method: 'GET',
               headers: reqHeaders,
               agent: false,

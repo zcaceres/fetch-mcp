@@ -98,14 +98,14 @@ describe('real proxy transport (Slice 02, PL-9)', () => {
 
     const httpGet = createRealHttpGet({ maxBytes: 100, timeoutMs: 2000 });
     const proxyUrl = `http://alice:s3cr3t@127.0.0.1:${proxy.port}/`;
-    const okRes = await httpGet(TargetUrl('http://unresolvable.invalid/page'), {}, [], proxyUrl);
+    const okRes = await httpGet(TargetUrl('http://user:pass@unresolvable.invalid/page?a=1#frag'), {}, [], proxyUrl);
 
     expect(okRes.ok).toBe(true);
     if (okRes.ok) {
       expect(okRes.value.status).toBe(200);
       expect(new TextDecoder().decode(okRes.value.rawBytes)).toBe('{"via":"http-proxy"}');
     }
-    expect(seenUrl).toBe('http://unresolvable.invalid/page');
+    expect(seenUrl).toBe('http://unresolvable.invalid/page?a=1');
     expect(seenHost).toBe('unresolvable.invalid');
     expect(seenAuth).toBe(`Basic ${Buffer.from('alice:s3cr3t').toString('base64')}`);
 

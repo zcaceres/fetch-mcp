@@ -102,7 +102,7 @@ export const redactProxyUrl = (proxyUrl: string): string => {
     }
   }
   return proxyUrl.replace(
-    /^([a-zA-Z][a-zA-Z0-9+.-]*:\/\/)?.*@/,
+    /^([a-zA-Z][a-zA-Z0-9+.-]*:\/\/)?[\s\S]*@/,
     (_match, scheme: string | undefined) => `${scheme ?? ''}<redacted>@`,
   );
 };

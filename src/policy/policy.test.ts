@@ -101,6 +101,8 @@ describe('policy domain (Slice 01)', () => {
       expect(redactProxyUrl('http://user:p/ss@bad host:8080')).toBe('http://<redacted>@bad host:8080');
       expect(redactProxyUrl('http://user:p?ss@bad host:8080')).toBe('http://<redacted>@bad host:8080');
       expect(redactProxyUrl('http://user:p#ss@bad host:8080')).toBe('http://<redacted>@bad host:8080');
+      expect(redactProxyUrl('http://user:sec\nret@bad host')).toBe('http://<redacted>@bad host');
+      expect(redactProxyUrl('user:sec\r\nret@bad host:8080')).toBe('<redacted>@bad host:8080');
       expect(redactProxyUrl('http://proxy.internal:8080/path?email=a@b.com')).toBe(
         'http://proxy.internal:8080/path?email=a@b.com',
       );

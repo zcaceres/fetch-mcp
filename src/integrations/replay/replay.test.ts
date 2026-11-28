@@ -1,10 +1,17 @@
-import { describe, expect, it } from 'bun:test';
+import { beforeAll, describe, expect, it } from 'bun:test';
+import { execFileSync } from 'node:child_process';
+import path from 'node:path';
 import { LIVE_SAMPLES } from '../../verification/samples.ts';
 import { createDnsMock } from '../dns/mock.ts';
 import { createOriginMock } from '../origin/mock.ts';
 import { recordLiveExchangeChain, recordLiveSampleExchanges, runVerificationMatrix } from './runner.ts';
 
+const REPO_ROOT = path.resolve(import.meta.dir, '../../..');
+
 describe('offline multi-form-factor cassette replay matrix (LV-3, LV-4, LV-5, D32, D33, D34, D35)', () => {
+  beforeAll(() => {
+    execFileSync('bun', ['run', 'build'], { cwd: REPO_ROOT, stdio: 'ignore' });
+  });
   it('replays all 8 curated real-world Live Samples across cli, mcp-stdio, and mcp-http with zero SSRF backdoors', async () => {
     const report = await runVerificationMatrix({ mode: 'replay' });
 

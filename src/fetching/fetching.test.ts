@@ -667,6 +667,27 @@ describe('fetching domain', () => {
       });
     });
 
+    it('enforces MAX_RESPONSE_BYTES raw wire-byte cap even on non-2xx responses (D17, I5)', async () => {
+      const res = await executeFetch(
+        { url: 'https://example.com/big-500', format: 'html' },
+        {
+          dnsLookup: async () => ok([ResolvedIp('93.184.216.34')]),
+          httpGet: async (reqUrl) =>
+            ok({
+              status: 500,
+              url: reqUrl,
+              headers: { 'content-type': 'text/plain' },
+              rawBytes: new TextEncoder().encode('x'.repeat(200)),
+            }),
+        },
+        { maxResponseBytes: 100 },
+      );
+      expect(res).toEqual({
+        ok: false,
+        error: { kind: 'response_too_large', message: 'Response too large: exceeded 100 byte limit' },
+      });
+    });
+
     it('uses last-value-wins for case-duplicate response headers (FW-9)', async () => {
       const res = await executeFetch(
         { url: 'https://example.com/dup-ct', format: 'html' },

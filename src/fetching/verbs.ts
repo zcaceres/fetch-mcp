@@ -237,15 +237,13 @@ const isBufferTooLargeError = (error: unknown): boolean => {
 };
 
 /**
- * Enforces MAX_RESPONSE_BYTES on declared Content-Length, raw wire bytes, and decompressed output,
- * decompressing gzip/x-gzip/deflate/br and passing unknown encodings through unchanged (D9, D14, D17, I5).
+ * Enforces MAX_RESPONSE_BYTES against declared Content-Length and raw wire bytes (D9, D17, I5).
  */
-export const decodeResponseBody = (
-  url: TargetUrl,
+export const validateRawResponseSize = (
   headers: Headers,
   rawBytes: Uint8Array,
   maxBytes: number = MAX_RESPONSE_BYTES,
-): Result<string, FetchError> => {
+): Result<void, FetchError> => {
   const contentLength = findHeaderCaseInsensitive(headers, 'content-length');
   if (contentLength !== undefined) {
     const declared = Number.parseInt(contentLength, 10);
@@ -263,6 +261,22 @@ export const decodeResponseBody = (
       message: `Response too large: exceeded ${maxBytes} byte limit`,
     });
   }
+
+  return ok(undefined);
+};
+
+/**
+ * Enforces MAX_RESPONSE_BYTES on declared Content-Length, raw wire bytes, and decompressed output,
+ * decompressing gzip/x-gzip/deflate/br and passing unknown encodings through unchanged (D9, D14, D17, I5).
+ */
+export const decodeResponseBody = (
+  url: TargetUrl,
+  headers: Headers,
+  rawBytes: Uint8Array,
+  maxBytes: number = MAX_RESPONSE_BYTES,
+): Result<string, FetchError> => {
+  const sizeCheck = validateRawResponseSize(headers, rawBytes, maxBytes);
+  if (!sizeCheck.ok) return sizeCheck;
 
   if (rawBytes.byteLength === 0) {
     return ok('');

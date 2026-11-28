@@ -87,8 +87,20 @@ describe('parseCliArgs (D12)', () => {
     });
   });
 
-  it('preserves CR/LF violation when duplicate exact-case --header flags are supplied (D18)', () => {
-    const parsed = parseCliArgs([
+  it('preserves CR/LF, control, and non-Latin-1 header violations across trimming and duplicate exact-case flags (D18)', () => {
+    const trailingCrlf = parseCliArgs(['html', 'https://example.com', '--header', 'X-Bad: val\r\n']);
+    expect(trailingCrlf.ok).toBe(true);
+    if (trailingCrlf.ok && trailingCrlf.value.kind === 'fetch') {
+      expect(trailingCrlf.value.headers['X-Bad']).toBe('val\r\n');
+    }
+
+    const leadingCrlf = parseCliArgs(['html', 'https://example.com', '--header', '\r\nX-Bad: val']);
+    expect(leadingCrlf.ok).toBe(true);
+    if (leadingCrlf.ok && leadingCrlf.value.kind === 'fetch') {
+      expect(Object.keys(leadingCrlf.value.headers)).toEqual(['\r\nX-Bad']);
+    }
+
+    const dupCrlf = parseCliArgs([
       'html',
       'https://example.com',
       '--header',
@@ -96,9 +108,22 @@ describe('parseCliArgs (D12)', () => {
       '--header',
       'X-A: good',
     ]);
-    expect(parsed.ok).toBe(true);
-    if (parsed.ok && parsed.value.kind === 'fetch') {
-      expect(parsed.value.headers['X-A']).toContain('\r\n');
+    expect(dupCrlf.ok).toBe(true);
+    if (dupCrlf.ok && dupCrlf.value.kind === 'fetch') {
+      expect(dupCrlf.value.headers['X-A']).toContain('\r\n');
+    }
+
+    const dupNul = parseCliArgs([
+      'html',
+      'https://example.com',
+      '--header',
+      'X-A: bad\u0000val',
+      '--header',
+      'X-A: good',
+    ]);
+    expect(dupNul.ok).toBe(true);
+    if (dupNul.ok && dupNul.value.kind === 'fetch') {
+      expect(dupNul.value.headers['X-A']).toBe('bad\u0000val');
     }
   });
 });

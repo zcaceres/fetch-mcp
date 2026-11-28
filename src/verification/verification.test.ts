@@ -135,6 +135,13 @@ describe('verification domain — Slice 02 (LV-2, LV-6, D31, D34, D35, I7)', () 
           headers: { Location: '//user:p/w@example.com:badport/path' },
           bodyBase64: '',
         },
+        {
+          url: 'https://user:sec\nret@bad host',
+          method: 'GET',
+          status: 302,
+          headers: { Location: '//user:sec\r\nret@bad host' },
+          bodyBase64: '',
+        },
       ],
     });
     expect(withEdgeLocations.exchanges[0]?.url).toBe('https://<redacted>@example.com/path');
@@ -143,6 +150,8 @@ describe('verification domain — Slice 02 (LV-2, LV-6, D31, D34, D35, I7)', () 
     expect(withEdgeLocations.exchanges[1]?.headers.location).toBe('//cdn.example.com/path');
     expect(withEdgeLocations.exchanges[2]?.url).toBe('https://<redacted>@example.com:badport/path');
     expect(withEdgeLocations.exchanges[2]?.headers.location).toBe('//<redacted>@example.com:badport/path');
+    expect(withEdgeLocations.exchanges[3]?.url).toBe('https://<redacted>@bad host');
+    expect(withEdgeLocations.exchanges[3]?.headers.location).toBe('//<redacted>@bad host');
   });
 
   it('refuses to overwrite an existing valid cassette on live failure and redacts on success (D34, D35, I7)', () => {
