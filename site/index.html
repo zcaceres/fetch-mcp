@@ -1,0 +1,856 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Fetch MCP — SSRF-Hardened Web Fetcher for MCP &amp; CLI</title>
+    <meta
+      name="description"
+      content="A lightweight, SSRF-hardened MCP server (stdio &amp; 2025-11-25 Streamable HTTP) and local CLI for fetching public web content as HTML, Markdown, Readability articles, plain text, JSON, or YouTube transcripts."
+    />
+    <meta property="og:title" content="Fetch MCP — SSRF-Hardened Web Fetcher for MCP &amp; CLI" />
+    <meta
+      property="og:description"
+      content="Safely fetch any web content without opening your network — SSRF-hardened MCP server (stdio &amp; 2025-11-25 Streamable HTTP) and CLI."
+    />
+    <meta property="og:url" content="https://fetch.zach.dev" />
+    <meta property="og:site_name" content="Fetch MCP" />
+    <meta property="og:type" content="website" />
+    <meta property="og:image" content="https://fetch.zach.dev/assets/logo.jpg" />
+    <meta property="og:image:width" content="1376" />
+    <meta property="og:image:height" content="768" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Fetch MCP v2.0" />
+    <meta
+      name="twitter:description"
+      content="SSRF-hardened MCP server (stdio &amp; Streamable HTTP) and CLI for agent-ready web content and YouTube transcripts."
+    />
+    <meta name="twitter:image" content="https://fetch.zach.dev/assets/logo.jpg" />
+    <link rel="icon" type="image/svg+xml" href="./assets/favicon.svg" />
+    <link rel="alternate" type="text/plain" href="./llms.txt" title="LLM-friendly documentation (llms.txt)" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&family=Pixelify+Sans:wght@700&family=Space+Grotesk:wght@600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="topbar-left">
+        <button
+          id="menu-toggle"
+          class="menu-toggle"
+          type="button"
+          aria-label="Toggle navigation menu"
+          aria-expanded="false"
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+            <line x1="3" y1="6" x2="21" y2="6" />
+            <line x1="3" y1="12" x2="21" y2="12" />
+            <line x1="3" y1="18" x2="21" y2="18" />
+          </svg>
+        </button>
+        <a class="brand-link" href="#overview">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <rect x="1" y="1" width="22" height="22" fill="#007A7A" stroke="#111616" stroke-width="2" />
+            <rect x="5" y="5" width="6" height="6" fill="#FFFFFF" />
+            <rect x="13" y="5" width="6" height="2" fill="#F5E960" />
+            <rect x="13" y="9" width="6" height="2" fill="#FFFFFF" />
+            <rect x="5" y="13" width="14" height="2" fill="#FFFFFF" />
+            <rect x="5" y="17" width="9" height="2" fill="#F5E960" />
+          </svg>
+          <span class="brand-wordmark">Fetch MCP</span>
+          <span class="badge-highlight">v2.0</span>
+        </a>
+      </div>
+
+      <nav class="topbar-nav" aria-label="Primary">
+        <a class="topbar-nav-link is-active" href="#overview">Overview</a>
+        <a class="topbar-nav-link" href="#tools">MCP Tools</a>
+        <a class="topbar-nav-link" href="#cli">CLI</a>
+        <a class="topbar-nav-link" href="#security">Security</a>
+        <a
+          class="github-pill"
+          href="https://github.com/zcaceres/fetch-mcp"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <path
+              d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.53 1.032 1.53 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"
+            />
+          </svg>
+          <span class="github-pill-full">zcaceres/fetch-mcp ↗</span>
+          <span class="github-pill-short">GitHub ↗</span>
+        </a>
+      </nav>
+    </header>
+
+    <div id="sidebar-backdrop" class="sidebar-backdrop" aria-hidden="true"></div>
+
+    <div class="docset-shell">
+      <aside id="sidebar" class="sidebar" aria-label="Documentation sections">
+        <div class="sidebar-groups">
+          <div class="sidebar-group">
+            <span class="sidebar-kicker">GETTING STARTED</span>
+            <a class="sidebar-link is-active" href="#overview">
+              <span class="sidebar-indicator" aria-hidden="true">›</span>
+              <span>Overview</span>
+            </a>
+            <a class="sidebar-link" href="#quickstart">
+              <span class="sidebar-indicator" aria-hidden="true">›</span>
+              <span>Quickstart</span>
+            </a>
+            <a class="sidebar-link" href="#clients">
+              <span class="sidebar-indicator" aria-hidden="true">›</span>
+              <span>MCP Clients</span>
+            </a>
+          </div>
+
+          <div class="sidebar-group">
+            <span class="sidebar-kicker">REFERENCE</span>
+            <a class="sidebar-link" href="#tools">
+              <span class="sidebar-indicator" aria-hidden="true">›</span>
+              <span>MCP Tools</span>
+            </a>
+            <a class="sidebar-link" href="#cli">
+              <span class="sidebar-indicator" aria-hidden="true">›</span>
+              <span>Local CLI</span>
+            </a>
+            <a class="sidebar-link" href="#http">
+              <span class="sidebar-indicator" aria-hidden="true">›</span>
+              <span>Streamable HTTP</span>
+            </a>
+            <a class="sidebar-link" href="#proxies">
+              <span class="sidebar-indicator" aria-hidden="true">›</span>
+              <span>Proxies &amp; Limits</span>
+            </a>
+          </div>
+
+          <div class="sidebar-group">
+            <span class="sidebar-kicker">SECURITY</span>
+            <a class="sidebar-link" href="#security">
+              <span class="sidebar-indicator" aria-hidden="true">›</span>
+              <span>SSRF &amp; DNS Pinning</span>
+            </a>
+            <a class="sidebar-link" href="#migration">
+              <span class="sidebar-indicator" aria-hidden="true">›</span>
+              <span>v2.0 Migration</span>
+            </a>
+          </div>
+        </div>
+
+        <div class="sidebar-footer">
+          <a
+            class="sidebar-ext primary"
+            href="https://github.com/zcaceres/fetch-mcp"
+            target="_blank"
+            rel="noopener noreferrer"
+            >GitHub Repository ↗</a
+          >
+          <a
+            class="sidebar-ext"
+            href="https://www.npmjs.com/package/mcp-fetch-server"
+            target="_blank"
+            rel="noopener noreferrer"
+            >npm: mcp-fetch-server ↗</a
+          >
+          <a class="sidebar-ext" href="./llms.txt">llms.txt ↗</a>
+        </div>
+      </aside>
+
+      <main class="main-content">
+        <!-- Hero / Overview -->
+        <section id="overview" class="hero" data-section>
+          <div class="hero-copy">
+            <div class="hero-meta">
+              <span class="badge-teal">MCP 2025-11-25</span>
+              <span class="hero-kicker">STDIO · STREAMABLE HTTP · CLI</span>
+            </div>
+            <h1 class="hero-title">Safely fetch any web content without opening your network.</h1>
+            <p class="hero-lead">
+              A lightweight, SSRF-hardened MCP server (<code>mcp-fetch-server</code>) and local CLI
+              (<code>mcp-fetch</code>) that retrieves public web pages, Readability articles, JSON, and YouTube
+              transcripts in clean, agent-ready text formats. Supports Node.js <code>&gt;= 22</code> LTS and Bun.
+            </p>
+            <div class="hero-actions">
+              <a class="btn btn-primary" href="#quickstart">Quickstart Guide</a>
+              <a
+                class="btn btn-secondary"
+                href="https://github.com/zcaceres/fetch-mcp"
+                target="_blank"
+                rel="noopener noreferrer"
+                >View on GitHub ↗</a
+              >
+            </div>
+          </div>
+
+          <div class="hero-banner">
+            <img
+              src="./assets/logo.jpg"
+              alt="Fetch MCP pixel-art banner showing a classic globe transferring documents to a terminal"
+              width="1376"
+              height="768"
+            />
+          </div>
+        </section>
+
+        <!-- 01 Quickstart -->
+        <section id="quickstart" class="doc-section" data-section>
+          <div class="section-header">
+            <div class="section-title-group">
+              <span class="section-num">01</span>
+              <h2 class="section-title">Quickstart</h2>
+            </div>
+            <span class="section-meta">Node.js &gt;= 22 LTS or Bun</span>
+          </div>
+          <p class="section-prose">
+            Run <code>mcp-fetch-server</code> over <code>stdio</code> or stateless MCP <code>2025-11-25</code>
+            Streamable HTTP, or invoke the same domain core directly from your shell via <code>mcp-fetch</code>.
+          </p>
+
+          <div class="terminal-block" data-tabs>
+            <div class="terminal-header">
+              <div class="tab-list" role="tablist" aria-label="Quickstart form factors">
+                <button
+                  class="tab-btn is-active"
+                  type="button"
+                  role="tab"
+                  aria-selected="true"
+                  data-tab-target="stdio"
+                  data-filename="mcp.json"
+                >
+                  MCP stdio
+                </button>
+                <button
+                  class="tab-btn"
+                  type="button"
+                  role="tab"
+                  aria-selected="false"
+                  data-tab-target="http"
+                  data-filename="terminal"
+                >
+                  Streamable HTTP
+                </button>
+                <button
+                  class="tab-btn"
+                  type="button"
+                  role="tab"
+                  aria-selected="false"
+                  data-tab-target="cli"
+                  data-filename="terminal"
+                >
+                  Local CLI
+                </button>
+              </div>
+              <div class="terminal-actions">
+                <span class="terminal-filename" data-tab-filename>mcp.json</span>
+                <button class="copy-btn" type="button" data-copy-block>Copy</button>
+              </div>
+            </div>
+            <div class="terminal-body">
+              <div class="terminal-panel is-active" data-tab-panel="stdio">
+                <pre><code>{
+  "mcpServers": {
+    "fetch": {
+      "command": "npx",
+      "args": ["mcp-fetch-server"]
+    }
+  }
+}</code></pre>
+              </div>
+              <div class="terminal-panel" data-tab-panel="http">
+                <pre><code># Start stateless MCP 2025-11-25 Streamable HTTP on http://127.0.0.1:3000/mcp
+npx mcp-fetch-server --http --host 127.0.0.1 --port 3000</code></pre>
+              </div>
+              <div class="terminal-panel" data-tab-panel="cli">
+                <pre><code># Run directly with npx or install globally with: npm install -g mcp-fetch-server
+npx mcp-fetch readable https://example.com
+npx mcp-fetch transcript 'https://www.youtube.com/watch?v=jNQXAC9IVRw' --lang en</code></pre>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 02 MCP Clients -->
+        <section id="clients" class="doc-section" data-section>
+          <div class="section-header">
+            <div class="section-title-group">
+              <span class="section-num">02</span>
+              <h2 class="section-title">MCP Clients</h2>
+            </div>
+            <span class="section-meta">Claude · Gemini · OpenAI · Inspector</span>
+          </div>
+          <p class="section-prose">
+            Every tool schema conforms to Anthropic, Google Gemini, and OpenAI MCP specifications with root
+            <code>additionalProperties: false</code>, typed <code>headers</code>, and <code>2025-11-25</code> read-only
+            annotations.
+          </p>
+
+          <div class="terminal-block" data-tabs>
+            <div class="terminal-header">
+              <div class="tab-list" role="tablist" aria-label="MCP client configurations">
+                <button
+                  class="tab-btn is-active"
+                  type="button"
+                  role="tab"
+                  aria-selected="true"
+                  data-tab-target="env"
+                  data-filename="mcp.json (with limits &amp; proxy)"
+                >
+                  Limits &amp; Proxy Env
+                </button>
+                <button
+                  class="tab-btn"
+                  type="button"
+                  role="tab"
+                  aria-selected="false"
+                  data-tab-target="inspector"
+                  data-filename="terminal"
+                >
+                  Streamable HTTP / Inspector
+                </button>
+                <button
+                  class="tab-btn"
+                  type="button"
+                  role="tab"
+                  aria-selected="false"
+                  data-tab-target="claude"
+                  data-filename="claude_desktop_config.json"
+                >
+                  Minimal stdio
+                </button>
+              </div>
+              <div class="terminal-actions">
+                <span class="terminal-filename" data-tab-filename>mcp.json (with limits &amp; proxy)</span>
+                <button class="copy-btn" type="button" data-copy-block>Copy</button>
+              </div>
+            </div>
+            <div class="terminal-body">
+              <div class="terminal-panel is-active" data-tab-panel="env">
+                <pre><code>{
+  "mcpServers": {
+    "fetch": {
+      "command": "npx",
+      "args": ["mcp-fetch-server"],
+      "env": {
+        "DEFAULT_LIMIT": "50000",
+        "MAX_RESPONSE_BYTES": "10485760",
+        "HTTPS_PROXY": "socks5://127.0.0.1:1080"
+      }
+    }
+  }
+}</code></pre>
+              </div>
+              <div class="terminal-panel" data-tab-panel="inspector">
+                <pre><code># Terminal 1 — launch Streamable HTTP server
+npx mcp-fetch-server --http --port 3000
+
+# Terminal 2 — connect with stock MCP Inspector
+npx @modelcontextprotocol/inspector --url http://127.0.0.1:3000/mcp</code></pre>
+              </div>
+              <div class="terminal-panel" data-tab-panel="claude">
+                <pre><code>{
+  "mcpServers": {
+    "fetch": {
+      "command": "npx",
+      "args": ["mcp-fetch-server"]
+    }
+  }
+}</code></pre>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 03 MCP Tools -->
+        <section id="tools" class="doc-section" data-section>
+          <div class="section-header">
+            <div class="section-title-group">
+              <span class="section-num">03</span>
+              <h2 class="section-title">MCP Tools &amp; Formats</h2>
+            </div>
+            <span class="section-meta">Read-only · strict schemas</span>
+          </div>
+          <p class="section-prose">
+            Every tool advertises MCP <code>2025-11-25</code> read-only annotations and strictly rejects unexpected
+            keys (such as a caller-supplied <code>proxy</code>) with <code>isError: true</code> before any network I/O.
+            Unknown tool names and invalid pagination cursors return JSON-RPC <code>-32602</code>.
+          </p>
+
+          <div class="pill-row" aria-label="MCP tool annotations">
+            <span class="badge-teal">readOnlyHint: true</span>
+            <span class="badge-teal">destructiveHint: false</span>
+            <span class="badge-teal">idempotentHint: true</span>
+            <span class="badge-teal">openWorldHint: true</span>
+            <span class="badge-highlight">additionalProperties: false</span>
+          </div>
+
+          <div class="spec-list">
+            <div class="spec-row">
+              <span class="spec-key">fetch_readable</span>
+              <span class="spec-desc"
+                >Extracts main article content via Mozilla Readability, converts to Markdown, and prepends
+                <code># &lt;title&gt;</code> when present.</span
+              >
+              <span class="spec-tag">markdown</span>
+            </div>
+            <div class="spec-row">
+              <span class="spec-key">fetch_markdown</span>
+              <span class="spec-desc"
+                >Fetches a public URL, strips <code>&lt;script&gt;</code> and <code>&lt;style&gt;</code> elements, and
+                converts the document to Markdown via Turndown.</span
+              >
+              <span class="spec-tag">markdown</span>
+            </div>
+            <div class="spec-row">
+              <span class="spec-key">fetch_text</span>
+              <span class="spec-desc"
+                >Strips <code>&lt;script&gt;</code>, <code>&lt;style&gt;</code>, and HTML tags, returning whitespace-normalized
+                plain text.</span
+              >
+              <span class="spec-tag">text/plain</span>
+            </div>
+            <div class="spec-row">
+              <span class="spec-key">fetch_json</span>
+              <span class="spec-desc"
+                >Fetches a JSON endpoint, validates via <code>JSON.parse</code>, and returns compact JSON (failing
+                explicitly on invalid JSON).</span
+              >
+              <span class="spec-tag">json</span>
+            </div>
+            <div class="spec-row">
+              <span class="spec-key">fetch_html</span>
+              <span class="spec-desc"
+                >Retrieves a URL and returns its unmodified UTF-8 HTML body within <code>MAX_RESPONSE_BYTES</code>.</span
+              >
+              <span class="spec-tag">text/html</span>
+            </div>
+            <div class="spec-row">
+              <span class="spec-key">fetch_transcript</span>
+              <span class="spec-desc"
+                >Fetches YouTube captions (tries local <code>yt-dlp</code> with manual &amp; auto-generated subtitles
+                first, falling back to direct watch-page + XML extraction). Accepts optional <code>lang</code> (default
+                <code>"en"</code>) and lists available codes when missing.</span
+              >
+              <span class="spec-tag">transcript</span>
+            </div>
+          </div>
+
+          <h3 class="subsection-kicker">Common Tool Parameters</h3>
+          <div class="spec-list">
+            <div class="spec-row">
+              <span class="spec-key">url</span>
+              <span class="spec-desc">Public <code>http:</code> or <code>https:</code> URL to fetch.</span>
+              <span class="spec-tag">string · req</span>
+            </div>
+            <div class="spec-row">
+              <span class="spec-key">headers</span>
+              <span class="spec-desc"
+                >Optional custom request headers (<code>Record&lt;string, string&gt;</code>); CR/LF and invalid header
+                characters are rejected.</span
+              >
+              <span class="spec-tag">object · opt</span>
+            </div>
+            <div class="spec-row">
+              <span class="spec-key">max_length</span>
+              <span class="spec-desc"
+                >Maximum characters to return (defaults to <code>DEFAULT_LIMIT</code> / <code>5000</code>;
+                <code>0</code> = unlimited). Returns sliced text only with no footer.</span
+              >
+              <span class="spec-tag">number · opt</span>
+            </div>
+            <div class="spec-row">
+              <span class="spec-key">start_index</span>
+              <span class="spec-desc"
+                >Zero-based starting character index for pagination (default <code>0</code>; returns
+                <code>""</code> if at or past output length).</span
+              >
+              <span class="spec-tag">number · opt</span>
+            </div>
+            <div class="spec-row">
+              <span class="spec-key">lang</span>
+              <span class="spec-desc"
+                ><code>fetch_transcript</code> only. Caption language code (default <code>"en"</code>; matches exact
+                code first, then regional prefix like <code>en</code> → <code>en-US</code>).</span
+              >
+              <span class="spec-tag">string · opt</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- 04 Local CLI -->
+        <section id="cli" class="doc-section" data-section>
+          <div class="section-header">
+            <div class="section-title-group">
+              <span class="section-num">04</span>
+              <h2 class="section-title">Local CLI</h2>
+            </div>
+            <span class="section-meta">mcp-fetch &lt;command&gt; &lt;url&gt;</span>
+          </div>
+          <p class="section-prose">
+            Use <code>mcp-fetch &lt;command&gt; &lt;url&gt; [flags]</code> directly from terminals or scripts. Subcommands
+            mirror the MCP tools: <code>html</code>, <code>markdown</code>, <code>readable</code>, <code>text</code>,
+            <code>json</code>, and <code>transcript</code>. Domain errors write to <code>stderr</code> and exit
+            <code>1</code>.
+          </p>
+
+          <div class="spec-list">
+            <div class="spec-row">
+              <span class="spec-key">--header &lt;K:V&gt;</span>
+              <span class="spec-desc">Custom request header (repeatable; case-insensitive last value wins).</span>
+              <span class="spec-tag">all commands</span>
+            </div>
+            <div class="spec-row">
+              <span class="spec-key">--max-length &lt;N&gt;</span>
+              <span class="spec-desc">Maximum characters to return (<code>0</code> = unlimited).</span>
+              <span class="spec-tag">all commands</span>
+            </div>
+            <div class="spec-row">
+              <span class="spec-key">--start-index &lt;N&gt;</span>
+              <span class="spec-desc">Start content from this character offset.</span>
+              <span class="spec-tag">all commands</span>
+            </div>
+            <div class="spec-row">
+              <span class="spec-key">--proxy &lt;URL&gt;</span>
+              <span class="spec-desc"
+                >Explicit proxy override (<code>http</code>, <code>https</code>, <code>socks4</code>,
+                <code>socks4a</code>, <code>socks5</code>, <code>socks5h</code>, or <code>host:port</code>; bypasses
+                <code>NO_PROXY</code>).</span
+              >
+              <span class="spec-tag">CLI only</span>
+            </div>
+            <div class="spec-row">
+              <span class="spec-key">--lang &lt;code&gt;</span>
+              <span class="spec-desc"
+                >Caption language code (default <code>en</code>). Rejected with a validation error on non-<code>transcript</code>
+                subcommands.</span
+              >
+              <span class="spec-tag">transcript</span>
+            </div>
+            <div class="spec-row">
+              <span class="spec-key">--help / --version</span>
+              <span class="spec-desc">Print usage summary or package version (<code>2.0.0</code>).</span>
+              <span class="spec-tag">meta</span>
+            </div>
+          </div>
+
+          <div class="terminal-block">
+            <div class="terminal-header">
+              <span class="terminal-filename">CLI examples</span>
+              <button class="copy-btn" type="button" data-copy-block>Copy</button>
+            </div>
+            <div class="terminal-body">
+              <pre><code># Extract readable article Markdown without boilerplate
+mcp-fetch readable https://example.com/blog/post
+
+# Fetch YouTube transcript (quote URLs containing '?' in zsh)
+mcp-fetch transcript 'https://www.youtube.com/watch?v=jNQXAC9IVRw' --lang en
+
+# Pass custom headers and window bounds
+mcp-fetch html https://example.com --header "Accept-Language: en-US" --max-length 10000
+
+# Route through a SOCKS5 proxy
+mcp-fetch json https://api.example.com/data --proxy socks5://127.0.0.1:1080</code></pre>
+            </div>
+          </div>
+        </section>
+
+        <!-- 05 Streamable HTTP -->
+        <section id="http" class="doc-section" data-section>
+          <div class="section-header">
+            <div class="section-title-group">
+              <span class="section-num">05</span>
+              <h2 class="section-title">Streamable HTTP</h2>
+            </div>
+            <span class="section-meta">POST /mcp · stateless · DNS-rebinding guard</span>
+          </div>
+          <p class="section-prose">
+            Launch <code>mcp-fetch-server --http</code> to expose stateless MCP <code>2025-11-25</code> Streamable HTTP
+            on <code>POST /mcp</code>. Requests validate both <code>Host</code> and <code>Origin</code> headers against
+            the bound address (returning <code>403</code> on mismatch). Unknown paths (including legacy <code>/sse</code>)
+            return <code>404</code>, and non-<code>POST</code> methods return <code>405</code>.
+          </p>
+
+          <div class="spec-list">
+            <div class="spec-row">
+              <span class="spec-key">--http</span>
+              <span class="spec-desc">Enable stateless Streamable HTTP mode instead of default <code>stdio</code>.</span>
+              <span class="spec-tag">default: off</span>
+            </div>
+            <div class="spec-row">
+              <span class="spec-key">--host &lt;addr&gt;</span>
+              <span class="spec-desc">Bind address for the HTTP listener (requires <code>--http</code>).</span>
+              <span class="spec-tag">127.0.0.1</span>
+            </div>
+            <div class="spec-row">
+              <span class="spec-key">--port &lt;n&gt;</span>
+              <span class="spec-desc">Listen port <code>1</code>–<code>65535</code> (requires <code>--http</code>).</span>
+              <span class="spec-tag">3000</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- 06 Proxies & Limits -->
+        <section id="proxies" class="doc-section" data-section>
+          <div class="section-header">
+            <div class="section-title-group">
+              <span class="section-num">06</span>
+              <h2 class="section-title">Proxies &amp; Operator Limits</h2>
+            </div>
+            <span class="section-meta">Fail-fast env validation</span>
+          </div>
+          <p class="section-prose">
+            <code>mcp-fetch-server</code> parses <code>DEFAULT_LIMIT</code> and <code>MAX_RESPONSE_BYTES</code> at
+            startup and exits <code>1</code> immediately if invalid. Proxy routing is re-evaluated on every redirect hop
+            and supports HTTP, HTTPS, SOCKS4/4a/5/5h, and bare <code>host:port</code>.
+          </p>
+
+          <div class="spec-list">
+            <div class="spec-row">
+              <span class="spec-key">DEFAULT_LIMIT</span>
+              <span class="spec-desc"
+                >Default character limit for responses (non-negative integer; <code>0</code> = unlimited; fails
+                explicitly if invalid).</span
+              >
+              <span class="spec-tag">5000</span>
+            </div>
+            <div class="spec-row">
+              <span class="spec-key">MAX_RESPONSE_BYTES</span>
+              <span class="spec-desc"
+                >Maximum raw wire and decompressed response size in bytes (positive integer; also enforced on
+                <code>yt-dlp</code> subtitle files).</span
+              >
+              <span class="spec-tag">10 MB</span>
+            </div>
+            <div class="spec-row">
+              <span class="spec-key">HTTPS_PROXY</span>
+              <span class="spec-desc"
+                >Proxy URL for <code>https://</code> targets (<code>HTTPS_PROXY</code> → <code>https_proxy</code> →
+                <code>HTTP_PROXY</code> → <code>http_proxy</code> → <code>ALL_PROXY</code> →
+                <code>all_proxy</code>).</span
+              >
+              <span class="spec-tag">https:</span>
+            </div>
+            <div class="spec-row">
+              <span class="spec-key">HTTP_PROXY / ALL_PROXY</span>
+              <span class="spec-desc"
+                >Proxy URL for <code>http://</code> targets and fallback for all HTTP(S) traffic (including
+                <code>yt-dlp --proxy</code>).</span
+              >
+              <span class="spec-tag">http/all</span>
+            </div>
+            <div class="spec-row">
+              <span class="spec-key">NO_PROXY / no_proxy</span>
+              <span class="spec-desc"
+                >Comma-separated hosts, <code>.domain</code> suffixes, <code>:port</code> entries,
+                <code>[ipv6]:port</code>, or <code>*</code> bypassing Operator env proxies (non-empty
+                <code>NO_PROXY</code> takes precedence).</span
+              >
+              <span class="spec-tag">bypass</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- 07 Security -->
+        <section id="security" class="doc-section" data-section>
+          <div class="section-header">
+            <div class="section-title-group">
+              <span class="section-num">07</span>
+              <h2 class="section-title">SSRF &amp; Security Model</h2>
+            </div>
+            <span class="section-meta">Fail-closed by default</span>
+          </div>
+
+          <div class="callout">
+            <div class="callout-body">
+              <div class="callout-heading">
+                <span class="badge-highlight">SECURITY MODEL</span>
+                <h3 class="callout-title">Hardened by default, never silent.</h3>
+              </div>
+              <p class="callout-text">
+                Every request, redirect hop, DNS resolution, decompression stream, and MCP tool invocation enforces
+                explicit fail-closed invariants with zero escape hatches for untrusted AI callers.
+              </p>
+            </div>
+            <a
+              class="callout-cta"
+              href="https://github.com/zcaceres/fetch-mcp/blob/main/REQUIREMENTS.md#invariants"
+              target="_blank"
+              rel="noopener noreferrer"
+              >Read Invariants ↗</a
+            >
+          </div>
+
+          <div class="spec-list">
+            <div class="spec-row">
+              <span class="spec-key">SSRF Blocking</span>
+              <span class="spec-desc"
+                >Restricts all URLs and up to 10 redirect hops to <code>http:</code>/<code>https:</code>; blocks
+                <code>localhost</code>, <code>*.localhost</code>, and all IANA-reserved IPv4/IPv6 ranges (including
+                IPv4-mapped IPv6 and multicast).</span
+              >
+              <span class="spec-tag">fail-closed</span>
+            </div>
+            <div class="spec-row">
+              <span class="spec-key">DNS Pinning</span>
+              <span class="spec-desc"
+                >Direct connections validate all resolved DNS records and pin them straight to sockets to prevent DNS
+                rebinding; proxied connections delegate hostname DNS to the proxy.</span
+              >
+              <span class="spec-tag">no TOCTOU</span>
+            </div>
+            <div class="spec-row">
+              <span class="spec-key">YouTube Isolation</span>
+              <span class="spec-desc"
+                >Restricts transcript tools to allowlisted YouTube domains, validates <code>lang</code> strictly, passes
+                <code>--</code> end-of-options sentinel to <code>yt-dlp</code>, and never swallows SSRF/validation
+                errors into fallback.</span
+              >
+              <span class="spec-tag">allowlist</span>
+            </div>
+            <div class="spec-row">
+              <span class="spec-key">Header Hygiene</span>
+              <span class="spec-desc"
+                >Strips <code>Authorization</code>, <code>Cookie</code>, and <code>Proxy-Authorization</code> across
+                cross-origin redirects and cross-origin YouTube caption track URLs; rejects CR/LF injection.</span
+              >
+              <span class="spec-tag">cross-origin</span>
+            </div>
+            <div class="spec-row">
+              <span class="spec-key">Resource Caps</span>
+              <span class="spec-desc"
+                >Enforces <code>MAX_RESPONSE_BYTES</code> across declared <code>Content-Length</code>, raw wire bytes,
+                decompressed <code>gzip</code>/<code>deflate</code>/<code>br</code> streams, and <code>yt-dlp</code>
+                files; rejects binary <code>Content-Type</code>s; <code>30s</code> single-attempt timeout.</span
+              >
+              <span class="spec-tag">10 MB / 30s</span>
+            </div>
+            <div class="spec-row">
+              <span class="spec-key">Trust Boundary</span>
+              <span class="spec-desc"
+                >MCP tool callers can never supply or override proxy routing — only Operator environment variables
+                configure MCP proxies.</span
+              >
+              <span class="spec-tag">Operator-only</span>
+            </div>
+            <div class="spec-row">
+              <span class="spec-key">Secret Redaction</span>
+              <span class="spec-desc"
+                >Proxy usernames and passwords are always redacted from error messages, CLI <code>stderr</code>, MCP
+                tool results, and recorded test cassettes.</span
+              >
+              <span class="spec-tag">redacted</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- 08 Migration -->
+        <section id="migration" class="doc-section" data-section>
+          <div class="section-header">
+            <div class="section-title-group">
+              <span class="section-num">08</span>
+              <h2 class="section-title">v2.0 Migration Guide</h2>
+            </div>
+            <span class="section-meta">Upgrading from v1.x</span>
+          </div>
+          <p class="section-prose">
+            Version <code>2.0.0</code> is a clean breaking release aligning tool names, CLI flags, MCP
+            <code>2025-11-25</code> compliance, and explicit error semantics.
+          </p>
+
+          <div class="spec-list">
+            <div class="spec-row">
+              <span class="spec-key">MCP Tools</span>
+              <span class="spec-desc"
+                ><code>fetch_txt</code> → <code>fetch_text</code>; <code>fetch_youtube_transcript</code> →
+                <code>fetch_transcript</code>.</span
+              >
+              <span class="spec-tag">renamed</span>
+            </div>
+            <div class="spec-row">
+              <span class="spec-key">CLI Subcommands</span>
+              <span class="spec-desc"
+                ><code>txt</code> → <code>text</code>; <code>youtube</code> → <code>transcript</code>. Added repeatable
+                <code>--header</code>; <code>--lang</code> is now rejected on non-<code>transcript</code> commands.</span
+              >
+              <span class="spec-tag">renamed</span>
+            </div>
+            <div class="spec-row">
+              <span class="spec-key">Strict Arguments</span>
+              <span class="spec-desc"
+                >Unexpected MCP tool properties (including any caller-supplied <code>proxy</code>) return
+                <code>isError: true</code> instead of being ignored.</span
+              >
+              <span class="spec-tag">strict</span>
+            </div>
+            <div class="spec-row">
+              <span class="spec-key">Config &amp; Captions</span>
+              <span class="spec-desc"
+                >Invalid <code>DEFAULT_LIMIT</code>, <code>MAX_RESPONSE_BYTES</code>, or proxy URLs fail fast instead of
+                silently falling back; missing YouTube caption languages fail listing available codes.</span
+              >
+              <span class="spec-tag">explicit</span>
+            </div>
+            <div class="spec-row">
+              <span class="spec-key">Runtime Floor</span>
+              <span class="spec-desc">Requires Node.js <code>&gt;= 22</code> LTS or Bun (Node 18 &amp; 20 are EOL).</span>
+              <span class="spec-tag">Node 22+</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- Footer -->
+        <footer class="site-footer">
+          <span>
+            fetch.zach.dev · MIT License · Built by
+            <a class="footer-link" href="https://zach.dev" target="_blank" rel="noopener noreferrer">zach.dev</a>
+          </span>
+          <div class="footer-links">
+            <a
+              class="footer-link"
+              href="https://x.com/zachcaceres"
+              target="_blank"
+              rel="noopener noreferrer"
+              >X (@zachcaceres) ↗</a
+            >
+            <a
+              class="footer-link"
+              href="https://github.com/zcaceres"
+              target="_blank"
+              rel="noopener noreferrer"
+              >GitHub (@zcaceres) ↗</a
+            >
+            <a
+              class="footer-link"
+              href="https://github.com/zcaceres/fetch-mcp"
+              target="_blank"
+              rel="noopener noreferrer"
+              >Repo ↗</a
+            >
+            <a
+              class="footer-link"
+              href="https://www.npmjs.com/package/mcp-fetch-server"
+              target="_blank"
+              rel="noopener noreferrer"
+              >npm ↗</a
+            >
+            <a class="footer-link" href="./llms.txt">llms.txt</a>
+          </div>
+        </footer>
+      </main>
+    </div>
+
+    <div id="zach-footer-logo" class="zach-footer-logo">
+      <button id="zach-footer-dismiss" class="zach-footer-dismiss" type="button" aria-label="Dismiss">&times;</button>
+      <a href="https://zach.dev" target="_blank" rel="noopener noreferrer">
+        <img src="https://zach.dev/images/statue.png" alt="zach.dev" class="zach-footer-statue" width="64" height="64" />
+        <span class="zach-footer-text">Built by zach.dev</span>
+      </a>
+    </div>
+
+    <script src="./app.js" defer></script>
+  </body>
+</html>

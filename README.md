@@ -3,8 +3,11 @@
 ![fetch mcp logo](logo.jpg)
 
 [![npm version](https://img.shields.io/npm/v/mcp-fetch-server.svg)](https://www.npmjs.com/package/mcp-fetch-server)
+[![docs](https://img.shields.io/badge/docs-fetch.zach.dev-007A7A.svg)](https://fetch.zach.dev)
 
-A lightweight, SSRF-hardened MCP server (`mcp-fetch-server`, supporting both `stdio` and `2025-11-25` Streamable HTTP) and local CLI (`mcp-fetch`) for fetching public web content as HTML, Markdown, readable article Markdown, plain text, JSON, or YouTube transcripts. Supports Node.js `>= 22` LTS and Bun.
+**Safely fetch any web content without opening your network.** A lightweight, SSRF-hardened MCP server (`mcp-fetch-server`, supporting both `stdio` and `2025-11-25` Streamable HTTP) and local CLI (`mcp-fetch`) for fetching public web content as HTML, Markdown, readable article Markdown, plain text, JSON, or YouTube transcripts. Supports Node.js `>= 22` LTS and Bun.
+
+**Docs:** [fetch.zach.dev](https://fetch.zach.dev) · **LLM-friendly docs:** [fetch.zach.dev/llms.txt](https://fetch.zach.dev/llms.txt)
 
 <a href="https://glama.ai/mcp/servers/nu09wf23ao">
   <img width="380" height="200" src="https://glama.ai/mcp/servers/nu09wf23ao/badge" alt="Fetch Server MCP server" />

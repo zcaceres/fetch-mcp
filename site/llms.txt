@@ -1,0 +1,112 @@
+# Fetch MCP (`mcp-fetch-server` v2.0.0)
+
+> Safely fetch any web content without opening your network. Lightweight, SSRF-hardened MCP server (`mcp-fetch-server`, supporting `stdio` and `2025-11-25` Streamable HTTP) and local CLI (`mcp-fetch`) for fetching public HTTP(S) content as HTML, Markdown, Mozilla Readability articles, plain text, JSON, or YouTube transcripts. Supports Node.js `>= 22` LTS and Bun.
+
+- Site: https://fetch.zach.dev
+- Source: https://github.com/zcaceres/fetch-mcp
+- Package: https://www.npmjs.com/package/mcp-fetch-server
+- Author: https://zach.dev | X: https://x.com/zachcaceres | GitHub: https://github.com/zcaceres
+- Requirements & Invariants: https://github.com/zcaceres/fetch-mcp/blob/main/REQUIREMENTS.md
+- README: https://github.com/zcaceres/fetch-mcp/blob/main/README.md
+
+## Quickstart
+
+### MCP Server (`stdio`)
+
+```json
+{
+  "mcpServers": {
+    "fetch": {
+      "command": "npx",
+      "args": ["mcp-fetch-server"]
+    }
+  }
+}
+```
+
+### MCP Server (Streamable HTTP — `2025-11-25`)
+
+```bash
+npx mcp-fetch-server --http --host 127.0.0.1 --port 3000
+```
+
+- Endpoint: `POST /mcp` (stateless per-request handling; defaults to `127.0.0.1:3000`).
+- Flags: `--http` (enable Streamable HTTP), `--host <addr>` (default `127.0.0.1`, requires `--http`), `--port <n>` (`1`–`65535`, default `3000`, requires `--http`).
+- Guards: Validates `Host` and `Origin` against the bound address (`403` on mismatch to prevent localhost DNS rebinding). Unknown paths (including legacy `/sse`) return `404`; non-`POST` methods return `405`.
+
+### Local CLI (`mcp-fetch`)
+
+```bash
+npx mcp-fetch <command> <url> [flags]
+# Or install globally:
+npm install -g mcp-fetch-server
+mcp-fetch readable https://example.com/blog/post
+mcp-fetch transcript 'https://www.youtube.com/watch?v=jNQXAC9IVRw' --lang en
+```
+
+## MCP Tools
+
+All tools conform to MCP `2025-11-25` (Anthropic, Google Gemini, OpenAI compatible), carry read-only annotations (`readOnlyHint: true`, `destructiveHint: false`, `idempotentHint: true`, `openWorldHint: true`), and enforce `additionalProperties: false`.
+
+- `fetch_html`: Fetch a public URL and return its unmodified UTF-8 HTML content.
+- `fetch_markdown`: Fetch a public URL, strip `<script>` and `<style>`, and convert to Markdown.
+- `fetch_readable`: Extract the main article content using Mozilla Readability, convert to Markdown, and prepend `# <title>` when present.
+- `fetch_text`: Fetch a public URL, strip `<script>` and `<style>`, and return whitespace-normalized plain text.
+- `fetch_json`: Fetch a JSON resource, validate via `JSON.parse`, and return compact JSON.
+- `fetch_transcript`: Fetch a YouTube video's captions (tries local `yt-dlp` first with `--write-sub` and `--write-auto-sub`, falling back to direct watch-page + caption XML extraction). Returns `[Transcript language: ...]` followed by `[m:ss]` timestamped lines. Accepts optional `lang` (default `"en"`); fails explicitly listing available language codes if absent.
+
+### Common MCP Tool Parameters
+
+- `url` (string, required): Public `http:` or `https:` URL to fetch.
+- `headers` (`Record<string, string>`, optional): Custom request headers (CR/LF and invalid header characters are rejected).
+- `max_length` (number, optional): Maximum characters to return (default: `DEFAULT_LIMIT` / `5000`; `0` = unlimited). Returns sliced text only with no footer.
+- `start_index` (number, optional): Zero-based starting character index (default: `0`; returns `""` if at or past output length).
+- `lang` (string, optional, `fetch_transcript` only): Caption language code (default: `"en"`; exact match first, then regional prefix such as `en` -> `en-US`).
+
+### MCP Error Semantics
+
+- Unknown tool names on `tools/call` and unrecognized `cursor` values on `tools/list` return JSON-RPC `-32602` (`InvalidParams`).
+- Argument validation errors — including any unexpected property such as a caller-supplied `proxy` key — and domain/transport/SSRF errors return `CallToolResult` with `isError: true`.
+- MCP tool callers can never supply or override proxy routing (Operator environment variables only).
+
+## Local CLI (`mcp-fetch`)
+
+Subcommands: `html`, `markdown`, `readable`, `text`, `json`, `transcript`.
+
+Flags:
+- `--header <Key:Value>`: Custom request header (repeatable; case-insensitive last value wins).
+- `--max-length <N>`: Maximum characters to return (`0` = unlimited).
+- `--start-index <N>`: Start content from this character index.
+- `--proxy <URL>`: Explicit proxy URL (`http`, `https`, `socks4`, `socks4a`, `socks5`, `socks5h`, or bare `host:port`; bypasses `NO_PROXY`).
+- `--lang <code>`: Caption language code (valid only with `transcript`; rejected on web subcommands; default `en`).
+- `--help` / `--version`: Print help or version (`2.0.0`).
+
+## Environment Variables (Operator Policy)
+
+`mcp-fetch-server` validates `DEFAULT_LIMIT` and `MAX_RESPONSE_BYTES` fail-fast at startup (writing to `stderr` and exiting `1` if invalid).
+
+- `DEFAULT_LIMIT`: Default character limit for responses (non-negative integer; default `5000`; `0` = unlimited; fails explicitly if invalid).
+- `MAX_RESPONSE_BYTES`: Maximum raw wire and decompressed response body size in bytes (positive integer; default `10485760` / 10 MB; also enforced on `yt-dlp` subtitle files; fails explicitly if invalid).
+- `HTTPS_PROXY` / `https_proxy`: Proxy URL for `https://` requests (`HTTPS_PROXY` -> `https_proxy` -> `HTTP_PROXY` -> `http_proxy` -> `ALL_PROXY` -> `all_proxy`).
+- `HTTP_PROXY` / `http_proxy`: Proxy URL for `http://` requests (and fallback for `https://`).
+- `ALL_PROXY` / `all_proxy`: Fallback proxy URL for HTTP/HTTPS requests (also forwarded to `yt-dlp --proxy`).
+- `NO_PROXY` / `no_proxy`: Comma-separated hostnames, `.domain` suffixes, `:port` entries, `[ipv6]:port`, or `*` bypassing Operator env proxies (non-empty `NO_PROXY` takes precedence over `no_proxy`).
+
+## Security Invariants
+
+- **I1 (SSRF Blocking):** Restricts every request and up to 10 redirect hops to `http:`/`https:`; blocks `localhost`, `*.localhost`, and all IANA-reserved IPv4/IPv6 ranges (including IPv4-mapped IPv6 and multicast); fails closed on malformed IPs.
+- **I2 (DNS Pinning):** Direct connections resolve and validate all DNS records and pin validated IPs directly to sockets to prevent DNS rebinding; proxied connections delegate public hostname DNS to the proxy.
+- **I3 (YouTube Isolation):** `fetch_transcript` / `mcp-fetch transcript` allows only allowlisted YouTube hosts (`youtube.com`, `www.youtube.com`, `m.youtube.com`, `music.youtube.com`, `youtu.be`), validates `lang` strictly, passes `--` sentinel to `yt-dlp`, and never swallows validation/SSRF errors into fallback.
+- **I4 (Cross-Origin Header Hygiene):** Strips `Authorization`, `Cookie`, and `Proxy-Authorization` across cross-origin redirects and cross-origin YouTube caption URLs; rejects CR/LF and invalid header characters.
+- **I5 (Resource Safety):** Enforces `MAX_RESPONSE_BYTES` across `Content-Length`, wire bytes, decompressed `gzip`/`deflate`/`br` streams, and `yt-dlp` subtitle files; rejects binary `Content-Type` responses; `30s` single-attempt timeout.
+- **I6 (Operator Proxy Trust Boundary):** MCP tool callers can never supply or override proxy routing.
+- **I7 (Secret Redaction):** Proxy credentials are always redacted from error messages, CLI `stderr`, MCP tool results, and diagnostic output.
+
+## Breaking Changes in v2.0.0
+
+- MCP tools renamed: `fetch_txt` -> `fetch_text`, `fetch_youtube_transcript` -> `fetch_transcript`.
+- CLI subcommands renamed: `txt` -> `text`, `youtube` -> `transcript`; added repeatable `--header`; `--lang` rejected on web subcommands.
+- Strict MCP argument validation (`additionalProperties: false`) rejects unexpected keys with `isError: true`.
+- Invalid `DEFAULT_LIMIT`, `MAX_RESPONSE_BYTES`, or proxy URLs fail explicitly instead of silently falling back.
+- Unavailable YouTube caption languages fail explicitly and list available language codes.
+- Runtime floor bumped to Node.js `>= 22` LTS or Bun.

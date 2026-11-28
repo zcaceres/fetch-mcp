@@ -27,6 +27,7 @@ something they cover.
 - Anthropic / MCP `2025-11-25` server specification & `@modelcontextprotocol/inspector` docs (reviewed 2026-11-27): `stdio` stdout hygiene, Streamable HTTP transport, `2025-11-25` tool annotations, and cross-client testing.
 - Google Gemini CLI MCP server documentation (reviewed 2026-11-27): `mcpServers` stdio/Streamable HTTP configuration and Gemini API tool schema validation rules.
 - OpenAI Responses API & Agents SDK MCP documentation (reviewed 2026-11-27): `MCPServerStdio` / `MCPServerStreamableHttp` / hosted MCP expectations, root `additionalProperties: false` strict schema rules, and tool safety annotations.
+- `zcaceres/spotify-cli` `.github/workflows/docs.yml` (reviewed 2026-11-28): GitHub Actions + GitHub Pages (`actions/deploy-pages`) static site deployment pattern for `*.zach.dev` project sites.
 
 ## Terminology
 
@@ -109,7 +110,7 @@ system computes a value for us, its rule for it is recorded here, as that system
 
 - **Security (SSRF & Isolation):** Every Target URL and redirect hop is restricted to `http:`/`https:` and blocked from `localhost`, `*.localhost`, and all IANA-reserved IPv4/IPv6 ranges (including IPv4-mapped IPv6 and multicast), failing closed on malformed IPs or DNS failures; direct connections pin validated DNS records to sockets while proxied connections delegate hostname DNS resolution to the proxy across both `fetch` and `fetch transcript` (D8, D23, D26, I1, I2, I3, I4, I6).
 - **Resource Safety:** Raw Response bodies are capped at `MAX_RESPONSE_BYTES` (default `10 MB`) across both raw wire bytes and decompressed streams, and network requests and `yt-dlp` subprocesses time out after `30s` (D9, I5).
-- **Runtime & Distribution:** Supports Node.js `>= 22` LTS and Bun, uses Bun (`bun test`, `bun build`, committed `bun.lock`) with `tsc --noEmit`, Biome linting, and a Bun-runnable DD harness + `scenarios/` runner, and upgrades dependencies to latest stable versions for the breaking major release (D10, D11, D13).
+- **Runtime & Distribution:** Supports Node.js `>= 22` LTS and Bun, uses Bun (`bun test`, `bun build`, committed `bun.lock`) with `tsc --noEmit`, Biome linting, and a Bun-runnable DD harness + `scenarios/` runner, upgrades dependencies to latest stable versions for the breaking major release, and publishes a static landing page from `site/` to GitHub Pages at `fetch.zach.dev` without adding runtime dependencies or assets to the npm package (D10, D11, D13, D36).
 - **Protocol Conformance:** Conforms to the latest MCP specification supported by `@modelcontextprotocol/sdk` (`2025-11-25`), advertising only implemented capabilities and rejecting unrecognized `tools/list` pagination cursors with `-32602` (D13, D27).
 - **Privacy & Statelessness:** No fetched content, credentials, or request history is persisted across calls (D3).
 
@@ -281,6 +282,10 @@ for an undecided rule and will change with it.
 ### D35. Verification context vocabulary
 
 - **Decided (2026-11-27):** Formalize the `src/verification/` context's vocabulary in Terminology (extending D4, D30, and D34): Nouns are **Form Factor** (`cli`, `mcp-stdio`, `mcp-http`), **Cassette**, **Live Sample**, and **Output Check**; Derived Noun is **Verification Report** *(derived)*; Verbs are **parse cassette** and **update cassette**.
+
+### D36. Static landing page on GitHub Pages (`fetch.zach.dev`)
+
+- **Decided (2026-11-28):** Fetch MCP includes a static package landing page and `llms.txt` docset authored in a dedicated `site/` directory (keeping `docs/journeys/` untouched for DD artifacts) and deployed automatically to GitHub Pages at custom domain `fetch.zach.dev` via a GitHub Actions Pages workflow (following `zcaceres/spotify-cli`'s `actions/deploy-pages` pattern). It is strictly static presentation/documentation and adds no runtime endpoints, assets, or dependencies to the published `mcp-fetch-server` npm package (relates to D3, D10).
 
 ## Undecided Questions
 
